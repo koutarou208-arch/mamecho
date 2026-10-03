@@ -1,0 +1,387 @@
+<!--
+  ===========================================================
+  index.html  ―  画面の「骨組み」
+  -----------------------------------------------------------
+  このファイルには、画面に最初から置いておく部品だけが書いてあります。
+  ・左のメニュー / 上のバー / スマホ用の下のタブ
+  ・入力用のダイアログ（ポップアップ画面）
+  中身（数字やグラフ）は js フォルダのプログラムがあとから書き込みます。
+
+  見た目（色・文字の大きさなど）は style.css にあります。
+  ===========================================================
+-->
+<title>まめ帳 家計簿</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=IBM+Plex+Sans+JP:wght@400;500;600;700&family=Zen+Old+Mincho:wght@700;900&display=swap">
+<link rel="stylesheet" href="style.css">
+
+<div class="app">
+
+  <!-- ===== 左のメニュー（パソコンなど横に広い画面のときだけ表示） ===== -->
+  <aside class="side" aria-label="メニュー">
+    <div class="brand">
+      <span class="stamp" aria-hidden="true">帳</span>
+      <span class="brand-name">まめ帳</span>
+    </div>
+    <nav class="side-nav" id="sideNav"></nav>
+    <div class="side-foot">
+      <span id="saveStatus" class="save-status"></span>
+    </div>
+  </aside>
+
+  <div class="main-wrap">
+
+    <!-- ===== 上のバー（画面名・期間の切りかえ・記録ボタン） ===== -->
+    <header class="topbar">
+      <div class="brand brand-mobile" aria-hidden="true">
+        <span class="stamp">帳</span>
+      </div>
+      <h1 id="screenTitle">ホーム</h1>
+
+      <div class="period-bar" id="periodBar">
+        <button class="icon-btn" data-action="change-period" data-step="-1" aria-label="前の期間" data-icon="chevron-left"></button>
+        <div class="period-label">
+          <strong id="periodTitle"></strong>
+          <span id="periodRange"></span>
+        </div>
+        <button class="icon-btn" data-action="change-period" data-step="1" aria-label="次の期間" data-icon="chevron-right"></button>
+        <button class="link-btn" data-action="period-today" id="periodTodayButton">今月へ</button>
+      </div>
+
+      <div class="top-actions">
+        <button class="icon-btn only-mobile" data-action="go" data-screen="settings" aria-label="設定" id="mobileSettingsButton" data-icon="settings"></button>
+        <button class="btn primary" data-action="new-transaction" id="newTransactionButton" data-icon="plus">記録する</button>
+      </div>
+    </header>
+
+    <!-- お知らせ帯（サンプル表示中などのときに出る） -->
+    <div id="banner"></div>
+
+    <!-- ===== ここに各画面の中身が入る ===== -->
+    <main id="screen" tabindex="-1"></main>
+  </div>
+
+  <!-- ===== スマホ用の下のタブ ===== -->
+  <nav class="tabbar" id="tabBar" aria-label="メニュー"></nav>
+</div>
+
+
+<!-- ===========================================================
+     ダイアログ1: 入出金の記録・編集
+     =========================================================== -->
+<dialog id="transactionDialog" class="sheet" aria-labelledby="transactionDialogTitle">
+  <form id="transactionForm" novalidate>
+    <header class="sheet-head">
+      <h2 id="transactionDialogTitle">入出金を記録</h2>
+      <button type="button" class="icon-btn" data-action="close-dialog" aria-label="閉じる" data-icon="close"></button>
+    </header>
+
+    <div class="sheet-body">
+      <!-- 種類: 支出 / 収入 / 振替 -->
+      <div class="seg" role="radiogroup" aria-label="種類" id="transactionTypeGroup">
+        <input type="radio" name="transactionType" id="typeExpense" value="expense" checked><label for="typeExpense">支出</label>
+        <input type="radio" name="transactionType" id="typeIncome" value="income"><label for="typeIncome">収入</label>
+        <input type="radio" name="transactionType" id="typeTransfer" value="transfer"><label for="typeTransfer">振替</label>
+      </div>
+      <p class="adjust-label" id="adjustLabel" hidden>残高修正（口座の残高を実際の金額に合わせた記録）</p>
+
+      <!-- レシート読み取り（Claudeが使えるときだけ表示） -->
+      <div class="receipt-row" id="receiptRow" hidden>
+        <button type="button" class="btn ghost small" data-action="pick-receipt" id="receiptButton">レシートの写真から読み取る</button>
+        <input type="file" id="receiptFile" accept="image/jpeg,image/png,image/webp,image/gif" hidden>
+        <span class="hint" id="receiptStatus" aria-live="polite"></span>
+      </div>
+
+      <label class="field">
+        <span>金額</span>
+        <div class="amount-input">
+          <span aria-hidden="true">¥</span>
+          <input id="transactionAmount" inputmode="decimal" autocomplete="off" placeholder="0">
+        </div>
+        <small class="hint" id="amountHint">「1200+380」のような計算もできます</small>
+      </label>
+
+      <div class="field-row">
+        <label class="field">
+          <span>日付</span>
+          <input type="date" id="transactionDate">
+        </label>
+        <label class="field">
+          <span>内容</span>
+          <input id="transactionDescription" list="descriptionSuggestions" autocomplete="off" placeholder="例: スーパー まるみや">
+        </label>
+      </div>
+      <datalist id="descriptionSuggestions"></datalist>
+
+      <div class="field-row" id="categoryFields">
+        <label class="field">
+          <span>大項目</span>
+          <select id="transactionCategory"></select>
+        </label>
+        <label class="field">
+          <span>中項目</span>
+          <select id="transactionSubcategory"></select>
+        </label>
+      </div>
+
+      <div class="field-row">
+        <label class="field">
+          <span id="fromAccountLabel">支払元</span>
+          <select id="transactionAccount"></select>
+        </label>
+        <label class="field" id="toAccountField" hidden>
+          <span>振替先</span>
+          <select id="transactionToAccount"></select>
+        </label>
+      </div>
+
+      <!-- カードで支出を記録するときだけ出る「支払い方法」 -->
+      <div class="payment-box" id="paymentMethodFields" hidden>
+        <div class="field-row">
+          <label class="field">
+            <span>支払い方法</span>
+            <select id="transactionPayMethod"></select>
+          </label>
+          <label class="field" id="installmentField" hidden>
+            <span>分割の回数</span>
+            <select id="transactionInstallments"></select>
+          </label>
+          <label class="field" id="skipField" hidden>
+            <span>支払いを何か月先にずらすか</span>
+            <select id="transactionSkipMonths"></select>
+          </label>
+        </div>
+        <p class="hint" id="paymentMethodNote"></p>
+        <p class="payment-preview" id="paymentPreview" aria-live="polite"></p>
+      </div>
+
+      <label class="field">
+        <span>メモ</span>
+        <input id="transactionMemo" autocomplete="off" placeholder="任意">
+      </label>
+
+      <label class="check" id="includeField">
+        <input type="checkbox" id="transactionInclude" checked>
+        <span>収支の計算に含める（立替金などは外す）</span>
+      </label>
+
+      <p class="form-error" id="transactionError" role="alert"></p>
+
+      <div class="confirm-box" id="transactionDeleteConfirm" hidden>
+        <p>この入出金を削除します。元に戻せません。</p>
+        <div class="row-gap">
+          <button type="button" class="btn danger" data-action="delete-transaction-yes">削除する</button>
+          <button type="button" class="btn ghost" data-action="delete-transaction-no">やめる</button>
+        </div>
+      </div>
+    </div>
+
+    <footer class="sheet-foot">
+      <button type="button" class="btn ghost danger-text" data-action="delete-transaction" id="transactionDeleteButton">削除</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" data-action="save-transaction-next" id="transactionSaveNextButton">保存して続けて入力</button>
+      <button type="submit" class="btn primary">保存</button>
+    </footer>
+  </form>
+</dialog>
+
+
+<!-- ===========================================================
+     ダイアログ2: 口座の追加・編集
+     =========================================================== -->
+<dialog id="accountDialog" class="sheet" aria-labelledby="accountDialogTitle">
+  <form id="accountForm" novalidate>
+    <header class="sheet-head">
+      <h2 id="accountDialogTitle">口座を追加</h2>
+      <button type="button" class="icon-btn" data-action="close-dialog" aria-label="閉じる" data-icon="close"></button>
+    </header>
+    <div class="sheet-body">
+      <label class="field">
+        <span>名前</span>
+        <input id="accountName" autocomplete="off" placeholder="例: メインバンク 普通預金">
+      </label>
+      <label class="field">
+        <span>種類</span>
+        <select id="accountKind"></select>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span id="accountBalanceLabel">残高</span>
+          <div class="amount-input">
+            <span aria-hidden="true">¥</span>
+            <input id="accountBalance" inputmode="decimal" autocomplete="off" placeholder="0">
+          </div>
+        </label>
+        <label class="field">
+          <span>基準日</span>
+          <input type="date" id="accountDate">
+        </label>
+      </div>
+      <!-- クレジットカードのときだけ出る設定 -->
+      <fieldset class="card-fields" id="cardFields" hidden>
+        <legend>カードの設定</legend>
+        <div class="field-row">
+          <label class="field">
+            <span>カード会社</span>
+            <select id="cardCompany"></select>
+          </label>
+          <label class="field">
+            <span>締め日と支払日</span>
+            <select id="cardCycle"></select>
+          </label>
+        </div>
+        <div class="field-row three" id="cardCustomCycle" hidden>
+          <label class="field">
+            <span>締め日</span>
+            <select id="cardClosingDay"></select>
+          </label>
+          <label class="field">
+            <span>支払う月</span>
+            <select id="cardMonthsLater">
+              <option value="0">締めた月（当月）</option>
+              <option value="1">翌月</option>
+              <option value="2">翌々月</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>支払日</span>
+            <select id="cardPaymentDay"></select>
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>引き落とし口座</span>
+            <select id="cardPayFrom"></select>
+          </label>
+          <label class="field">
+            <span>利用枠（わかれば）</span>
+            <div class="amount-input">
+              <span aria-hidden="true">¥</span>
+              <input id="cardLimit" inputmode="numeric" autocomplete="off" placeholder="例: 500000">
+            </div>
+          </label>
+        </div>
+        <label class="check">
+          <input type="checkbox" id="cardAutoRevolving">
+          <span id="cardAutoRevolvingLabel">登録型リボ（1回払いで払っても自動でリボになる設定）を使っている</span>
+        </label>
+        <details class="more">
+          <summary>手数料率・リボ・ポイントの細かい設定</summary>
+          <div class="sheet-body" style="padding:12px 0 0">
+            <div class="field-row">
+              <label class="field"><span>分割払いの手数料（年率 %）</span><input id="cardInstallmentRate" inputmode="decimal" autocomplete="off"></label>
+              <label class="field"><span>リボ払いの手数料（年率 %）</span><input id="cardRevolvingRate" inputmode="decimal" autocomplete="off"></label>
+            </div>
+            <div class="field-row">
+              <label class="field"><span>スキップ払いの手数料（年率 %）</span><input id="cardSkipRate" inputmode="decimal" autocomplete="off"></label>
+              <label class="field"><span>ボーナス2回払いの手数料（100円あたり 円）</span><input id="cardBonus2Fee" inputmode="decimal" autocomplete="off"></label>
+            </div>
+            <div class="field-row">
+              <label class="field"><span>リボで毎月返す元金</span><div class="amount-input"><span aria-hidden="true">¥</span><input id="cardRevolvingMonthly" inputmode="numeric" autocomplete="off"></div></label>
+              <label class="field"><span>ポイント還元率（%）</span><input id="cardPointRate" inputmode="decimal" autocomplete="off" placeholder="例: 0.5"></label>
+            </div>
+            <small class="hint">空欄にすると、カード会社の標準の値（目安）を使います。</small>
+          </div>
+        </details>
+        <p class="hint" id="cardCompanyNote"></p>
+      </fieldset>
+
+      <small class="hint" id="accountBalanceHint">基準日の朝の時点の残高を入れてください。それ以降の入出金が自動で足し引きされます。</small>
+
+      <p class="form-error" id="accountError" role="alert"></p>
+
+      <div class="confirm-box" id="accountDeleteConfirm" hidden>
+        <p id="accountDeleteMessage"></p>
+        <div class="row-gap">
+          <button type="button" class="btn danger" data-action="delete-account-yes">削除する</button>
+          <button type="button" class="btn ghost" data-action="delete-account-no">やめる</button>
+        </div>
+      </div>
+    </div>
+    <footer class="sheet-foot">
+      <button type="button" class="btn ghost danger-text" data-action="delete-account" id="accountDeleteButton">この口座を削除</button>
+      <span class="spacer"></span>
+      <button type="submit" class="btn primary">保存</button>
+    </footer>
+  </form>
+</dialog>
+
+
+<!-- ===========================================================
+     ダイアログ3: 口座の明細（通帳ふう）
+     中身は js/16-dialog-account.js が書き込みます
+     =========================================================== -->
+<dialog id="passbookDialog" class="sheet wide" aria-labelledby="passbookTitle">
+  <header class="sheet-head">
+    <h2 id="passbookTitle">口座の明細</h2>
+    <button type="button" class="icon-btn" data-action="close-dialog" aria-label="閉じる" data-icon="close"></button>
+  </header>
+  <div class="sheet-body" id="passbookBody"></div>
+</dialog>
+
+
+<!-- ===========================================================
+     ダイアログ4: CSVの取り込み
+     中身は js/17-csv-and-backup.js が書き込みます
+     =========================================================== -->
+<dialog id="importDialog" class="sheet wide" aria-labelledby="importTitle">
+  <header class="sheet-head">
+    <h2 id="importTitle">CSVを取り込む</h2>
+    <button type="button" class="icon-btn" data-action="close-dialog" aria-label="閉じる" data-icon="close"></button>
+  </header>
+  <div class="sheet-body" id="importBody"></div>
+</dialog>
+
+
+<!-- ===========================================================
+     ダイアログ5: 書き出した文字をコピーする（ファイル保存ができない環境用）
+     =========================================================== -->
+<dialog id="textDialog" class="sheet wide" aria-labelledby="textDialogTitle">
+  <header class="sheet-head">
+    <h2 id="textDialogTitle">書き出し</h2>
+    <button type="button" class="icon-btn" data-action="close-dialog" aria-label="閉じる" data-icon="close"></button>
+  </header>
+  <div class="sheet-body">
+    <p class="hint">この環境ではファイルを保存できないため、内容を表示しています。コピーしてテキストファイルに貼り付けてください。</p>
+    <textarea id="textDialogContent" rows="12" readonly></textarea>
+    <div class="row-gap">
+      <button type="button" class="btn primary" data-action="copy-text">コピーする</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- 選ぶとすぐ読み込む隠しファイル選択（バックアップの復元用） -->
+<input type="file" id="restoreFile" accept=".json,application/json" hidden>
+
+<!-- グラフにマウスをのせたときの吹き出し -->
+<div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+<!-- 画面下に一瞬出るお知らせ（「保存しました」など） -->
+<div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+
+<!-- ===========================================================
+     プログラムの読み込み
+     番号の順に読み込まれます（順番を入れかえると動かなくなります）
+     =========================================================== -->
+<script src="js/01-categories.js"></script>
+<script src="js/02-card-companies.js"></script>
+<script src="js/03-helpers.js"></script>
+<script src="js/04-state-and-storage.js"></script>
+<script src="js/05-calculations.js"></script>
+<script src="js/06-credit-card-billing.js"></script>
+<script src="js/07-charts.js"></script>
+<script src="js/08-screen-home.js"></script>
+<script src="js/09-screen-transactions.js"></script>
+<script src="js/10-screen-report.js"></script>
+<script src="js/11-screen-budget.js"></script>
+<script src="js/12-screen-cards.js"></script>
+<script src="js/13-screen-accounts.js"></script>
+<script src="js/14-screen-settings.js"></script>
+<script src="js/15-dialog-transaction.js"></script>
+<script src="js/16-dialog-account.js"></script>
+<script src="js/17-csv-and-backup.js"></script>
+<script src="js/18-ai-features.js"></script>
+<script src="js/19-sample-data.js"></script>
+<script src="js/20-app-start.js"></script>
