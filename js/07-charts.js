@@ -156,8 +156,8 @@ function niceScale(minValue, maxValue, tickCount) {
    =========================================================== */
 
 function drawAssetTrendChart(container, points) {
-  if (points.length < 2) {
-    container.innerHTML = '<p class="empty-note">記録が2か月分たまると、ここに推移が表示されます。</p>';
+  if (points.length < 1) {
+    container.innerHTML = '<p class="empty-note">口座を登録すると、ここに推移が表示されます。</p>';
     return;
   }
 
@@ -175,6 +175,9 @@ function drawAssetTrendChart(container, points) {
   const values = points.map((point) => point.amount);
   const scale = niceScale(Math.min(0, ...values), Math.max(0, ...values), 4);
   function xOf(index) {
+    if (points.length === 1) {
+      return padLeft + plotWidth; // 1つだけのときは右端に点を置く
+    }
     return padLeft + plotWidth * (index / (points.length - 1));
   }
   function yOf(value) {
@@ -251,7 +254,7 @@ function drawAssetTrendChart(container, points) {
   hitArea.addEventListener('pointermove', (event) => {
     const box = svgElement.getBoundingClientRect();
     const pointerX = (event.clientX - box.left) * (width / box.width);
-    let index = Math.round(((pointerX - padLeft) / plotWidth) * lastIndex);
+    let index = lastIndex === 0 ? 0 : Math.round(((pointerX - padLeft) / plotWidth) * lastIndex);
     index = Math.max(0, Math.min(lastIndex, index));
     showPoint(index, event.clientX, event.clientY);
   });
@@ -590,8 +593,7 @@ function drawCardDebtChart(container, rows) {
    =========================================================== */
 
 function drawDailySafetyChart(container, rows) {
-  if (rows.length < 2) {
-    container.innerHTML = '<p class="empty-note">2日分たまると、日ごとの推移が出ます。</p>';
+  if (rows.length < 1) {
     return;
   }
   const width = Math.max(280, container.clientWidth || 600);
@@ -611,6 +613,9 @@ function drawDailySafetyChart(container, rows) {
   }
   const scale = niceScale(low, Math.max(high, 1), 4);
   function xOf(index) {
+    if (rows.length === 1) {
+      return padLeft + plotWidth; // 1日だけのときは右端に点を置く
+    }
     return padLeft + plotWidth * (index / (rows.length - 1));
   }
   function yOf(value) {
@@ -639,7 +644,7 @@ function drawDailySafetyChart(container, rows) {
   svg += '<circle cx="' + xOf(last).toFixed(1) + '" cy="' + yOf(rows[last].tradeNet).toFixed(1) + '" r="4" fill="var(--chart-3)" stroke="var(--surface)" stroke-width="2"/>';
 
   // 日付の目盛り（最初・真ん中・最後）
-  const labelIndexes = [0, Math.floor(last / 2), last];
+  const labelIndexes = [...new Set([0, Math.floor(last / 2), last])];
   for (const index of labelIndexes) {
     const anchor = index === 0 ? 'start' : (index === last ? 'end' : 'middle');
     svg += '<text class="axis-text" x="' + xOf(index).toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '">' + formatShortDate(rows[index].date) + '</text>';

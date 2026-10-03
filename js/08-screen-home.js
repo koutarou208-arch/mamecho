@@ -277,7 +277,7 @@ function homeTradeSafetyCardHtml(period) {
 
   // 日ごとの推移（今日までを1日ずつ追う）
   const dayRows = homeSafetyDayRows(period);
-  if (dayRows.length >= 2) {
+  if (dayRows.length >= 1) {
     html += '<div class="legend" style="margin-top:14px">' +
       '<span><i class="key" style="background:var(--expense)"></i>必要な株の利益</span>' +
       '<span><i class="key" style="background:var(--chart-3)"></i>株の損益（累計）</span></div>';
