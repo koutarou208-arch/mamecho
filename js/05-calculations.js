@@ -407,6 +407,41 @@ function summarizePeriod(period) {
 }
 
 
+/**
+ * 「株の利益がどれくらいあれば安心か」を計算する（自分の数字だけを使った計算で、投資のおすすめではありません）。
+ *   summary … summarizeRange / summarizePeriod の結果
+ *   goal    … 毎月の貯金目標（なければ 0 ＝ 赤字にならなければ安心）
+ * 返す形:
+ *   base       … 投資をのぞいた収支（収入 − 投資の利益 − 生活費の支出）
+ *   needed     … 安心ラインに届くために必要な、株の利益（本業だけで足りるなら 0）
+ *   remaining  … 今の投資損益（tradeNet）で足りない分（足りていれば 0）
+ *   status     … 'safe'（株がなくても安心） / 'covered'（株の利益で安心になった） / 'short'（まだ足りない）
+ */
+function judgeTradeSafety(summary, goal) {
+  const base = summary.income - summary.tradeGain - summary.spending;
+  const target = Math.max(0, Number(goal) || 0);
+  const needed = Math.max(0, target - base);
+  const remaining = Math.max(0, needed - summary.tradeNet);
+  let status = 'short';
+  if (needed === 0) {
+    status = 'safe';
+  } else if (remaining === 0) {
+    status = 'covered';
+  }
+  return { base: base, needed: needed, remaining: remaining, status: status };
+}
+
+/** 直近 months か月（今の期間をのぞく）の「投資をのぞいた収支」の平均 */
+function averageBaseBalance(period, months) {
+  let total = 0;
+  for (let back = 1; back <= months; back++) {
+    const summary = summarizePeriod(shiftPeriod(period, -back));
+    total = total + (summary.income - summary.tradeGain - summary.spending);
+  }
+  return Math.round(total / months);
+}
+
+
 /* ===========================================================
    5. 予算
    =========================================================== */

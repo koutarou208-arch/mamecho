@@ -331,6 +331,25 @@ const mergedRules = replaceRuleAt(baseRules, 1, { keyword: 'AAA', type: 'expense
 same('ルール修正: 同じキーワードの別ルールとは1つにまとまる', mergedRules.length, 2);
 same('ルール修正: まとまったルールは新しい内容', mergedRules.filter((rule) => rule.keyword === 'AAA')[0].category, 'hobby');
 
+section('株の利益の安心ライン');
+// 投資をのぞく収支 = 収入 − 投資の利益 − 生活費の支出
+const safeA = judgeTradeSafety({ income: 350000, tradeGain: 50000, tradeNet: 30000, spending: 100000 }, 0);
+same('安心ライン: 投資をのぞく収支', safeA.base, 200000);
+same('安心ライン: 黒字なら必要な利益は0', safeA.needed, 0);
+same('安心ライン: 黒字なら「投資なしで安心」', safeA.status, 'safe');
+const safeB = judgeTradeSafety({ income: 250000, tradeGain: 0, tradeNet: 0, spending: 280000 }, 0);
+same('安心ライン: 赤字ならその分が必要な利益', safeB.needed, 30000);
+same('安心ライン: 利益がまだなければ「不足」', safeB.status, 'short');
+same('安心ライン: あと', safeB.remaining, 30000);
+const safeC = judgeTradeSafety({ income: 280000, tradeGain: 40000, tradeNet: 40000, spending: 280000 }, 0);
+same('安心ライン: 投資をのぞくと赤字（-40000）', safeC.base, -40000);
+same('安心ライン: 利益で埋まれば「達成」', safeC.status, 'covered');
+same('安心ライン: 達成ならあとは0', safeC.remaining, 0);
+const safeD = judgeTradeSafety({ income: 300000, tradeGain: 0, tradeNet: 0, spending: 250000 }, 80000);
+same('安心ライン: 貯金目標があれば目標までが必要な利益', safeD.needed, 30000);
+const safeE = judgeTradeSafety({ income: 300000, tradeGain: 10000, tradeNet: -5000, spending: 250000 }, 0);
+same('安心ライン: 投資で損でも本業が黒字なら安心', safeE.status, 'safe');
+
 /* ===========================================================
    結果
    =========================================================== */

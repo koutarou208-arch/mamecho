@@ -143,6 +143,8 @@ function homeMonthCardHtml(period) {
       '<span class="delta ' + tradeClass + '">' + iconSvg(summary.tradeNet >= 0 ? 'up' : 'down') + formatYen(summary.tradeNet, { showPlus: true }) + '</span></p>';
   }
 
+  html += homeTradeSafetyHtml(period, summary);
+
   html += '<hr class="divider">';
 
   // --- 予算 ---
@@ -202,6 +204,46 @@ function homeMonthCardHtml(period) {
   }
 
   html += '</section>';
+  return html;
+}
+
+
+/**
+ * 「株の利益がどれくらいあれば安心か」の表示（今の収支をもとにした計算。投資のおすすめではない）。
+ * 毎月の貯金目標があれば、それを安心ラインにする。なければ「赤字にならない」ことが安心ライン。
+ */
+function homeTradeSafetyHtml(period, summary) {
+  if (summary.income === 0 && summary.expense === 0) {
+    return ''; // 記録がまだない期間は出さない
+  }
+  const goal = Number(appState.profile.settings.savingsGoal) || 0;
+  const judge = judgeTradeSafety(summary, goal);
+  const average = averageBaseBalance(period, 3);
+  const lineName = goal > 0 ? '貯金目標' : '赤字にならないライン';
+
+  let chip = '';
+  let message = '';
+  if (judge.status === 'safe') {
+    chip = statusChipHtml('good', '株なしで安心');
+    message = '投資をのぞいた収支は <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。' + lineName + 'に届いています';
+  } else if (judge.status === 'covered') {
+    chip = statusChipHtml('good', '利益で安心');
+    message = '投資をのぞくと <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。株の利益で' + lineName + 'に届きました';
+  } else {
+    chip = statusChipHtml('warn', 'あと ' + formatYen(judge.remaining));
+    message = '投資をのぞくと <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。' + lineName + 'まで、株で <strong class="num">' + formatYen(judge.needed) + '</strong> の利益が必要です';
+  }
+
+  let html = '<div class="trade-safety" style="margin-top:12px">';
+  html += '<div class="row-gap" style="justify-content:space-between"><strong>株の利益の安心ライン</strong>' + chip + '</div>';
+  html += '<p class="small" style="margin-top:6px">' + message + '</p>';
+  const averageNeeded = Math.max(0, goal - average);
+  if (averageNeeded > 0) {
+    html += '<p class="small muted" style="margin-top:4px">ふだんの月（直近3か月）は、毎月 ' + formatYen(averageNeeded) + ' の利益で' + lineName + 'に届きます</p>';
+  } else {
+    html += '<p class="small muted" style="margin-top:4px">ふだんの月（直近3か月）は、投資なしで' + lineName + 'に届いています</p>';
+  }
+  html += '</div>';
   return html;
 }
 
