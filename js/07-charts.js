@@ -580,3 +580,70 @@ function drawCardDebtChart(container, rows) {
     showMonth(nextIndex, box.left + centerOf(nextIndex) * (box.width / width), box.top + zeroY * (box.height / height));
   });
 }
+
+
+/* ===========================================================
+   8. 株の利益の安心ライン（日ごとの推移・折れ線）
+   rows = [{ date, base, tradeNet, needed, remaining }, ...]（古い順）
+   橙の線 … 安心ラインに届くために必要な株の利益（下がるほど安心に近づく）
+   緑の線 … 株の損益の累計（橙の線より上なら安心）
+   =========================================================== */
+
+function drawDailySafetyChart(container, rows) {
+  if (rows.length < 2) {
+    container.innerHTML = '<p class="empty-note">2日分たまると、日ごとの推移が出ます。</p>';
+    return;
+  }
+  const width = Math.max(280, container.clientWidth || 600);
+  const height = 200;
+  const padLeft = 54;
+  const padRight = 12;
+  const padTop = 12;
+  const padBottom = 24;
+  const plotWidth = width - padLeft - padRight;
+  const plotHeight = height - padTop - padBottom;
+
+  let low = 0;
+  let high = 0;
+  for (const row of rows) {
+    low = Math.min(low, row.tradeNet);
+    high = Math.max(high, row.needed, row.tradeNet);
+  }
+  const scale = niceScale(low, Math.max(high, 1), 4);
+  function xOf(index) {
+    return padLeft + plotWidth * (index / (rows.length - 1));
+  }
+  function yOf(value) {
+    return padTop + plotHeight * (1 - (value - scale.min) / (scale.max - scale.min));
+  }
+
+  let svg = '<svg viewBox="0 0 ' + width + ' ' + height + '" width="' + width + '" height="' + height + '" role="img" aria-label="日ごとの、必要な株の利益と株の損益の累計">';
+  for (const tick of scale.ticks) {
+    const y = yOf(tick).toFixed(1);
+    svg += '<line class="grid-line" x1="' + padLeft + '" x2="' + (width - padRight) + '" y1="' + y + '" y2="' + y + '"/>';
+    svg += '<text class="axis-text" x="' + (padLeft - 8) + '" y="' + (Number(y) + 4) + '" text-anchor="end">' + formatYenShort(tick) + '</text>';
+  }
+
+  // 折れ線2本
+  let neededPath = '';
+  let tradePath = '';
+  for (let index = 0; index < rows.length; index++) {
+    const command = index === 0 ? 'M' : 'L';
+    neededPath += command + xOf(index).toFixed(1) + ',' + yOf(rows[index].needed).toFixed(1);
+    tradePath += command + xOf(index).toFixed(1) + ',' + yOf(rows[index].tradeNet).toFixed(1);
+  }
+  svg += '<path d="' + neededPath + '" fill="none" stroke="var(--expense)" stroke-width="2.5" stroke-linejoin="round"/>';
+  svg += '<path d="' + tradePath + '" fill="none" stroke="var(--chart-3)" stroke-width="2.5" stroke-linejoin="round"/>';
+  const last = rows.length - 1;
+  svg += '<circle cx="' + xOf(last).toFixed(1) + '" cy="' + yOf(rows[last].needed).toFixed(1) + '" r="4" fill="var(--expense)" stroke="var(--surface)" stroke-width="2"/>';
+  svg += '<circle cx="' + xOf(last).toFixed(1) + '" cy="' + yOf(rows[last].tradeNet).toFixed(1) + '" r="4" fill="var(--chart-3)" stroke="var(--surface)" stroke-width="2"/>';
+
+  // 日付の目盛り（最初・真ん中・最後）
+  const labelIndexes = [0, Math.floor(last / 2), last];
+  for (const index of labelIndexes) {
+    const anchor = index === 0 ? 'start' : (index === last ? 'end' : 'middle');
+    svg += '<text class="axis-text" x="' + xOf(index).toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '">' + formatShortDate(rows[index].date) + '</text>';
+  }
+  svg += '</svg>';
+  container.innerHTML = svg;
+}

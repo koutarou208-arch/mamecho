@@ -350,6 +350,26 @@ same('安心ライン: 貯金目標があれば目標までが必要な利益', 
 const safeE = judgeTradeSafety({ income: 300000, tradeGain: 10000, tradeNet: -5000, spending: 250000 }, 0);
 same('安心ライン: 投資で損でも本業が黒字なら安心', safeE.status, 'safe');
 
+section('安心ラインを日ごとに追う');
+allTransactions = [
+  { id: 'd1', type: 'income', date: '2026-10-01', amount: 200000, category: 'salary' },
+  { id: 'd2', type: 'expense', date: '2026-10-02', amount: 230000, category: 'housing' },
+  { id: 'd3', type: 'income', date: '2026-10-03', amount: 40000, category: 'trade' },
+  { id: 'd4', type: 'expense', date: '2026-10-04', amount: 10000, category: 'tradeLoss' },
+];
+const dayRows = dailySafetyRows({ start: '2026-10-01', end: '2026-11-01' }, '2026-10-04', 0);
+same('日ごと: 今日までの日数ぶんの行', dayRows.length, 4);
+same('日ごと: 1日目は黒字なので必要な利益0', dayRows[0].needed, 0);
+same('日ごと: 2日目は赤字（-30000）', dayRows[1].base, -30000);
+same('日ごと: 2日目に必要な利益', dayRows[1].needed, 30000);
+same('日ごと: 3日目の株の損益', dayRows[2].tradeNet, 40000);
+same('日ごと: 3日目は株の利益でカバー', dayRows[2].remaining, 0);
+same('日ごと: 4日目の株の損益（損失をひく）', dayRows[3].tradeNet, 30000);
+same('日ごと: 日付が入る', dayRows[3].date, '2026-10-04');
+const dayRowsEarly = dailySafetyRows({ start: '2026-10-01', end: '2026-10-03' }, '2026-12-31', 0);
+same('日ごと: 期間の最後の日までで止まる', dayRowsEarly.length, 2);
+allTransactions = [];
+
 /* ===========================================================
    結果
    =========================================================== */

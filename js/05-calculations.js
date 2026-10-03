@@ -431,6 +431,25 @@ function judgeTradeSafety(summary, goal) {
   return { base: base, needed: needed, remaining: remaining, status: status };
 }
 
+/**
+ * 安心ラインを「日ごと」に追った一覧を作る。
+ *   range    … 期間（{ start, end }。end はふくまない日）
+ *   lastDate … ここまでの日を出す（ふつうは今日。期間の最後を過ぎていれば期間の最後まで）
+ *   goal     … 毎月の貯金目標（なければ 0）
+ * 返す形: [{ date, base, tradeNet, needed, remaining }, ...]  … 期間の最初の日から、その日までの合計で計算
+ */
+function dailySafetyRows(range, lastDate, goal) {
+  const rows = [];
+  let date = range.start;
+  while (date < range.end && date <= lastDate) {
+    const summary = summarizeRange({ start: range.start, end: addDays(date, 1) });
+    const judge = judgeTradeSafety(summary, goal);
+    rows.push({ date: date, base: judge.base, tradeNet: summary.tradeNet, needed: judge.needed, remaining: judge.remaining });
+    date = addDays(date, 1);
+  }
+  return rows;
+}
+
 /** 直近 months か月（今の期間をのぞく）の「投資をのぞいた収支」の平均 */
 function averageBaseBalance(period, months) {
   let total = 0;

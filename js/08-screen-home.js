@@ -38,6 +38,11 @@ const HomeScreen = {
 
   afterRender() {
     const period = appState.period;
+    const safetyArea = findOne('#safetyDayChart');
+    if (safetyArea) {
+      const dayRows = homeSafetyDayRows(period);
+      registerChart(() => drawDailySafetyChart(safetyArea, dayRows));
+    }
     const chartArea = findOne('#assetTrendChart');
     if (chartArea) {
       const points = assetHistory(period, 12);
@@ -207,6 +212,13 @@ function homeMonthCardHtml(period) {
 }
 
 
+/** 安心ラインを日ごとに追った行（期間の最初の日から、今日または期間の最後の日まで） */
+function homeSafetyDayRows(period) {
+  const goal = Number(appState.profile.settings.savingsGoal) || 0;
+  const range = periodRange(period);
+  return dailySafetyRows(range, todayText(), goal);
+}
+
 /**
  * 「株でいくら利益が出れば安心か」を、ホームの上のほうに大きく出すカード。
  * （今の収支をもとにした計算で、投資のおすすめではありません）
@@ -261,6 +273,21 @@ function homeTradeSafetyCardHtml(period) {
     html += '<p class="small muted" style="margin-top:12px">ふだんの月（直近3か月）は、毎月 ' + formatYen(averageNeeded) + ' の利益が目安です</p>';
   } else {
     html += '<p class="small muted" style="margin-top:12px">ふだんの月（直近3か月）は、株なしで届いています</p>';
+  }
+
+  // 日ごとの推移（今日までを1日ずつ追う）
+  const dayRows = homeSafetyDayRows(period);
+  if (dayRows.length >= 2) {
+    html += '<div class="legend" style="margin-top:14px">' +
+      '<span><i class="key" style="background:var(--expense)"></i>必要な株の利益</span>' +
+      '<span><i class="key" style="background:var(--chart-3)"></i>株の損益（累計）</span></div>';
+    html += '<div class="chart" id="safetyDayChart"></div>';
+    html += '<details class="more"><summary>日ごとに見る</summary><div class="table-wrap"><table class="data"><thead><tr><th>日</th><th>株をのぞく収支</th><th>株の損益</th><th>必要な利益</th></tr></thead><tbody>';
+    for (let index = dayRows.length - 1; index >= 0; index--) {
+      const row = dayRows[index];
+      html += '<tr><td>' + formatMonthDay(row.date) + '</td><td class="num">' + formatYen(row.base, { showPlus: true }) + '</td><td class="num">' + formatYen(row.tradeNet, { showPlus: true }) + '</td><td class="num">' + formatYen(row.needed) + '</td></tr>';
+    }
+    html += '</tbody></table></div></details>';
   }
   html += '</section>';
   return html;
