@@ -226,9 +226,7 @@ function homeSafetyDayRows(period) {
  */
 function homeTradeSafetyCardHtml(period) {
   const summary = summarizePeriod(period);
-  if (summary.income === 0 && summary.expense === 0) {
-    return ''; // 記録がまだない期間は出さない
-  }
+  const hasNoRecords = summary.income === 0 && summary.expense === 0; // この期間の記録がまだ1件もない
   const goal = Number(appState.profile.settings.savingsGoal) || 0;
   const judge = judgeTradeSafety(summary, goal);
   const average = averageBaseBalance(period, 3);
@@ -238,7 +236,11 @@ function homeTradeSafetyCardHtml(period) {
   let headline = '';
   let meterClass = '';
   let chip = '';
-  if (judge.status === 'safe') {
+  if (hasNoRecords) {
+    headline = 'この期間の記録がまだありません';
+    chip = statusChipHtml('warn', '記録待ち');
+    meterClass = 'warn';
+  } else if (judge.status === 'safe') {
     headline = '株の利益がなくても安心です';
     chip = statusChipHtml('good', '安心');
   } else if (judge.status === 'covered') {
@@ -265,7 +267,7 @@ function homeTradeSafetyCardHtml(period) {
   html += '<div class="stats" style="margin-top:14px">' +
     '<div class="stat"><span class="label">株をのぞいた収支</span><span class="value num">' + formatYen(judge.base, { showPlus: true }) + '</span></div>' +
     '<div class="stat"><span class="label">必要な株の利益</span><span class="value num">' + formatYen(judge.needed) + '</span></div>' +
-    '<div class="stat"><span class="label">今月の株の損益</span><span class="value num">' + formatYen(summary.tradeNet, { showPlus: true }) + '</span></div>' +
+    '<div class="stat"><span class="label">この期間の株の損益</span><span class="value num">' + formatYen(summary.tradeNet, { showPlus: true }) + '</span></div>' +
     '</div>';
 
   const averageNeeded = Math.max(0, goal - average);
