@@ -61,8 +61,8 @@
   --passbook-rule: #cfe0d2;
 
   /* 文字の種類 */
-  --font-display: "Zen Old Mincho", "Hiragino Mincho ProN", "Yu Mincho", serif;     /* 見出し（明朝体） */
-  --font-body: "IBM Plex Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; /* 本文 */
+  --font-display: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;  /* 見出し（丸ゴシック） */
+  --font-body: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "Hiragino Sans", "Yu Gothic UI", Meiryo, system-ui, sans-serif; /* 本文（丸ゴシック） */
   --font-dot: "DotGothic16", "Osaka-Mono", "MS Gothic", monospace;                   /* 通帳のドット文字 */
 
   /* 角の丸み・余白 */
