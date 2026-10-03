@@ -357,11 +357,13 @@ function isCounted(transaction) {
  * 返す形:
  *   {
  *     income: 300000, expense: 180000,
+ *     tradeGain: 50000, tradeLoss: 20000, tradeNet: 30000,  … 株式投資の利益・損失・損益（収支にはふくまれる）
+ *     spending: 160000,  … 支出から投資の損失をのぞいた「生活費」（予算と比べるのはこちら）
  *     categories: { food: { total: 42000, count: 31, subs: { '外食': 12000, ... } }, ... }
  *   }
  */
 function summarizeRange(range) {
-  const summary = { income: 0, expense: 0, categories: {} };
+  const summary = { income: 0, expense: 0, tradeGain: 0, tradeLoss: 0, tradeNet: 0, spending: 0, categories: {} };
   for (const transaction of allTransactions) {
     if (transaction.date < range.start || transaction.date >= range.end) {
       continue;
@@ -369,13 +371,23 @@ function summarizeRange(range) {
     if (!isCounted(transaction)) {
       continue;
     }
+    const categoryId = transaction.category || 'other';
+    const isInvestment = categoryId === 'trade' || categoryId === 'tradeLoss';
     if (transaction.type === 'income') {
       summary.income = summary.income + transaction.amount;
+      if (categoryId === 'trade') {
+        summary.tradeGain = summary.tradeGain + transaction.amount;
+      }
     } else {
       summary.expense = summary.expense + transaction.amount;
+      if (categoryId === 'tradeLoss') {
+        summary.tradeLoss = summary.tradeLoss + transaction.amount;
+      }
+      if (!isInvestment) {
+        summary.spending = summary.spending + transaction.amount;
+      }
     }
 
-    const categoryId = transaction.category || 'other';
     if (!summary.categories[categoryId]) {
       summary.categories[categoryId] = { total: 0, count: 0, subs: {} };
     }
@@ -385,6 +397,7 @@ function summarizeRange(range) {
     const subName = transaction.sub || '未分類';
     bucket.subs[subName] = (bucket.subs[subName] || 0) + transaction.amount;
   }
+  summary.tradeNet = summary.tradeGain - summary.tradeLoss;
   return summary;
 }
 

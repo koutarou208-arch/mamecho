@@ -178,8 +178,8 @@ function reportFixedCostCardHtml(period) {
       fixed = fixed + summary.categories[category.id].total;
     }
   }
-  const variable = summary.expense - fixed;
-  const fixedShare = summary.expense > 0 ? Math.round((fixed / summary.expense) * 100) : 0;
+  const variable = summary.spending - fixed; // 投資の損失は生活費ではないのでのぞく
+  const fixedShare = summary.spending > 0 ? Math.round((fixed / summary.spending) * 100) : 0;
 
   const recurring = findRecurringPayments(period);
   let recurringTotal = 0;
@@ -191,7 +191,7 @@ function reportFixedCostCardHtml(period) {
   html += '<div class="card-head"><h2>固定費と変動費</h2></div>';
   html += '<div class="stats" style="grid-template-columns:repeat(2, minmax(0,1fr))">' +
     '<div class="stat"><span class="label">固定費（住宅・光熱・通信・保険・税）</span><span class="value num">' + formatYen(fixed) + '</span><span class="small muted">支出の' + fixedShare + '%</span></div>' +
-    '<div class="stat"><span class="label">変動費（それ以外）</span><span class="value num">' + formatYen(variable) + '</span><span class="small muted">支出の' + (summary.expense > 0 ? 100 - fixedShare : 0) + '%</span></div>' +
+    '<div class="stat"><span class="label">変動費（それ以外）</span><span class="value num">' + formatYen(variable) + '</span><span class="small muted">支出の' + (summary.spending > 0 ? 100 - fixedShare : 0) + '%</span></div>' +
     '</div>';
   html += '<hr class="divider">';
   html += '<div class="card-head" style="margin-bottom:4px"><h2>毎月の支払い・サブスク</h2><span class="sub">月 約' + formatYen(recurringTotal) + '</span></div>';

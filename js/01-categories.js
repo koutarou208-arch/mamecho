@@ -40,7 +40,12 @@ const EXPENSE_CATEGORIES = [
   { id: 'insurance', name: '保険',         mark: '保', subs: ['生命保険', '医療保険', 'その他保険'], fixed: true },
   { id: 'tax',       name: '税・社会保障', mark: '税', subs: ['所得税・住民税', '年金保険料', '健康保険', 'その他税'], fixed: true },
   { id: 'other',     name: 'その他',       mark: '他', subs: ['未分類', '雑費', 'カード手数料', '仕送り', '使途不明金'] },
+  // 株式などの売買で出た損。収支には入るが、生活費ではないので予算の対象にはしない（investment: true）
+  { id: 'tradeLoss', name: '投資の損失',   mark: '損', subs: ['株式の売却損', '投資信託の売却損', '先物・FX', 'その他の損失'], investment: true },
 ];
+
+/** 予算や支出ランキングに使う「生活費のカテゴリ」（投資の損失はのぞく） */
+const LIVING_EXPENSE_CATEGORIES = EXPENSE_CATEGORIES.filter((category) => !category.investment);
 
 
 /* -----------------------------------------------------------
@@ -53,6 +58,8 @@ const INCOME_CATEGORIES = [
   { id: 'dividend', name: '配当・利息',   mark: '配', subs: ['配当', '分配金', '利息'] },
   { id: 'extra',    name: '臨時収入',     mark: '臨', subs: ['臨時収入', '還付金', 'お祝い'] },
   { id: 'otherIn',  name: 'その他入金',   mark: '入', subs: ['その他入金', '未分類'] },
+  // 株式などの売買で出た益。収支に入る（trade は「売買益」の id）
+  { id: 'trade',    name: '投資の利益',   mark: '益', subs: ['株式の売却益', '投資信託の売却益', '先物・FX', 'その他の利益'], investment: true },
 ];
 
 
@@ -119,6 +126,8 @@ const BUILT_IN_RULES = [
   { type: 'income', words: ['配当', '分配金'], category: 'dividend', sub: '配当' },
   { type: 'income', words: ['利息', 'リソク'], category: 'dividend', sub: '利息' },
   { type: 'income', words: ['還付'], category: 'extra', sub: '還付金' },
+  { type: 'income', words: ['売却益', '譲渡益', '利益確定'], category: 'trade', sub: '株式の売却益' },
+  { type: 'expense', words: ['売却損', '譲渡損', '損切り'], category: 'tradeLoss', sub: '株式の売却損' },
 
   // ---- 食費 ----
   { type: 'expense', words: ['セブン-イレブン', 'セブンイレブン', 'ローソン', 'ファミリーマート', 'ファミマ', 'ミニストップ', 'デイリーヤマザキ', 'セイコーマート'], category: 'food', sub: '食料品' },

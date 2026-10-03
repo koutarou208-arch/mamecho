@@ -61,21 +61,21 @@ function budgetViewHtml(period) {
     return html;
   }
 
-  const left = budget - summary.expense;
-  const status = budgetStatus(summary.expense, budget, elapsed);
+  const left = budget - summary.spending;
+  const status = budgetStatus(summary.spending, budget, elapsed);
   html += '<div class="stats">' +
     '<div class="stat"><span class="label">予算</span><span class="value num">' + formatYen(budget) + '</span></div>' +
-    '<div class="stat"><span class="label">使った金額</span><span class="value num">' + formatYen(summary.expense) + '</span></div>' +
+    '<div class="stat"><span class="label">使った金額</span><span class="value num">' + formatYen(summary.spending) + '</span></div>' +
     '<div class="stat"><span class="label">残り</span><span class="value num total">' + formatYen(left) + '</span></div>' +
     '</div>';
-  html += '<div style="margin-top:14px">' + budgetMeterHtml(summary.expense, budget, elapsed, status) + '</div>';
+  html += '<div style="margin-top:14px">' + budgetMeterHtml(summary.spending, budget, elapsed, status) + '</div>';
   html += '<p class="small muted" style="margin-top:8px">黒い縦線は「今日までに使っていい金額」の目安です。' + statusChipHtml(status) + '</p>';
   html += '</section>';
 
   // --- カテゴリごと ---
   html += '<section class="card span-8"><div class="card-head"><h2>カテゴリごと</h2></div><div class="budget-list">';
   const unbudgeted = [];
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     const limit = Number(budgets[category.id]) || 0;
     const spent = summary.categories[category.id] ? summary.categories[category.id].total : 0;
     if (limit <= 0) {
@@ -148,7 +148,7 @@ function budgetEditHtml() {
     '<button type="button" class="btn small" data-action="fill-budget" data-source="average">3か月平均で入れる</button>' +
     '</div>';
 
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     html += '<div class="budget-edit-row">' +
       '<label for="budget-' + category.id + '" class="cat-name"><span class="mark" aria-hidden="true">' + category.mark + '</span><span>' + category.name + '</span></label>' +
       '<input id="budget-' + category.id + '" class="budget-input" inputmode="numeric" data-budget-input="' + category.id + '" value="' + escapeHtml(draft[category.id] || '') + '" placeholder="なし">' +
@@ -170,7 +170,7 @@ function budgetEditHtml() {
 /** 「予算を編集」を押したとき: 今の予算を下書きにコピーする */
 function startBudgetEdit() {
   const draft = {};
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     const value = appState.profile.budgets[category.id];
     draft[category.id] = value ? String(value) : '';
   }
@@ -183,7 +183,7 @@ function startBudgetEdit() {
 /** 先月の実績（または3か月平均）で下書きをうめる */
 function fillBudgetDraft(source) {
   const months = source === 'average' ? 3 : 1;
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     let total = 0;
     for (let back = 1; back <= months; back++) {
       const summary = summarizePeriod(shiftPeriod(appState.period, -back));
@@ -200,7 +200,7 @@ function fillBudgetDraft(source) {
 /** 下書きを確かめて保存する */
 function saveBudgetDraft() {
   const newBudgets = {};
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     const value = calculateAmount(appState.budgetDraft[category.id]);
     if (value === null) {
       continue; // 空欄は予算なし

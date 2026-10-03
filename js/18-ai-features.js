@@ -83,7 +83,7 @@ async function readReceiptImage(file) {
 
   // カテゴリの一覧を Claude に伝える
   let categoryList = '';
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     categoryList += category.id + ': ' + category.name + '（' + category.subs.join('／') + '）\n';
   }
   const prompt =
@@ -170,7 +170,7 @@ function buildReviewPrompt() {
   const budgets = appState.profile.budgets;
 
   let lines = '';
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     const now = summary.categories[category.id] ? summary.categories[category.id].total : 0;
     const before = previous.categories[category.id] ? previous.categories[category.id].total : 0;
     const budget = Number(budgets[category.id]) || 0;

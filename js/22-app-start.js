@@ -45,17 +45,31 @@ const NAV_ITEMS = [
 
 /** メニュー（左側とスマホの下）を作る */
 function renderNavigation() {
-  let sideHtml = '';
-  let tabHtml = '';
-  for (const item of NAV_ITEMS) {
-    const current = appState.screen === item.screen ? ' aria-current="page"' : '';
-    sideHtml += '<button type="button" class="nav-item" data-action="go" data-screen="' + item.screen + '"' + current + '>' + iconSvg(item.icon) + item.label + '</button>';
-    if (item.mobile) {
-      tabHtml += '<button type="button" class="tab-item" data-action="go" data-screen="' + item.screen + '"' + current + '>' + iconSvg(item.icon) + item.label + '</button>';
+  const sideNav = findOne('#sideNav');
+  const tabBar = findOne('#tabBar');
+
+  // ボタンは最初の1回だけ作る（押すたびに作り直すと、タップした瞬間にチカッと点滅するため）
+  if (sideNav.children.length === 0) {
+    let sideHtml = '';
+    let tabHtml = '';
+    for (const item of NAV_ITEMS) {
+      sideHtml += '<button type="button" class="nav-item" data-action="go" data-screen="' + item.screen + '">' + iconSvg(item.icon) + item.label + '</button>';
+      if (item.mobile) {
+        tabHtml += '<button type="button" class="tab-item" data-action="go" data-screen="' + item.screen + '">' + iconSvg(item.icon) + item.label + '</button>';
+      }
+    }
+    sideNav.innerHTML = sideHtml;
+    tabBar.innerHTML = tabHtml;
+  }
+
+  // 今いる画面のボタンに印を付け替える
+  for (const button of findAll('[data-screen]', sideNav).concat(findAll('[data-screen]', tabBar))) {
+    if (button.dataset.screen === appState.screen) {
+      button.setAttribute('aria-current', 'page');
+    } else {
+      button.removeAttribute('aria-current');
     }
   }
-  findOne('#sideNav').innerHTML = sideHtml;
-  findOne('#tabBar').innerHTML = tabHtml;
 
   // 下のタブの「今いる場所」の印を、選ばれたタブの位置へすべらせる
   let tabIndex = 0;
@@ -186,19 +200,18 @@ function goToScreen(screenName) {
     // 使えない環境では何もしない
   }
   renderApp();
-  playScreenEnter('');
   window.scrollTo(0, 0);
 }
 
 /**
- * 画面の中身を、ふわっと現れさせる。
- *   direction … '' なら下から軽く、'next' なら右から、'previous' なら左から入ってくる
+ * 月を切りかえたとき、画面の中身を横にすべらせる（透明にはしない＝点滅しない）。
+ *   direction … 'next' なら右から、'previous' なら左から入ってくる
  */
 function playScreenEnter(direction) {
   const screenArea = findOne('#screen');
-  screenArea.classList.remove('enter', 'enter-next', 'enter-previous');
+  screenArea.classList.remove('enter-next', 'enter-previous');
   void screenArea.offsetWidth; // 同じ動きをもう一度させるためのおまじない
-  screenArea.classList.add(direction ? 'enter-' + direction : 'enter');
+  screenArea.classList.add('enter-' + direction);
 }
 
 /** 期間を step だけ動かす（ボタンもスワイプもここを通る） */

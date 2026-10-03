@@ -871,8 +871,7 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
     transform: translateX(calc(var(--tab-index) * 100%));
     transition: transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1);
   }
-  .tab-item { transition: transform 0.12s ease, color 0.2s ease; }
-  .tab-item:active { transform: scale(0.88); }
+  .tab-item { transition: color 0.2s ease; -webkit-tap-highlight-color: transparent; }
   .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
 
@@ -976,16 +975,14 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 }
 
 /* 画面を切りかえたときの、ふわっと現れる動き */
-@keyframes screen-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
-@keyframes screen-from-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
-@keyframes screen-from-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
-#screen.enter { animation: screen-rise 0.3s ease-out; }
+/* 点滅して見えないように、透明にはせず横にすべるだけにしている（月の切りかえ専用） */
+@keyframes screen-from-right { from { transform: translateX(24px); } to { transform: none; } }
+@keyframes screen-from-left { from { transform: translateX(-24px); } to { transform: none; } }
 #screen.enter-next { animation: screen-from-right 0.26s ease-out; }
 #screen.enter-previous { animation: screen-from-left 0.26s ease-out; }
 
-/* 押した感じ（ボタンが少しへこむ） */
-.btn:active, .icon-btn:active { transform: scale(0.95); }
-.btn, .icon-btn { transition: transform 0.1s ease; }
+/* スマホでタップしたときの、灰色の四角いハイライトを消す */
+html { -webkit-tap-highlight-color: transparent; }
 
 /* 動きを減らす設定の人には、アニメーションをしない */
 @media (prefers-reduced-motion: reduce) {

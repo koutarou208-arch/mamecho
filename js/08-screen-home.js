@@ -136,19 +136,26 @@ function homeMonthCardHtml(period) {
     '<div class="stat"><span class="label">収支</span><span class="value num total">' + formatYen(balance, { showPlus: true }) + '</span></div>' +
     '</div>';
 
+  // --- 株式投資の損益（収支にふくまれている分） ---
+  if (summary.tradeGain > 0 || summary.tradeLoss > 0) {
+    const tradeClass = summary.tradeNet >= 0 ? 'up' : 'down';
+    html += '<p class="small" style="margin-top:10px">株式投資の損益（収支にふくむ） ' +
+      '<span class="delta ' + tradeClass + '">' + iconSvg(summary.tradeNet >= 0 ? 'up' : 'down') + formatYen(summary.tradeNet, { showPlus: true }) + '</span></p>';
+  }
+
   html += '<hr class="divider">';
 
   // --- 予算 ---
   const budget = totalBudget();
   if (budget > 0) {
     const elapsed = elapsedRatio(period);
-    const status = budgetStatus(summary.expense, budget, elapsed);
-    const usedPercent = Math.min(100, (summary.expense / budget) * 100);
+    const status = budgetStatus(summary.spending, budget, elapsed);
+    const usedPercent = Math.min(100, (summary.spending / budget) * 100);
     const meterClass = status === 'good' ? '' : status;
     html += '<div class="row-gap" style="justify-content:space-between; margin-bottom:8px">' +
-      '<span><strong>予算</strong> <span class="muted small">' + formatYen(summary.expense) + ' / ' + formatYen(budget) + '</span></span>' +
+      '<span><strong>予算</strong> <span class="muted small">' + formatYen(summary.spending) + ' / ' + formatYen(budget) + '</span></span>' +
       statusChipHtml(status) + '</div>';
-    html += '<div class="meter" role="img" aria-label="予算の' + Math.round((summary.expense / budget) * 100) + '%を使用">' +
+    html += '<div class="meter" role="img" aria-label="予算の' + Math.round((summary.spending / budget) * 100) + '%を使用">' +
       '<div class="meter-fill ' + meterClass + '" style="width:' + usedPercent.toFixed(1) + '%"></div>';
     if (isCurrent) {
       html += '<div class="meter-pace" style="left:calc(' + (elapsed * 100).toFixed(1) + '% - 1px)" title="今日までのペースの目安"></div>';
@@ -156,7 +163,7 @@ function homeMonthCardHtml(period) {
     html += '</div>';
 
     // 残りの日数と1日あたり
-    const remaining = budget - summary.expense;
+    const remaining = budget - summary.spending;
     if (isCurrent) {
       const range = periodRange(period);
       const daysLeft = daysBetween(todayText(), range.end);
@@ -187,8 +194,8 @@ function homeMonthCardHtml(period) {
     const previousRange = periodRange(shiftPeriod(period, -1));
     const sameDayLastMonth = addDays(previousRange.start, passedDays);
     const previousSoFar = summarizeRange({ start: previousRange.start, end: sameDayLastMonth < previousRange.end ? sameDayLastMonth : previousRange.end });
-    const difference = summary.expense - previousSoFar.expense;
-    if (previousSoFar.expense > 0) {
+    const difference = summary.spending - previousSoFar.spending;
+    if (previousSoFar.spending > 0) {
       const word = difference <= 0 ? '少ない' : '多い';
       html += '<p class="small muted" style="margin-top:6px">先月の同じ時期より支出が ' + formatYen(Math.abs(difference)) + ' ' + word + 'ペースです</p>';
     }
@@ -237,7 +244,7 @@ function homeCardPaymentsHtml() {
 function homeSpendingCardHtml(period) {
   const summary = summarizePeriod(period);
   const rows = [];
-  for (const category of EXPENSE_CATEGORIES) {
+  for (const category of LIVING_EXPENSE_CATEGORIES) {
     const bucket = summary.categories[category.id];
     if (bucket && bucket.total > 0) {
       rows.push({ id: category.id, label: category.name, value: bucket.total });

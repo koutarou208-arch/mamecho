@@ -297,6 +297,25 @@ same('スワイプ: 短い動きは無視', swipeStepOf(30, 0), 0);
 same('スワイプ: 縦のほうが大きければ無視', swipeStepOf(80, 90), 0);
 
 
+section('株式投資の損益（収支に含める）');
+allTransactions = [
+  { id: 'a', type: 'income', date: '2026-10-05', amount: 300000, category: 'salary' },
+  { id: 'b', type: 'expense', date: '2026-10-06', amount: 100000, category: 'food' },
+  { id: 'c', type: 'income', date: '2026-10-10', amount: 50000, category: 'trade' },
+  { id: 'd', type: 'expense', date: '2026-10-12', amount: 20000, category: 'tradeLoss' },
+];
+const tradeSummary = summarizeRange({ start: '2026-10-01', end: '2026-11-01' });
+same('投資: 収支は利益・損失をふくむ（収入）', tradeSummary.income, 350000);
+same('投資: 収支は利益・損失をふくむ（支出）', tradeSummary.expense, 120000);
+same('投資: 利益', tradeSummary.tradeGain, 50000);
+same('投資: 損失', tradeSummary.tradeLoss, 20000);
+same('投資: 損益の合計', tradeSummary.tradeNet, 30000);
+same('投資: 生活費の支出（予算の対象）は損失をのぞく', tradeSummary.spending, 100000);
+check('投資: 損失カテゴリは予算の対象外', !LIVING_EXPENSE_CATEGORIES.some((item) => item.id === 'tradeLoss'));
+check('投資: 損失カテゴリは支出の選択肢にある', EXPENSE_CATEGORIES.some((item) => item.id === 'tradeLoss'));
+check('投資: 利益カテゴリは収入の選択肢にある', INCOME_CATEGORIES.some((item) => item.id === 'trade'));
+allTransactions = [];
+
 /* ===========================================================
    結果
    =========================================================== */
