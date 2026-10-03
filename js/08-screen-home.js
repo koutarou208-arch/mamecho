@@ -23,9 +23,10 @@ const HomeScreen = {
 
   html() {
     const period = appState.period;
-    let html = '<div class="grid">';
+    let html = '<div class="grid home-grid">';
     html += homeWelcomeHtml();
     html += homeAssetCardHtml(period);
+    html += homeTradeSafetyCardHtml(period);
     html += homeCompositionCardHtml(period);
     html += homeMonthCardHtml(period);
     html += homeCardPaymentsHtml();
@@ -54,7 +55,7 @@ function homeWelcomeHtml() {
   if (appState.isSample || allTransactions.length > 0) {
     return '';
   }
-  return '<section class="card span-12">' +
+  return '<section class="card span-12 home-welcome">' +
     '<div class="card-head"><h2>はじめに</h2></div>' +
     '<ol class="welcome-steps">' +
     '<li><strong>口座を登録する</strong><span>財布・銀行・カードなどと、今の残高を入れます。</span><button class="btn small" data-action="go" data-screen="accounts">口座へ</button></li>' +
@@ -97,7 +98,7 @@ function homeAssetCardHtml(period) {
   }
 
   const sign = breakdown.net < 0 ? '−' : '';
-  return '<section class="card span-7">' +
+  return '<section class="card span-7 home-asset">' +
     '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '</span></div>' +
     '<div class="hero-number">' + sign + '<span class="yen">¥</span>' + formatNumber(Math.abs(breakdown.net)) + '</div>' +
     '<div style="margin-block: 6px 14px">' + deltaHtml + '</div>' +
@@ -142,8 +143,6 @@ function homeMonthCardHtml(period) {
     html += '<p class="small" style="margin-top:10px">株式投資の損益（収支にふくむ） ' +
       '<span class="delta ' + tradeClass + '">' + iconSvg(summary.tradeNet >= 0 ? 'up' : 'down') + formatYen(summary.tradeNet, { showPlus: true }) + '</span></p>';
   }
-
-  html += homeTradeSafetyHtml(period, summary);
 
   html += '<hr class="divider">';
 
@@ -209,41 +208,61 @@ function homeMonthCardHtml(period) {
 
 
 /**
- * 「株の利益がどれくらいあれば安心か」の表示（今の収支をもとにした計算。投資のおすすめではない）。
- * 毎月の貯金目標があれば、それを安心ラインにする。なければ「赤字にならない」ことが安心ライン。
+ * 「株でいくら利益が出れば安心か」を、ホームの上のほうに大きく出すカード。
+ * （今の収支をもとにした計算で、投資のおすすめではありません）
+ * 毎月の貯金目標があれば、それが安心ライン。なければ「赤字にならないこと」が安心ライン。
  */
-function homeTradeSafetyHtml(period, summary) {
+function homeTradeSafetyCardHtml(period) {
+  const summary = summarizePeriod(period);
   if (summary.income === 0 && summary.expense === 0) {
     return ''; // 記録がまだない期間は出さない
   }
   const goal = Number(appState.profile.settings.savingsGoal) || 0;
   const judge = judgeTradeSafety(summary, goal);
   const average = averageBaseBalance(period, 3);
-  const lineName = goal > 0 ? '貯金目標' : '赤字にならないライン';
+  const lineName = goal > 0 ? '貯金目標 ' + formatYen(goal) : '赤字にならないこと';
 
+  // 大きな見出しの文と、色
+  let headline = '';
+  let meterClass = '';
   let chip = '';
-  let message = '';
   if (judge.status === 'safe') {
-    chip = statusChipHtml('good', '株なしで安心');
-    message = '投資をのぞいた収支は <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。' + lineName + 'に届いています';
+    headline = '株の利益がなくても安心です';
+    chip = statusChipHtml('good', '安心');
   } else if (judge.status === 'covered') {
-    chip = statusChipHtml('good', '利益で安心');
-    message = '投資をのぞくと <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。株の利益で' + lineName + 'に届きました';
+    headline = '株の利益で安心ラインに届きました';
+    chip = statusChipHtml('good', '達成');
   } else {
-    chip = statusChipHtml('warn', 'あと ' + formatYen(judge.remaining));
-    message = '投資をのぞくと <strong class="num">' + formatYen(judge.base, { showPlus: true }) + '</strong>。' + lineName + 'まで、株で <strong class="num">' + formatYen(judge.needed) + '</strong> の利益が必要です';
+    headline = 'あと <span class="num">' + formatYen(judge.remaining) + '</span> の株の利益で安心です';
+    meterClass = 'warn';
+    chip = statusChipHtml('warn', 'もう少し');
   }
 
-  let html = '<div class="trade-safety" style="margin-top:12px">';
-  html += '<div class="row-gap" style="justify-content:space-between"><strong>株の利益の安心ライン</strong>' + chip + '</div>';
-  html += '<p class="small" style="margin-top:6px">' + message + '</p>';
+  // 進み具合のバー（必要な利益のうち、今の株の損益でどれだけ埋まったか）
+  let percent = 100;
+  if (judge.needed > 0) {
+    percent = Math.max(0, Math.min(100, (summary.tradeNet / judge.needed) * 100));
+  }
+
+  let html = '<section class="card span-12 safety-card">';
+  html += '<div class="card-head"><h2>株の利益の安心ライン</h2>' + chip + '</div>';
+  html += '<p class="safety-headline">' + headline + '</p>';
+  html += '<p class="small muted">安心ライン: ' + lineName + '</p>';
+  html += '<div class="meter" style="margin-top:12px" role="img" aria-label="必要な利益の' + Math.round(percent) + '%まで届いています">' +
+    '<div class="meter-fill ' + meterClass + '" style="width:' + percent.toFixed(1) + '%"></div></div>';
+  html += '<div class="stats" style="margin-top:14px">' +
+    '<div class="stat"><span class="label">株をのぞいた収支</span><span class="value num">' + formatYen(judge.base, { showPlus: true }) + '</span></div>' +
+    '<div class="stat"><span class="label">必要な株の利益</span><span class="value num">' + formatYen(judge.needed) + '</span></div>' +
+    '<div class="stat"><span class="label">今月の株の損益</span><span class="value num">' + formatYen(summary.tradeNet, { showPlus: true }) + '</span></div>' +
+    '</div>';
+
   const averageNeeded = Math.max(0, goal - average);
   if (averageNeeded > 0) {
-    html += '<p class="small muted" style="margin-top:4px">ふだんの月（直近3か月）は、毎月 ' + formatYen(averageNeeded) + ' の利益で' + lineName + 'に届きます</p>';
+    html += '<p class="small muted" style="margin-top:12px">ふだんの月（直近3か月）は、毎月 ' + formatYen(averageNeeded) + ' の利益が目安です</p>';
   } else {
-    html += '<p class="small muted" style="margin-top:4px">ふだんの月（直近3か月）は、投資なしで' + lineName + 'に届いています</p>';
+    html += '<p class="small muted" style="margin-top:12px">ふだんの月（直近3か月）は、株なしで届いています</p>';
   }
-  html += '</div>';
+  html += '</section>';
   return html;
 }
 

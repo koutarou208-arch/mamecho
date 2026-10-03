@@ -822,7 +822,15 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 /* タブレットくらいの幅: カードを1列に */
 @media (max-width: 1020px) {
   .span-7, .span-5, .span-6, .span-4, .span-8 { grid-column: span 12; }
+  /* ホームは「総資産」のすぐ下に「株の利益の安心ライン」を出す（ほかのカードはその後ろ） */
+  .home-grid > .card { order: 5; }
+  .home-grid > .home-welcome { order: 0; }
+  .home-grid > .home-asset { order: 1; }
+  .home-grid > .safety-card { order: 2; }
 }
+
+/* 株の利益の安心ライン */
+.safety-headline { margin: 4px 0 2px; font-size: clamp(18px, 4.6vw, 24px); font-weight: 700; line-height: 1.4; }
 
 /* スマホくらいの幅: 左メニューを消して、下にタブを出す */
 @media (max-width: 860px) {
