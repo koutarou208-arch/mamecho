@@ -316,6 +316,21 @@ check('投資: 損失カテゴリは支出の選択肢にある', EXPENSE_CATEGO
 check('投資: 利益カテゴリは収入の選択肢にある', INCOME_CATEGORIES.some((item) => item.id === 'trade'));
 allTransactions = [];
 
+section('自動分類ルールの修正');
+const baseRules = [
+  { keyword: 'AAA', type: 'expense', category: 'food', sub: '外食' },
+  { keyword: 'BBB', type: 'expense', category: 'daily', sub: '日用品' },
+  { keyword: 'CCC', type: 'income', category: 'salary', sub: '給与' },
+];
+const editedRules = replaceRuleAt(baseRules, 1, { keyword: 'bbb2', type: 'expense', category: 'hobby', sub: 'サブスク' });
+same('ルール修正: 件数は変わらない', editedRules.length, 3);
+same('ルール修正: 同じ位置が書きかわる', editedRules[1].category, 'hobby');
+same('ルール修正: キーワードは正規化される', editedRules[1].keyword, 'BBB2');
+same('ルール修正: 元の配列は変えない', baseRules[1].category, 'daily');
+const mergedRules = replaceRuleAt(baseRules, 1, { keyword: 'AAA', type: 'expense', category: 'hobby', sub: 'サブスク' });
+same('ルール修正: 同じキーワードの別ルールとは1つにまとまる', mergedRules.length, 2);
+same('ルール修正: まとまったルールは新しい内容', mergedRules.filter((rule) => rule.keyword === 'AAA')[0].category, 'hobby');
+
 /* ===========================================================
    結果
    =========================================================== */

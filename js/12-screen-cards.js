@@ -262,8 +262,8 @@ function manualBillFormHtml(account, settings) {
   if (entries.length > 0) {
     html += '<ul class="plain-list">';
     for (const entry of entries) {
-      html += '<li><span class="grow"><span>' + formatMonthText(entry.billMonth) + '</span></span>' +
-        '<strong class="num">' + formatYen(-entry.amount) + '</strong>' +
+      html += '<li><button type="button" class="grow row-edit" data-action="edit-transaction" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の金額を直す"><span>' + formatMonthText(entry.billMonth) + '</span>' +
+        '<strong class="num">' + formatYen(-entry.amount) + '</strong></button>' +
         '<button type="button" class="icon-btn" data-action="delete-manual-bill" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の手入力を削除">' + iconSvg('close') + '</button></li>';
     }
     html += '</ul>';

@@ -348,6 +348,9 @@ function readTransactionForm() {
   if (editing && editing.billMonth) {
     transaction.billMonth = editing.billMonth; // カードの引き落とし記録の印は残す
   }
+  if (editing && editing.manualBill) {
+    transaction.manualBill = true; // 「月の支払い金額だけ入力」の印も残す（消えると請求として数えられなくなる）
+  }
 
   if (type === 'transfer') {
     const toAccountId = findOne('#transactionToAccount').value;

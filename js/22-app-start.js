@@ -375,6 +375,8 @@ const ACTIONS = {
 
   // --- 設定 ---
   'add-rule': () => addRuleFromForm(),
+  'edit-rule': (button) => startRuleEdit(Number(button.dataset.index)),
+  'cancel-rule-edit': () => cancelRuleEdit(),
   'delete-rule': (button) => deleteRule(Number(button.dataset.index)),
   'wipe': () => {
     isWipeConfirmOpen = true;

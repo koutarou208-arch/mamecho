@@ -512,6 +512,24 @@ function rememberCategoryRule(description, type, category, sub) {
 }
 
 
+/**
+ * ルールの一覧のうち、index 番目を新しい内容に書きかえた「新しい一覧」を返す（元の一覧は変えない）。
+ * 同じキーワード・同じ種類の別のルールがあれば、1つにまとめる。
+ */
+function replaceRuleAt(rules, index, newRule) {
+  const replaced = { keyword: normalizeText(newRule.keyword), type: newRule.type, category: newRule.category, sub: newRule.sub };
+  const result = [];
+  for (let position = 0; position < rules.length; position++) {
+    if (position === index) {
+      result.push(replaced);
+    } else if (!(rules[position].keyword === replaced.keyword && rules[position].type === replaced.type)) {
+      result.push(rules[position]);
+    }
+  }
+  return result;
+}
+
+
 /* ===========================================================
    7. 毎月の固定費・サブスクを見つける
    直近4か月のうち3か月以上、同じ内容・ほぼ同じ金額で出ている支出を探す。

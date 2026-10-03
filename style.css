@@ -718,6 +718,11 @@ details.more > summary { cursor: pointer; color: var(--accent); font-weight: 600
 .passbook th:first-child, .passbook td:first-child { text-align: left; }
 .passbook td:nth-child(2) { max-width: 16em; overflow: hidden; text-overflow: ellipsis; }
 .passbook tr.carry td { color: var(--muted); }
+/* 押すと直せる行 */
+.passbook tr.row-edit { cursor: pointer; }
+.passbook tr.row-edit:hover td { background: var(--accent-soft); }
+button.row-edit { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; padding: 6px 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+button.row-edit:hover { color: var(--accent); }
 .passbook-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 14px; }
 .passbook-balance { display: grid; gap: 2px; margin-bottom: 4px; }
 

@@ -414,7 +414,7 @@ function renderPassbook() {
     }
     const outAmount = row.effect < 0 ? passbookAmount(-row.effect) : '';
     const inAmount = row.effect > 0 ? passbookAmount(row.effect) : '';
-    html += '<tr><td>' + toWarekiText(record.date) + '</td><td title="' + escapeHtml(summaryText) + '">' + escapeHtml(summaryText) + '</td>' +
+    html += '<tr class="row-edit" data-action="edit-transaction" data-id="' + escapeHtml(record.id) + '" title="押すと直せます"><td>' + toWarekiText(record.date) + '</td><td title="' + escapeHtml(summaryText) + '">' + escapeHtml(summaryText) + '</td>' +
       '<td>' + outAmount + '</td><td>' + inAmount + '</td><td>' + passbookAmount(isDebt ? -row.balanceAfter : row.balanceAfter) + '</td></tr>';
   }
   html += '</tbody></table></div>';
