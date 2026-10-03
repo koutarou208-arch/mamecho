@@ -64,7 +64,7 @@ function settingsPeriodCardHtml() {
   const period = periodOf(todayText());
   return '<section class="card span-6">' +
     '<div class="card-head"><h2>集計期間</h2></div>' +
-    '<div class="setting"><label for="startDaySelect"><strong>1か月の始まりの日</strong><br><span class="hint">給料日が25日なら「25日」にすると、給料日から次の給料日の前日までを1か月として集計します。</span></label>' +
+    '<div class="setting"><label for="startDaySelect"><strong>1か月の始まりの日</strong><br><span class="hint">給料日が25日なら「25日」に</span></label>' +
     '<select id="startDaySelect">' + options + '</select></div>' +
     '<p class="small muted" style="margin-top:12px">今の期間: ' + periodTitle(period) + '（' + periodRangeText(period) + '）</p>' +
     '</section>';
@@ -78,11 +78,11 @@ function settingsDataCardHtml() {
   return '<section class="card span-6">' +
     '<div class="card-head"><h2>データの取り込み・書き出し</h2></div>' +
     '<div class="settings-list">' +
-    '<div class="setting"><span><strong>CSVを取り込む</strong><br><span class="hint">銀行・カードの明細CSVや、マネーフォワード ME から書き出したCSVを読み込めます。</span></span>' +
+    '<div class="setting"><span><strong>CSVを取り込む</strong></span>' +
     '<button type="button" class="btn small" data-action="open-import" data-icon="upload">取り込む</button></div>' +
-    '<div class="setting"><span><strong>CSVで書き出す</strong><br><span class="hint">表計算ソフトで開ける形で、すべての入出金を書き出します。</span></span>' +
+    '<div class="setting"><span><strong>CSVで書き出す</strong></span>' +
     '<button type="button" class="btn small" data-action="export-csv" data-icon="download">書き出す</button></div>' +
-    '<div class="setting"><span><strong>バックアップ</strong><br><span class="hint">口座・予算・設定もふくめて丸ごと保存します（JSON形式）。</span></span>' +
+    '<div class="setting"><span><strong>バックアップ</strong></span>' +
     '<span class="row-gap"><button type="button" class="btn small" data-action="export-backup" data-icon="download">保存</button>' +
     '<button type="button" class="btn small" data-action="restore-backup" data-icon="upload">戻す</button></span></div>' +
     '</div></section>';
@@ -95,7 +95,7 @@ function settingsDataCardHtml() {
 function settingsRulesCardHtml() {
   const rules = appState.profile.rules;
   let html = '<section class="card span-12">';
-  html += '<div class="card-head"><h2>自動分類ルール</h2><span class="sub">「内容」にキーワードがふくまれていたら、そのカテゴリにします</span></div>';
+  html += '<div class="card-head"><h2>自動分類ルール</h2><span class="sub">キーワード → カテゴリ</span></div>';
 
   // 追加フォーム
   html += '<div class="rule-form">' +

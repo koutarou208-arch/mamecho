@@ -109,7 +109,7 @@ function renderTransactionList() {
     '<span>支出 <strong class="num">' + formatYen(expense) + '</strong></span>';
 
   if (list.length === 0) {
-    listArea.innerHTML = '<p class="empty-note">条件に合う入出金はありません。<br>期間を変えるか、絞り込みを外してみてください。</p>';
+    listArea.innerHTML = '<p class="empty-note">条件に合う入出金はありません。</p>';
     return;
   }
 

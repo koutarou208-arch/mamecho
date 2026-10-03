@@ -19,7 +19,7 @@ const AccountsScreen = {
 
     // --- まとめ ---
     html += '<section class="card span-12">';
-    html += '<div class="card-head"><h2>すべての口座</h2><span class="sub">今の残高（予定として入れた先の日付の記録もふくむ）</span>' +
+    html += '<div class="card-head"><h2>すべての口座</h2><span class="sub">今の残高</span>' +
       '<button type="button" class="btn small primary" style="margin-left:auto" data-action="add-account" data-icon="plus">口座を追加</button></div>';
     html += '<div class="stats">' +
       '<div class="stat"><span class="label">資産</span><span class="value num">' + formatYen(breakdown.assets) + '</span></div>' +

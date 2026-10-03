@@ -171,9 +171,9 @@ function applyTypeToDialog(type) {
   findOne('#fromAccountLabel').textContent = accountLabels[type];
 
   if (type === 'adjust') {
-    findOne('#amountHint').textContent = '残高が増えた分はプラス、減った分はマイナス（例: -500）で入れます';
+    findOne('#amountHint').textContent = '増えた分はプラス、減った分はマイナス';
   } else {
-    findOne('#amountHint').textContent = '「1200+380」のような計算もできます';
+    findOne('#amountHint').textContent = '「1200+380」のような計算もOK';
   }
   updatePaymentFieldsVisibility();
 }
@@ -217,7 +217,7 @@ function updateAmountHint() {
     const value = calculateAmount(text);
     hint.textContent = Number.isNaN(value) || value === null ? '計算できません' : '= ' + formatYen(value);
   } else if (currentDialogType() !== 'adjust') {
-    hint.textContent = '「1200+380」のような計算もできます';
+    hint.textContent = '「1200+380」のような計算もOK';
   }
   updatePaymentPreview();
 }

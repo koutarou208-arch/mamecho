@@ -56,7 +56,7 @@ function budgetViewHtml(period) {
     '<button type="button" class="btn small" style="margin-left:auto" data-action="edit-budget">予算を編集</button></div>';
 
   if (budget === 0) {
-    html += '<p class="empty-note">まだ予算がありません。「予算を編集」から、カテゴリごとに1か月の上限を決めましょう。<br>先月の実績から自動で入れることもできます。</p>';
+    html += '<p class="empty-note">まだ予算がありません。「予算を編集」から決められます。</p>';
     html += '</section></div>';
     return html;
   }
@@ -142,11 +142,11 @@ function budgetMeterHtml(spent, limit, elapsed, status) {
 function budgetEditHtml() {
   const draft = appState.budgetDraft;
   let html = '<section class="card">';
-  html += '<div class="card-head"><h2>予算を編集</h2><span class="sub">空欄のカテゴリは予算なしになります</span></div>';
+  html += '<div class="card-head"><h2>予算を編集</h2></div>';
   html += '<div class="row-gap" style="margin-bottom:12px">' +
     '<button type="button" class="btn small" data-action="fill-budget" data-source="last">先月の実績で入れる</button>' +
     '<button type="button" class="btn small" data-action="fill-budget" data-source="average">3か月平均で入れる</button>' +
-    '<span class="hint">1,000円単位で切り上げて入ります</span></div>';
+    '</div>';
 
   for (const category of EXPENSE_CATEGORIES) {
     html += '<div class="budget-edit-row">' +

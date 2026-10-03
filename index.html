@@ -84,7 +84,7 @@
         <input type="radio" name="transactionType" id="typeIncome" value="income"><label for="typeIncome">収入</label>
         <input type="radio" name="transactionType" id="typeTransfer" value="transfer"><label for="typeTransfer">振替</label>
       </div>
-      <p class="adjust-label" id="adjustLabel" hidden>残高修正（口座の残高を実際の金額に合わせた記録）</p>
+      <p class="adjust-label" id="adjustLabel" hidden>残高修正</p>
 
       <!-- レシート読み取り（Claudeが使えるときだけ表示） -->
       <div class="receipt-row" id="receiptRow" hidden>
@@ -99,7 +99,7 @@
           <span aria-hidden="true">¥</span>
           <input id="transactionAmount" inputmode="decimal" autocomplete="off" placeholder="0">
         </div>
-        <small class="hint" id="amountHint">「1200+380」のような計算もできます</small>
+        <small class="hint" id="amountHint">「1200+380」のような計算もOK</small>
       </label>
 
       <div class="field-row">
@@ -287,7 +287,7 @@
         <p class="hint" id="cardCompanyNote"></p>
       </fieldset>
 
-      <small class="hint" id="accountBalanceHint">基準日の朝の時点の残高を入れてください。それ以降の入出金が自動で足し引きされます。</small>
+      <small class="hint" id="accountBalanceHint">基準日の時点の残高</small>
 
       <p class="form-error" id="accountError" role="alert"></p>
 

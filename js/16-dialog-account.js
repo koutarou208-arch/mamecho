@@ -61,10 +61,10 @@ function onAccountKindChange() {
   findOne('#cardFields').hidden = kind !== 'card';
   if (isDebt) {
     findOne('#accountBalanceLabel').textContent = '未払いの残高（借りている額）';
-    findOne('#accountBalanceHint').textContent = '基準日の朝の時点で、まだ払っていない金額を入れてください（なければ0）。';
+    findOne('#accountBalanceHint').textContent = '基準日の時点で、まだ払っていない金額（なければ0）';
   } else {
     findOne('#accountBalanceLabel').textContent = '残高';
-    findOne('#accountBalanceHint').textContent = '基準日の朝の時点の残高を入れてください。それ以降の入出金が自動で足し引きされます。';
+    findOne('#accountBalanceHint').textContent = '基準日の時点の残高';
   }
 }
 

@@ -98,7 +98,7 @@ function homeAssetCardHtml(period) {
 
   const sign = breakdown.net < 0 ? '−' : '';
   return '<section class="card span-7">' +
-    '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '（資産 − 負債）</span></div>' +
+    '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '</span></div>' +
     '<div class="hero-number">' + sign + '<span class="yen">¥</span>' + formatNumber(Math.abs(breakdown.net)) + '</div>' +
     '<div style="margin-block: 6px 14px">' + deltaHtml + '</div>' +
     '<div class="chart" id="assetTrendChart"></div>' +
@@ -257,7 +257,7 @@ function homeSpendingCardHtml(period) {
 
   const span = cardAccounts().length > 0 ? 'span-7' : 'span-5';
   return '<section class="card ' + span + '">' +
-    '<div class="card-head"><h2>' + periodShortTitle(period) + 'の支出の内訳</h2><span class="sub">項目を押すと明細へ</span></div>' +
+    '<div class="card-head"><h2>' + periodShortTitle(period) + 'の支出の内訳</h2></div>' +
     rankingBarsHtml(shownRows, 'expense') +
     '</section>';
 }
@@ -273,7 +273,7 @@ function homeRecentCardHtml() {
   let html = '<section class="card ' + span + '">';
   html += '<div class="card-head"><h2>最近の入出金</h2><button class="link-btn" data-action="go" data-screen="transactions">すべて見る</button></div>';
   if (recent.length === 0) {
-    html += '<p class="empty-note">まだ記録がありません。右上の「記録する」から始めましょう。</p>';
+    html += '<p class="empty-note">まだ記録がありません。</p>';
   } else {
     html += '<div class="tx-list">';
     for (const transaction of recent) {

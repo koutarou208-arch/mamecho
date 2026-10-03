@@ -194,7 +194,7 @@ function reportFixedCostCardHtml(period) {
     '<div class="stat"><span class="label">変動費（それ以外）</span><span class="value num">' + formatYen(variable) + '</span><span class="small muted">支出の' + (summary.expense > 0 ? 100 - fixedShare : 0) + '%</span></div>' +
     '</div>';
   html += '<hr class="divider">';
-  html += '<div class="card-head" style="margin-bottom:4px"><h2>毎月の支払い・サブスク</h2><span class="sub">自動で見つけたもの · 月 約' + formatYen(recurringTotal) + '</span></div>';
+  html += '<div class="card-head" style="margin-bottom:4px"><h2>毎月の支払い・サブスク</h2><span class="sub">月 約' + formatYen(recurringTotal) + '</span></div>';
   if (recurring.length === 0) {
     html += '<p class="small muted">3か月以上続けて同じように出ている支払いが見つかると、ここに出ます。</p>';
   } else {
@@ -251,7 +251,7 @@ function reportCalendarCardHtml(period, spanClass) {
   }
 
   let html = '<section class="card ' + spanClass + '">';
-  html += '<div class="card-head"><h2>カレンダー</h2><span class="sub">日を押すとその日の明細へ</span></div>';
+  html += '<div class="card-head"><h2>カレンダー</h2></div>';
   html += '<div class="calendar">';
   for (let index = 0; index < 7; index++) {
     const className = index === 0 ? ' sun' : index === 6 ? ' sat' : '';

@@ -20,7 +20,7 @@ const CardsScreen = {
     const cards = cardAccounts();
     let html = '<div class="grid">';
     if (cards.length === 0) {
-      html += '<section class="card span-12"><p class="empty-note">クレジットカードがまだ登録されていません。<br>カードを登録すると、締め日・支払日から引き落とし予定を自動で計算します。</p>' +
+      html += '<section class="card span-12"><p class="empty-note">クレジットカードがまだ登録されていません。</p>' +
         '<div class="row-gap" style="justify-content:center"><button type="button" class="btn primary" data-action="add-account" data-kind="card">カードを登録する</button></div></section>';
     }
     for (const card of cards) {
@@ -92,7 +92,7 @@ function cardPanelHtml(account) {
   // --- 支払日を過ぎたのに記録されていない請求 ---
   if (summary.overdueBills.length > 0) {
     html += '<div class="confirm-box" style="margin-top:14px; border-color:var(--warn); background:color-mix(in oklab, var(--warn) 10%, var(--surface))">' +
-      '<p>' + statusChipHtml('warn', '未記録') + ' 支払日を過ぎた請求が' + summary.overdueBills.length + '件あります。引き落とされていたら「記録する」を押すと、口座の残高に反映されます。</p><div class="row-gap">';
+      '<p>' + statusChipHtml('warn', '未記録') + ' 支払日を過ぎた請求が' + summary.overdueBills.length + '件あります。引き落とされていたら「記録する」を押してください。</p><div class="row-gap">';
     for (const bill of summary.overdueBills.slice(-3)) {
       html += '<button type="button" class="btn small" data-action="record-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '">' +
         formatMonthDay(bill.payDate) + ' ' + formatYen(bill.total) + ' を記録する</button>';
@@ -131,7 +131,7 @@ function cardPanelHtml(account) {
 
   // --- これからの請求の一覧 ---
   html += '<hr class="divider">';
-  html += '<div class="card-head" style="margin-bottom:4px"><h2>これからの請求</h2><span class="sub">行を押すと内訳</span></div>';
+  html += '<div class="card-head" style="margin-bottom:4px"><h2>これからの請求</h2></div>';
   if (summary.upcomingBills.length === 0) {
     html += '<p class="small muted">これからの請求はありません。</p>';
   } else {
@@ -190,7 +190,7 @@ function billRowHtml(account, bill, today) {
   }
   if (!bill.paid) {
     html += '<div style="margin-top:6px"><button type="button" class="btn small" data-action="record-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '">この引き落としを記録する</button>' +
-      '<span class="hint" style="margin-left:8px">引き落とし口座からカードへの振替（と手数料の支出）として記録します</span></div>';
+      '</div>';
   }
   html += '</div></details>';
   return html;
@@ -251,8 +251,7 @@ function manualBillFormHtml(account, settings) {
   const entries = manualBillsOf(account);
   const isOpen = openManualPanels[account.id] || entries.length > 0;
   let html = '<details class="more"' + (isOpen ? ' open' : '') + '><summary>月の支払い金額だけをまとめて入力する</summary>';
-  html += '<p class="hint" style="margin-top:8px">買い物を1件ずつ記録しなくても、「この月にいくら引き落とされる」という合計だけを入れられます（JCBのスキップ払いの確定額など）。' +
-    '入れた金額はこのカードの負債に足され、上のグラフと請求の一覧に出ます。同じ月にもう一度入れると上書きされます。</p>';
+  html += '<p class="hint" style="margin-top:8px">月の合計だけを入れられます。同じ月に入れ直すと上書きされます。</p>';
   html += '<div class="manual-bill-form">' +
     '<label class="field"><span>支払う月</span><select id="manualMonth-' + escapeHtml(account.id) + '">' + options + '</select></label>' +
     '<label class="field"><span>金額</span><div class="amount-input"><span aria-hidden="true">¥</span>' +
