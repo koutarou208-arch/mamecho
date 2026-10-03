@@ -7,7 +7,7 @@
 
    デザインのテーマ: 緑の罫線が入った「帳簿ノート」と、銀行の「通帳」。
    ・アクセント色 … 帳簿の緑
-   ・ロゴ          … 朱色のハンコ
+   ・ロゴ          … ロシアンブルーの猫（index.html の中の絵）
    ・通帳画面      … ドット文字（昔のプリンターの文字）
    =========================================================== */
 
@@ -34,9 +34,6 @@
   --accent: #1c6a4f;
   --accent-ink: #ffffff;    /* アクセント色の上に置く文字 */
   --accent-soft: #e2f0e9;   /* アクセントのうすい版（選択中の背景） */
-
-  /* ハンコの朱色（ロゴだけで使う） */
-  --stamp: #c4412b;
 
   /* グラフの色（色覚の多様性に配慮して検証済みの組み合わせ） */
   --income: #2a78d6;        /* 収入（青） */
@@ -92,7 +89,6 @@
     --accent: #5dc39b;
     --accent-ink: #0a1711;
     --accent-soft: #1a3328;
-    --stamp: #e0644d;
     --income: #3987e5;
     --expense: #d95926;
     --chart-1: #3987e5;
@@ -123,7 +119,6 @@
   --accent: #5dc39b;
   --accent-ink: #0a1711;
   --accent-soft: #1a3328;
-  --stamp: #e0644d;
   --income: #3987e5;
   --expense: #d95926;
   --chart-1: #3987e5;
@@ -190,19 +185,8 @@ button { font: inherit; color: inherit; }
 }
 .brand { display: flex; align-items: center; gap: 10px; padding-inline: 8px; }
 .brand-name { font-family: var(--font-display); font-weight: 900; font-size: 20px; letter-spacing: 0.06em; }
-/* ハンコのロゴ */
-.stamp {
-  width: 32px; height: 32px;
-  display: grid; place-items: center;
-  border: 2px solid var(--stamp);
-  border-radius: 50%;
-  color: var(--stamp);
-  font-family: var(--font-display);
-  font-weight: 900;
-  font-size: 16px;
-  line-height: 1;
-  transform: rotate(-8deg);
-}
+/* ロゴの猫 */
+.cat-logo { width: 36px; height: 36px; flex: none; }
 .side-nav { display: grid; gap: 2px; }
 .nav-item {
   display: flex; align-items: center; gap: 12px;
