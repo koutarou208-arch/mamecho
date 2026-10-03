@@ -351,6 +351,43 @@
   </div>
 </dialog>
 
+
+<!-- ===========================================================
+     ダイアログ6: 暗号化ロックのパスフレーズ入力
+     （ロック中は閉じられません。中身は js/21-encryption-lock.js が動かします）
+     =========================================================== -->
+<dialog id="lockDialog" class="sheet" aria-labelledby="lockDialogTitle">
+  <form id="lockForm" novalidate>
+    <header class="sheet-head">
+      <h2 id="lockDialogTitle">ロックされています</h2>
+    </header>
+    <div class="sheet-body">
+      <p>パスフレーズを入れると、家計簿が開きます。</p>
+      <label class="field">
+        <span>パスフレーズ</span>
+        <input type="password" id="lockPassphrase" autocomplete="current-password">
+      </label>
+      <p class="form-error" id="lockError" role="alert"></p>
+      <details class="more">
+        <summary>パスフレーズを忘れたとき</summary>
+        <p class="hint" style="margin-top:8px">パスフレーズを忘れると、暗号化されたデータはだれにも元に戻せません。バックアップのファイルがあれば、新しく始めたあとに「設定」から戻せます。</p>
+        <p style="margin-top:8px"><button type="button" class="btn small ghost danger-text" data-action="forget-lock">暗号化されたデータを削除して新しく始める</button></p>
+        <div class="confirm-box" id="lockForgetConfirm" hidden>
+          <p>暗号化されたデータをすべて削除します。元に戻せません。</p>
+          <div class="row-gap">
+            <button type="button" class="btn danger" data-action="forget-lock-yes">削除して新しく始める</button>
+            <button type="button" class="btn ghost" data-action="forget-lock-no">やめる</button>
+          </div>
+        </div>
+      </details>
+    </div>
+    <footer class="sheet-foot">
+      <span class="spacer"></span>
+      <button type="submit" class="btn primary" id="lockSubmit">開く</button>
+    </footer>
+  </form>
+</dialog>
+
 <!-- 選ぶとすぐ読み込む隠しファイル選択（バックアップの復元用） -->
 <input type="file" id="restoreFile" accept=".json,application/json" hidden>
 
@@ -384,4 +421,6 @@
 <script src="js/17-csv-and-backup.js"></script>
 <script src="js/18-ai-features.js"></script>
 <script src="js/19-sample-data.js"></script>
-<script src="js/20-app-start.js"></script>
+<script src="js/20-rules-alerts.js"></script>
+<script src="js/21-encryption-lock.js"></script>
+<script src="js/22-app-start.js"></script>

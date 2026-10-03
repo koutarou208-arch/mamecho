@@ -938,6 +938,16 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 /* 月の支払い金額を手入力する欄 */
 .manual-bill-form { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-top: 8px; }
 
+/* 制度変更のお知らせ */
+.banner.notice { border-style: solid; border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); align-items: flex-start; }
+.banner.notice .notice-body { flex: 1 1 280px; min-width: 0; display: grid; gap: 8px; }
+.banner.notice .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.banner.notice a { color: var(--accent); font-weight: 600; }
+.banner + .banner { margin-top: -4px; }
+
+/* 暗号化ロックの設定 */
+.lock-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-top: 12px; }
+
 /* ホームの「はじめに」 */
 .welcome-steps { display: grid; gap: 10px; margin: 0; padding-left: 1.4em; }
 .welcome-steps li { padding-left: 4px; }
@@ -947,6 +957,7 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 @media (max-width: 560px) {
   .card-stats { grid-template-columns: minmax(0, 1fr); }
   .manual-bill-form { grid-template-columns: minmax(0, 1fr); }
+  .lock-form { grid-template-columns: minmax(0, 1fr); }
   .field-row.three { grid-template-columns: minmax(0, 1fr); }
   .bill-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(5.5em, 1fr); }
   .bill-row > span:nth-child(3), .bill-row > span:nth-child(4) { display: none; }

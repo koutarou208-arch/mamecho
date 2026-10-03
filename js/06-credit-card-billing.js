@@ -41,6 +41,59 @@ function valueOr(value, fallback) {
   return value;
 }
 
+/** 空欄なら null、数字なら数字にする */
+function numberOrNull(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+/** 分割払いの手数料率（年%）。買い物をした日と回数で決まる */
+function installmentRateFor(settings, count, dateText) {
+  if (settings.override.installment !== null) {
+    return settings.override.installment;
+  }
+  return pickRate(settings.company.rates.installment, dateText, count);
+}
+
+/** リボ払いの手数料率（年%）。dateText 時点の率 */
+function revolvingRateFor(settings, dateText) {
+  if (settings.override.revolving !== null) {
+    return settings.override.revolving;
+  }
+  return pickRate(settings.company.rates.revolving, dateText);
+}
+
+/** スキップ払いの手数料率（年%）。買い物をした日の率 */
+function skipRateFor(settings, dateText) {
+  if (settings.override.skip !== null) {
+    return settings.override.skip;
+  }
+  return pickRate(settings.company.rates.skip, dateText);
+}
+
+/** 画面に出す「今の手数料率」の文。例: 「分割 年14.7〜17.7%・リボ 年18%」 */
+function currentRateText(settings, dateText) {
+  function rangeText(rates, override) {
+    if (override !== null) {
+      return '年' + override + '%（自分で設定）';
+    }
+    const range = rateRangeAt(rates, dateText);
+    if (!range) {
+      return 'なし';
+    }
+    return range.min === range.max ? '年' + range.min + '%' : '年' + range.min + '〜' + range.max + '%';
+  }
+  let text = '分割 ' + rangeText(settings.company.rates.installment, settings.override.installment) +
+    '・リボ ' + rangeText(settings.company.rates.revolving, settings.override.revolving);
+  if (settings.methods.includes('skip')) {
+    text += '・スキップ ' + rangeText(settings.company.rates.skip, settings.override.skip);
+  }
+  return text;
+}
+
 /**
  * カード口座の設定を、カード会社の初期値と合わせて返す。
  * （口座ごとに上書きした数字があれば、そちらを使う）
@@ -56,9 +109,12 @@ function cardSettings(account) {
     monthsLater: Number(valueOr(saved.monthsLater, cycle.monthsLater)),
     payFrom: saved.payFrom || '',
     limit: Number(valueOr(saved.limit, 0)),
-    installmentRate: Number(valueOr(saved.installmentRate, company.installmentRate)),
-    revolvingRate: Number(valueOr(saved.revolvingRate, company.revolvingRate)),
-    skipRate: Number(valueOr(saved.skipRate, company.skipRate)),
+    // 自分で上書きした手数料率（空なら null。null のときは会社の表を日付で引く）
+    override: {
+      installment: numberOrNull(saved.installmentRate),
+      revolving: numberOrNull(saved.revolvingRate),
+      skip: numberOrNull(saved.skipRate),
+    },
     bonus2Fee: Number(valueOr(saved.bonus2Fee, company.bonus2Fee)),
     revolvingMonthly: Number(valueOr(saved.revolvingMonthly, 10000)),
     autoRevolving: saved.autoRevolving === true,
@@ -190,7 +246,8 @@ function installmentPlan(amount, count, annualRate) {
 
 /** スキップ払いの手数料 = 利用額 × 月利 × ずらした月数 */
 function skipFee(amount, months, annualRate) {
-  return Math.floor(amount * (annualRate / 100 / 12) * months);
+  // 0.0001 円を足すのは、小数の計算誤差で 449.9999… になり1円少なくなるのを防ぐため
+  return Math.floor(amount * annualRate * months / 1200 + 0.0001);
 }
 
 
@@ -312,14 +369,14 @@ function buildCardBills(account, records) {
       addToBill(month2, 'bonus2', transaction, 'ボーナス2回払い 2/2回目', amount - half, totalFee - halfFee);
     } else if (method === 'installment') {
       const count = Number(transaction.installments) || 3;
-      const plan = installmentPlan(amount, count, settings.installmentRate);
+      const plan = installmentPlan(amount, count, installmentRateFor(settings, count, transaction.date));
       for (let index = 0; index < plan.length; index++) {
         const label = '分割払い ' + (index + 1) + '/' + count + '回目';
         addToBill(addMonths(firstMonth, index), 'installment', transaction, label, plan[index].principal, plan[index].fee);
       }
     } else if (method === 'skip') {
       const months = Math.min(6, Math.max(1, Number(transaction.skipMonths) || 1));
-      const fee = skipFee(amount, months, settings.skipRate);
+      const fee = skipFee(amount, months, skipRateFor(settings, transaction.date));
       addToBill(addMonths(firstMonth, months), 'skip', transaction, 'スキップ払い（' + months + 'か月後）', amount, fee);
     } else if (method === 'revolving') {
       revolvingAdds[firstMonth] = (revolvingAdds[firstMonth] || 0) + amount;
@@ -334,11 +391,11 @@ function buildCardBills(account, records) {
   const revolvingMonths = Object.keys(revolvingAdds).sort();
   if (revolvingMonths.length > 0) {
     const lastAddMonth = revolvingMonths[revolvingMonths.length - 1];
-    const monthlyRate = settings.revolvingRate / 100 / 12;
     const monthlyPrincipal = Math.max(1000, settings.revolvingMonthly);
     let balance = 0;
     let month = revolvingMonths[0];
     for (let guard = 0; guard < 360; guard++) {
+      const monthlyRate = revolvingRateFor(settings, paymentDateOf(month, settings)) / 100 / 12;
       const fee = Math.round(balance * monthlyRate);
       balance = balance + (revolvingAdds[month] || 0);
       const principal = Math.min(balance, monthlyPrincipal);
@@ -493,23 +550,26 @@ function describePaymentPreview(account, draft) {
   }
   if (method === 'installment') {
     const count = Number(draft.installments) || 3;
-    const plan = installmentPlan(amount, count, settings.installmentRate);
+    const rate = installmentRateFor(settings, count, draft.date);
+    const plan = installmentPlan(amount, count, rate);
     let totalFee = 0;
     for (const part of plan) {
       totalFee = totalFee + part.fee;
     }
     const monthly = plan[0].principal + plan[0].fee;
-    return firstPayDate + 'から' + count + '回 · 毎月 約' + formatYen(monthly) + ' · 手数料 合計 約' + formatYen(totalFee) + '（年率' + settings.installmentRate + '%）';
+    return firstPayDate + 'から' + count + '回 · 毎月 約' + formatYen(monthly) + ' · 手数料 合計 約' + formatYen(totalFee) + '（年率' + rate + '%）';
   }
   if (method === 'skip') {
     const months = Number(draft.skipMonths) || 1;
     const payMonth = addMonths(firstMonth, months);
-    const fee = skipFee(amount, months, settings.skipRate);
-    return formatMonthDay(paymentDateOf(payMonth, settings)) + 'に ' + formatYen(amount + fee) + '（手数料 ' + formatYen(fee) + ' · 年率' + settings.skipRate + '%）';
+    const skipRate = skipRateFor(settings, draft.date);
+    const fee = skipFee(amount, months, skipRate);
+    return formatMonthDay(paymentDateOf(payMonth, settings)) + 'に ' + formatYen(amount + fee) + '（手数料 ' + formatYen(fee) + ' · 年率' + skipRate + '%）';
   }
   if (method === 'revolving') {
-    const monthlyFee = Math.round(amount * settings.revolvingRate / 100 / 12);
-    return firstPayDate + 'から毎月' + formatYen(settings.revolvingMonthly) + 'ずつ元金を返済 · 手数料は残高に月 約' + formatYen(monthlyFee) + '〜（年率' + settings.revolvingRate + '%）';
+    const revolvingRate = revolvingRateFor(settings, draft.date);
+    const monthlyFee = Math.round(amount * revolvingRate / 100 / 12);
+    return firstPayDate + 'から毎月' + formatYen(settings.revolvingMonthly) + 'ずつ元金を返済 · 手数料は残高に月 約' + formatYen(monthlyFee) + '〜（年率' + revolvingRate + '%）';
   }
   return firstPayDate + 'に ' + formatYen(amount) + '（手数料なし）';
 }

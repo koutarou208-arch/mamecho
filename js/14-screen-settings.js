@@ -18,6 +18,8 @@ const SettingsScreen = {
     let html = '<div class="grid">';
     html += settingsPeriodCardHtml();
     html += settingsDataCardHtml();
+    html += lockCardHtml();            // 21-encryption-lock.js
+    html += rulesDataCardHtml();       // 20-rules-alerts.js
     html += settingsRulesCardHtml();
     html += settingsStorageCardHtml();
     html += '</div>';

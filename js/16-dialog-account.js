@@ -138,9 +138,17 @@ function onCardCompanyChange(saved) {
   findOne('#cardMonthsLater').value = String(valueOr(savedCard.monthsLater, cycle.monthsLater));
 
   // 手数料率の欄には、会社の標準値を薄く表示しておく
-  findOne('#cardInstallmentRate').placeholder = '標準 ' + company.installmentRate;
-  findOne('#cardRevolvingRate').placeholder = '標準 ' + company.revolvingRate;
-  findOne('#cardSkipRate').placeholder = company.methods.includes('skip') ? '標準 ' + company.skipRate : 'この会社にはありません';
+  const today = todayText();
+  function standardText(rates) {
+    const range = rateRangeAt(rates, today);
+    if (!range) {
+      return '';
+    }
+    return '標準 ' + (range.min === range.max ? range.min : range.min + '〜' + range.max);
+  }
+  findOne('#cardInstallmentRate').placeholder = standardText(company.rates.installment);
+  findOne('#cardRevolvingRate').placeholder = standardText(company.rates.revolving);
+  findOne('#cardSkipRate').placeholder = company.methods.includes('skip') ? standardText(company.rates.skip) : 'この会社にはありません';
   findOne('#cardBonus2Fee').placeholder = company.methods.includes('bonus2') ? '標準 ' + company.bonus2Fee : 'この会社にはありません';
   findOne('#cardRevolvingMonthly').placeholder = '標準 10000';
 
@@ -148,7 +156,7 @@ function onCardCompanyChange(saved) {
     ? company.autoRevolvingName + 'を使っている（1回払いも自動でリボになる）'
     : '登録型リボ（1回払いで払っても自動でリボになる設定）を使っている';
 
-  findOne('#cardCompanyNote').textContent = company.notes + (company.verified ? '' : '（この会社の数字は未確認の目安です）');
+  findOne('#cardCompanyNote').textContent = company.notes + '（確からしさ: ' + CONFIDENCE_LABELS[company.confidence] + ' · ' + company.checkedAt + ' 確認）';
   onCardCycleChange();
 }
 

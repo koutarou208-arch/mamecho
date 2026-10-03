@@ -1,5 +1,5 @@
 /* ===========================================================
-   20-app-start.js  ―  アプリの「司令塔」
+   22-app-start.js  ―  アプリの「司令塔」
    -----------------------------------------------------------
    いちばん最後に読み込まれるファイルです。
      ・画面の一覧（SCREENS）とメニュー
@@ -79,6 +79,15 @@ function renderApp() {
 
   const screenArea = findOne('#screen');
 
+  // 暗号化ロック中: 中身は何も出さず、パスフレーズを求める
+  if (appState.locked) {
+    findOne('#screenTitle').textContent = 'ロック中';
+    findOne('#periodBar').hidden = true;
+    clearCharts();
+    screenArea.innerHTML = lockedScreenHtml();
+    return;
+  }
+
   // まだデータを読み込み中
   if (!appState.profile) {
     findOne('#screenTitle').textContent = '読み込み中';
@@ -133,13 +142,18 @@ function renderApp() {
 /** 画面の上のお知らせ帯 */
 function renderBanner() {
   const banner = findOne('#banner');
+  if (appState.locked) {
+    banner.innerHTML = '';
+    return;
+  }
+  const alertsHtml = rulesAlertsHtml(); // 20-rules-alerts.js（制度変更のお知らせ）
   if (appState.isSample) {
     banner.innerHTML = '<div class="banner"><p><strong>サンプルの家計簿を表示しています。</strong>架空の1年分のデータです。さわってみても保存はされません。</p>' +
-      '<button type="button" class="btn primary small" data-action="start-own">自分の家計簿をはじめる</button></div>';
+      '<button type="button" class="btn primary small" data-action="start-own">自分の家計簿をはじめる</button></div>' + alertsHtml;
   } else if (appState.storageMode === 'memory') {
-    banner.innerHTML = '<div class="banner"><p><strong>この環境では保存できません。</strong>ページを閉じると記録が消えます。設定からバックアップを保存できます。</p></div>';
+    banner.innerHTML = '<div class="banner"><p><strong>この環境では保存できません。</strong>ページを閉じると記録が消えます。設定からバックアップを保存できます。</p></div>' + alertsHtml;
   } else {
-    banner.innerHTML = '';
+    banner.innerHTML = alertsHtml;
   }
 }
 
@@ -151,6 +165,7 @@ function goToScreen(screenName) {
   appState.screen = screenName;
   appState.budgetDraft = null;
   isWipeConfirmOpen = false;
+  isDisableLockConfirmOpen = false;
   try {
     history.replaceState(null, '', '#' + screenName); // URLの最後に #cards などを付ける
   } catch (error) {
@@ -296,6 +311,31 @@ const ACTIONS = {
     showToast('すべてのデータを削除しました');
   },
 
+  // --- 制度データのお知らせ・報告 ---
+  'dismiss-rule-alerts': () => dismissRuleAlerts(),
+  'copy-report': () => copyDiagnostics(),
+
+  // --- 暗号化ロック ---
+  'enable-lock': () => enableLockFromForm(),
+  'lock-now': () => lockNow(),
+  'open-lock-dialog': () => openLockDialog(),
+  'disable-lock': () => {
+    isDisableLockConfirmOpen = true;
+    renderApp();
+  },
+  'disable-lock-no': () => {
+    isDisableLockConfirmOpen = false;
+    renderApp();
+  },
+  'disable-lock-yes': () => disableLockConfirmed(),
+  'forget-lock': () => {
+    findOne('#lockForgetConfirm').hidden = false;
+  },
+  'forget-lock-no': () => {
+    findOne('#lockForgetConfirm').hidden = true;
+  },
+  'forget-lock-yes': () => wipeEncryptedData(),
+
   // --- AI ---
   'run-review': () => runMonthlyReview(),
   'stop-review': () => stopMonthlyReview(),
@@ -326,7 +366,7 @@ function start() {
   // ダイアログの外側（暗いところ）を押したら閉じる
   for (const dialog of findAll('dialog')) {
     dialog.addEventListener('click', (event) => {
-      if (event.target === dialog) {
+      if (event.target === dialog && dialog.id !== 'lockDialog') { // ロック画面は外を押しても閉じない
         dialog.close();
       }
     });
@@ -350,6 +390,7 @@ function start() {
 
   setupTransactionDialog();
   setupAccountDialog();
+  setupLockDialog();
   fillIcons(document);
 
   // URL の最後が #cards などなら、その画面から始める（あとで変わったときも追いかける）

@@ -155,8 +155,8 @@ function cardPanelHtml(account) {
 
   // --- カード会社の補足 ---
   html += '<p class="hint" style="margin-top:12px">' + escapeHtml(settings.company.notes) +
-    (settings.company.verified ? '' : '（この会社の数字は未確認の目安です）') +
-    ' 手数料は年率' + settings.installmentRate + '%（分割）・' + settings.revolvingRate + '%（リボ）で計算しています。カードの設定から変更できます。</p>';
+    '（確からしさ: ' + CONFIDENCE_LABELS[settings.company.confidence] + ' · ' + settings.company.checkedAt + ' 確認）' +
+    ' 手数料の率（いま）: ' + escapeHtml(currentRateText(settings, todayText())) + '。カードの設定から変更できます。</p>';
   html += '</section>';
   return html;
 }

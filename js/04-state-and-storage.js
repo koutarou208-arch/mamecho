@@ -15,6 +15,13 @@
    保存するデータの形:
      profile         … 設定・口座・予算・自動分類ルール（1つの箱）
      m-2026-09 など  … その月の入出金のリスト（1か月ごとに1つの箱）
+     lock            … 暗号化ロックをオンにしたときだけ。鍵を作るための情報（秘密ではない）
+
+   【暗号化ロック】21-encryption-lock.js
+   オンにすると、箱の中身は書き込む直前にパスフレーズで暗号化され、
+   読み込んだ直後に元に戻します。保存先には暗号文しか残りません。
+   そのため、この4番のファイルでは「保存の直前・読み込みの直後」に
+   encryptForStorage / decryptFromStorage を通します。
    =========================================================== */
 
 
@@ -53,6 +60,9 @@ const appState = {
 
   // 保存の状態: '' / 'saving' / 'saved' / 'error'
   saveStatus: '',
+
+  // 暗号化ロックでロック中なら true（このときは何も表示せず、保存もしない）
+  locked: false,
 };
 
 /** 何もないところから始めるときの設定 */
@@ -101,6 +111,8 @@ const cloud = {
   firstAnswerArrived: false,
   waitingWrites: new Map(), // これから書き込む内容（箱の名前 → 中身）
   writingNow: new Set(),    // 今まさに書き込み中の箱の名前
+  queue: Promise.resolve(), // 届いたデータを「1つずつ順番に」処理するための列
+  heldDocs: null,           // ロック中に届いた暗号文（解除したら読む）
 };
 
 /**
@@ -172,8 +184,14 @@ function connectCloud(db, userId) {
   );
 }
 
-/** 保存場所から届いたデータを appState に入れる */
+/** 保存場所から届いたデータを appState に入れる（複数届いても1つずつ順番に処理する） */
 function receiveCloudSnapshot(snapshot) {
+  cloud.queue = cloud.queue
+    .then(() => processCloudSnapshot(snapshot))
+    .catch((error) => console.warn('snapshot error', error));
+}
+
+async function processCloudSnapshot(snapshot) {
   // 最初の1回: 端末に残っていた古い情報（キャッシュ）が空なら、サーバーの返事を待つ
   if (!cloud.firstAnswerArrived) {
     if (snapshot.empty && snapshot.metadata.fromCache) {
@@ -193,6 +211,35 @@ function receiveCloudSnapshot(snapshot) {
     return;
   }
 
+  // 届いたデータは書きかえ禁止の状態なので、コピーしてから使う
+  const raw = documents.map((documentSnapshot) => ({
+    name: documentSnapshot.id,
+    data: JSON.parse(JSON.stringify(documentSnapshot.data() || {})),
+  }));
+  await applyCloudDocuments(raw);
+}
+
+/**
+ * 届いた箱（暗号化されていれば元に戻して）appState に入れる。
+ * raw = [{ name: 'profile', data: {...} }, ...]
+ */
+async function applyCloudDocuments(raw) {
+  // --- 暗号化ロックの確認 ---
+  // （自分でオン/オフにした直後30秒は、古いデータが届いても勘違いしないよう無視する）
+  const lockEntry = raw.find((entry) => entry.name === 'lock');
+  const justChanged = Date.now() - Math.max(lockState.justEnabledAt, lockState.justDisabledAt) < 30000;
+  if (lockEntry && !(justChanged && !lockState.enabled)) {
+    adoptLockSettings(lockEntry.data);
+  } else if (!lockEntry && lockState.enabled && !isCloudWriteBusy('lock') && !justChanged) {
+    forgetLock(); // 別の端末でロックがオフにされた
+  }
+  if (lockState.enabled && !lockState.key) {
+    cloud.heldDocs = raw;   // 鍵がないので、パスフレーズが入るまで読まずに置いておく
+    enterLockedState();
+    return;
+  }
+  cloud.heldDocs = null;
+
   // 本物のデータが届いたので、サンプル表示はやめる
   if (appState.isSample) {
     appState.isSample = false;
@@ -201,21 +248,29 @@ function receiveCloudSnapshot(snapshot) {
   }
 
   const arrivedNames = new Set();
-  for (const documentSnapshot of documents) {
-    const name = documentSnapshot.id;
-    arrivedNames.add(name);
+  for (const entry of raw) {
+    if (entry.name === 'lock') {
+      continue;
+    }
+    arrivedNames.add(entry.name);
 
     // 自分が今書き込んでいる最中の箱は、画面の内容のほうが新しいので上書きしない
-    if (isCloudWriteBusy(name)) {
+    if (isCloudWriteBusy(entry.name)) {
       continue;
     }
 
-    // 届いたデータは書きかえ禁止の状態なので、コピーしてから使う
-    const data = JSON.parse(JSON.stringify(documentSnapshot.data() || {}));
-    if (name === 'profile') {
+    let data = entry.data;
+    try {
+      data = await decryptFromStorage(data); // 暗号化されていなければそのまま返る
+    } catch (error) {
+      console.warn('decrypt error', entry.name, error);
+      showToast('一部のデータを読み取れませんでした（パスフレーズが違うか、データが壊れています）。');
+      continue;
+    }
+    if (entry.name === 'profile') {
       appState.profile = normalizeProfile(data);
-    } else if (name.startsWith('m-')) {
-      const month = name.slice(2);
+    } else if (entry.name.startsWith('m-')) {
+      const month = entry.name.slice(2);
       appState.monthly[month] = Array.isArray(data.items) ? data.items : [];
     }
   }
@@ -231,6 +286,7 @@ function receiveCloudSnapshot(snapshot) {
   if (appState.profile === null) {
     appState.profile = createEmptyProfile();
   }
+  appState.locked = false;
   finishLoading();
 }
 
@@ -260,7 +316,16 @@ async function runCloudWrites(name) {
   while (cloud.waitingWrites.has(name)) {
     const content = cloud.waitingWrites.get(name);
     cloud.waitingWrites.delete(name);
-    await writeOneCloudDocument(name, content, false);
+    let stored = content;
+    try {
+      stored = content === null ? null : await encryptForStorage(name, content);
+    } catch (error) {
+      setSaveStatus('error');
+      showToast('暗号化に失敗したため保存しませんでした。');
+      console.warn('encrypt error', error);
+      continue;
+    }
+    await writeOneCloudDocument(name, stored, false);
   }
 
   cloud.writingNow.delete(name);
@@ -303,6 +368,11 @@ async function writeOneCloudDocument(name, content, isRetry) {
    4. ブラウザの中への保存（localStorage）
    =========================================================== */
 
+const browserStore = {
+  heldEnc: null,                 // ロック中に読み込んだ暗号文
+  saveChain: Promise.resolve(),  // 保存を「1つずつ順番に」行うための列
+};
+
 function loadFromBrowser() {
   let savedText = null;
   try {
@@ -319,6 +389,14 @@ function loadFromBrowser() {
     saved = null;
   }
 
+  // 暗号化されて保存されている → パスフレーズが入るまで読まない
+  if (saved && saved.lock && saved.enc) {
+    adoptLockSettings(saved.lock);
+    browserStore.heldEnc = saved.enc;
+    enterLockedState();
+    return;
+  }
+
   if (saved && saved.profile) {
     appState.profile = normalizeProfile(saved.profile);
     appState.monthly = saved.monthly || {};
@@ -328,15 +406,27 @@ function loadFromBrowser() {
   finishLoading();
 }
 
+/** ブラウザへの保存を予約する（暗号化がオンなら暗号化してから） */
 function saveToBrowser() {
-  try {
-    const content = JSON.stringify({ profile: appState.profile, monthly: appState.monthly });
-    localStorage.setItem(BROWSER_STORAGE_KEY, content);
-    setSaveStatus('saved');
-  } catch (error) {
-    setSaveStatus('error');
-    showToast('このブラウザに保存できませんでした。');
+  browserStore.saveChain = browserStore.saveChain
+    .then(writeBrowserNow)
+    .catch((error) => {
+      setSaveStatus('error');
+      showToast('このブラウザに保存できませんでした。');
+      console.warn('browser save error', error);
+    });
+}
+
+async function writeBrowserNow() {
+  const body = { profile: appState.profile, monthly: appState.monthly };
+  let text;
+  if (lockState.enabled && lockState.key) {
+    text = JSON.stringify({ lock: currentLockDocument(), enc: await encryptJson(body) });
+  } else {
+    text = JSON.stringify(body);
   }
+  localStorage.setItem(BROWSER_STORAGE_KEY, text);
+  setSaveStatus('saved');
 }
 
 
@@ -350,8 +440,8 @@ function saveToBrowser() {
  *   profileChanged … 設定・口座・予算が変わったら true
  */
 function saveChanges(changedMonths, profileChanged) {
-  if (appState.isSample) {
-    return; // サンプルは保存しない
+  if (appState.isSample || appState.locked) {
+    return; // サンプルとロック中は保存しない
   }
 
   if (appState.storageMode === 'cloud') {
@@ -364,7 +454,7 @@ function saveChanges(changedMonths, profileChanged) {
         queueCloudWrite('m-' + month, null); // 空になった月の箱は消す
       } else {
         const content = { month: month, items: items };
-        if (JSON.stringify(content).length > 240000) {
+        if (JSON.stringify(content).length > 170000) {
           showToast(month + ' の記録が多すぎて保存できない可能性があります。');
         }
         queueCloudWrite('m-' + month, content);
@@ -396,11 +486,12 @@ function describeSaveStatus() {
   if (appState.saveStatus === 'error') {
     return '保存できませんでした';
   }
+  const lockText = lockState.enabled ? '・暗号化' : '';
   if (appState.storageMode === 'cloud') {
-    return 'Claudeアカウントに保存（自分専用）';
+    return 'Claudeアカウントに保存（自分専用' + lockText + '）';
   }
   if (appState.storageMode === 'browser') {
-    return 'このブラウザに保存';
+    return 'このブラウザに保存' + (lockState.enabled ? '（暗号化）' : '');
   }
   if (appState.storageMode === 'memory') {
     return '保存できない環境です';
