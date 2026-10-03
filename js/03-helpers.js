@@ -344,6 +344,23 @@ function showToast(message) {
 }
 
 /**
+ * 指を横にすべらせた動きから、期間を動かす向きを決める。
+ *   dx … 横にどれだけ動いたか（右が＋）  dy … 縦にどれだけ動いたか
+ * 返す値: -1（前の期間へ） / 1（次の期間へ） / 0（何もしない）
+ * 短い動きや、縦のほうが大きい動き（ふつうの上下スクロール）は 0 にします。
+ */
+function swipeStepOf(dx, dy) {
+  const minimumDistance = 60;
+  if (Math.abs(dx) < minimumDistance) {
+    return 0;
+  }
+  if (Math.abs(dx) < Math.abs(dy) * 1.5) {
+    return 0;
+  }
+  return dx > 0 ? -1 : 1;
+}
+
+/**
  * アイコン（小さな絵）のSVGを返す。
  * 線だけで描いた24×24の絵で、色は文字の色に合わせて変わります。
  */

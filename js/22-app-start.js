@@ -56,6 +56,20 @@ function renderNavigation() {
   }
   findOne('#sideNav').innerHTML = sideHtml;
   findOne('#tabBar').innerHTML = tabHtml;
+
+  // 下のタブの「今いる場所」の印を、選ばれたタブの位置へすべらせる
+  let tabIndex = 0;
+  let mobileIndex = 0;
+  for (const item of NAV_ITEMS) {
+    if (!item.mobile) {
+      continue;
+    }
+    if (appState.screen === item.screen) {
+      tabIndex = mobileIndex;
+    }
+    mobileIndex += 1;
+  }
+  findOne('#tabBar').style.setProperty('--tab-index', tabIndex);
 }
 
 /** data-icon="plus" のような印が付いた部品に、アイコンの絵を入れる */
@@ -172,7 +186,63 @@ function goToScreen(screenName) {
     // 使えない環境では何もしない
   }
   renderApp();
+  playScreenEnter('');
   window.scrollTo(0, 0);
+}
+
+/**
+ * 画面の中身を、ふわっと現れさせる。
+ *   direction … '' なら下から軽く、'next' なら右から、'previous' なら左から入ってくる
+ */
+function playScreenEnter(direction) {
+  const screenArea = findOne('#screen');
+  screenArea.classList.remove('enter', 'enter-next', 'enter-previous');
+  void screenArea.offsetWidth; // 同じ動きをもう一度させるためのおまじない
+  screenArea.classList.add(direction ? 'enter-' + direction : 'enter');
+}
+
+/** 期間を step だけ動かす（ボタンもスワイプもここを通る） */
+function movePeriod(step) {
+  appState.period = shiftPeriod(appState.period, step);
+  appState.filters.date = '';
+  renderApp();
+  playScreenEnter(step > 0 ? 'next' : 'previous');
+}
+
+/**
+ * 画面を左右になぞって、前の月・次の月へ動かせるようにする（スマホ向け）。
+ * 入力欄・グラフ・横にスクロールする表の上では動かさない。
+ */
+function setupSwipe() {
+  const screenArea = findOne('#screen');
+  let startX = 0;
+  let startY = 0;
+  let tracking = false;
+
+  screenArea.addEventListener('touchstart', (event) => {
+    const blocked = event.target.closest('input, select, textarea, button, .chart, .scroll-x, table');
+    tracking = !blocked && event.touches.length === 1;
+    if (tracking) {
+      startX = event.touches[0].clientX;
+      startY = event.touches[0].clientY;
+    }
+  }, { passive: true });
+
+  screenArea.addEventListener('touchend', (event) => {
+    if (!tracking) {
+      return;
+    }
+    tracking = false;
+    const screen = SCREENS[appState.screen];
+    if (!screen || !screen.usesPeriod || appState.locked || !appState.profile) {
+      return;
+    }
+    const touch = event.changedTouches[0];
+    const step = swipeStepOf(touch.clientX - startX, touch.clientY - startY);
+    if (step !== 0) {
+      movePeriod(step);
+    }
+  }, { passive: true });
 }
 
 /** 入出金画面の絞り込みを全部外す */
@@ -188,11 +258,7 @@ function resetFilters() {
 const ACTIONS = {
   // --- 画面の移動と期間 ---
   'go': (button) => goToScreen(button.dataset.screen),
-  'change-period': (button) => {
-    appState.period = shiftPeriod(appState.period, Number(button.dataset.step));
-    appState.filters.date = '';
-    renderApp();
-  },
+  'change-period': (button) => movePeriod(Number(button.dataset.step)),
   'period-today': () => {
     appState.period = periodOf(todayText());
     appState.filters.date = '';
@@ -391,6 +457,7 @@ function start() {
   setupTransactionDialog();
   setupAccountDialog();
   setupLockDialog();
+  setupSwipe();
   fillIcons(document);
 
   // URL の最後が #cards などなら、その画面から始める（あとで変わったときも追いかける）

@@ -861,6 +861,18 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
     cursor: pointer;
   }
   .tab-item[aria-current="page"] { color: var(--accent); font-weight: 700; }
+  /* 今いるタブの上に出る印。タブを変えると横にすべる */
+  .tabbar { --tab-index: 0; }
+  .tabbar::before {
+    content: ""; position: absolute; top: 0; left: 4px;
+    width: calc((100% - 8px) / 6); height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent);
+    transform: translateX(calc(var(--tab-index) * 100%));
+    transition: transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1);
+  }
+  .tab-item { transition: transform 0.12s ease, color 0.2s ease; }
+  .tab-item:active { transform: scale(0.88); }
   .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
 }
 
@@ -962,6 +974,18 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .bill-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(5.5em, 1fr); }
   .bill-row > span:nth-child(3), .bill-row > span:nth-child(4) { display: none; }
 }
+
+/* 画面を切りかえたときの、ふわっと現れる動き */
+@keyframes screen-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes screen-from-right { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes screen-from-left { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+#screen.enter { animation: screen-rise 0.3s ease-out; }
+#screen.enter-next { animation: screen-from-right 0.26s ease-out; }
+#screen.enter-previous { animation: screen-from-left 0.26s ease-out; }
+
+/* 押した感じ（ボタンが少しへこむ） */
+.btn:active, .icon-btn:active { transform: scale(0.95); }
+.btn, .icon-btn { transition: transform 0.1s ease; }
 
 /* 動きを減らす設定の人には、アニメーションをしない */
 @media (prefers-reduced-motion: reduce) {
