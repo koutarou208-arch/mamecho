@@ -40,26 +40,32 @@ const LINE_PATTERN = /(利用日|利用金額|利用先|カード名称)/;
 
 function doGet(e) {
   const params = (e && e.parameter) || {};
-  if (params.key !== KEY) {
+  // 合言葉が短すぎる・合わない問い合わせには、メールを読まずに断る
+  if (KEY.length < 16 || params.key !== KEY) {
     return reply({ ok: false, error: 'bad_key' });
   }
-  const since = Number(params.since) || 0;
-  const items = [];
-  const threads = GmailApp.search(SEARCH, 0, 50);
-  for (const thread of threads) {
-    for (const message of thread.getMessages()) {
-      const receivedAt = message.getDate().getTime();
-      if (receivedAt <= since) {
-        continue;
-      }
-      const lines = message.getPlainBody().split(/\r?\n/).filter((line) => LINE_PATTERN.test(line));
-      if (lines.length > 0) {
-        items.push({ id: message.getId(), receivedAt: receivedAt, text: lines.join('\n') });
+  try {
+    const since = Number(params.since) || 0;
+    const items = [];
+    const threads = GmailApp.search(SEARCH, 0, 50);
+    for (const thread of threads) {
+      for (const message of thread.getMessages()) {
+        const receivedAt = message.getDate().getTime();
+        if (receivedAt <= since) {
+          continue;
+        }
+        const lines = message.getPlainBody().split(/\r?\n/).filter((line) => LINE_PATTERN.test(line));
+        if (lines.length > 0) {
+          items.push({ id: message.getId(), receivedAt: receivedAt, text: lines.join('\n').slice(0, 1000) });
+        }
       }
     }
+    items.sort((a, b) => a.receivedAt - b.receivedAt);
+    return reply({ ok: true, items: items.slice(0, 200) });
+  } catch (error) {
+    // 失敗したときも、エラーの中身（メールの文が入るかもしれない）は返さない
+    return reply({ ok: false, error: 'server_error' });
   }
-  items.sort((a, b) => a.receivedAt - b.receivedAt);
-  return reply({ ok: true, items: items.slice(0, 200) });
 }
 
 function reply(data) {
@@ -137,7 +143,7 @@ function mailItemToTransaction(item, accounts, defaultAccountId, today, guess) {
     account: account.id,
     category: guess ? guess.category : 'other',
     sub: guess ? guess.sub : '未分類',
-    description: notice.merchant || 'カードの利用',
+    description: (notice.merchant || 'カードの利用').slice(0, 60),
     memo: 'カード利用メールから自動で記録',
     include: true,
     createdAt: Date.now(),
@@ -247,15 +253,26 @@ async function runMailImport(manual) {
   }
 
   try {
-    const response = await fetch(mailImportUrl(config.url, config.key, config.lastReceivedAt));
+    // credentials: 'omit' … Google のログイン情報を送らない
+    // referrerPolicy: 'no-referrer' … どのページから来たかを送らない
+    // cache: 'no-store' … カードの利用の中身を、ブラウザのキャッシュ（端末の中の一時保存）に残さない
+    const response = await fetch(mailImportUrl(config.url, config.key, config.lastReceivedAt), {
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      cache: 'no-store',
+    });
     const data = await response.json();
     if (!appState.profile || appState.isSample || appState.locked) {
       return; // 待っている間にロックされた・別のデータに変わった
     }
     if (!data || data.ok !== true) {
-      mailImportState.message = data && data.error === 'bad_key'
-        ? '合言葉が合いません。「スクリプトをコピー」でコピーし直して、もう一度デプロイしてください。'
-        : '取り込み係から、思っていない返事が来ました。';
+      if (data && data.error === 'bad_key') {
+        mailImportState.message = '合言葉が合いません。「スクリプトをコピー」でコピーし直して、もう一度デプロイしてください。';
+      } else if (data && data.error === 'server_error') {
+        mailImportState.message = '取り込み係の中でエラーが起きました。Google の画面で「test」を実行して、許可が出ているか確かめてください。';
+      } else {
+        mailImportState.message = '取り込み係から、思っていない返事が来ました。';
+      }
       return;
     }
     const added = addMailItems(Array.isArray(data.items) ? data.items : []);
@@ -376,13 +393,14 @@ function mailImportCardHtml() {
     '</ol>';
   html += '<div class="mail-form">' +
     '<label class="field"><span>ウェブアプリの URL</span><input id="mailScriptUrl" autocomplete="off" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" value="' + escapeHtml(config.url) + '"></label>' +
-    '<label class="field"><span>合言葉（スクリプトの KEY と同じもの）</span><input id="mailScriptKey" autocomplete="off" value="' + escapeHtml(config.key) + '" placeholder="「スクリプトをコピー」で自動で入ります"></label>' +
+    '<label class="field"><span>合言葉（スクリプトの KEY と同じもの）</span><input id="mailScriptKey" type="password" autocomplete="off" value="' + escapeHtml(config.key) + '" placeholder="「スクリプトをコピー」で自動で入ります"></label>' +
     '<label class="field"><span>カードが分からないときの口座</span><select id="mailDefaultAccount">' + accountOptions + '</select></label>' +
     '</div>';
   html += '<label class="check" style="margin-top:8px"><input type="checkbox" id="mailIncludePast"><span>過去60日のメールも取り込む（自分で入れた分と重なることがあります）</span></label>';
   html += '<p class="form-error" id="mailImportError" role="alert"></p>';
   html += '<div class="row-gap" style="margin-top:8px"><button type="button" class="btn primary" data-action="mail-connect">つなぐ</button></div>';
-  html += '<p class="hint" style="margin-top:10px">取り込み係は、あなたの Google アカウントの中で動き、JCB の利用通知メールの「日時・金額・利用先・カード名」の行だけを渡します。合言葉を知らない人には何も返しません。合言葉は人に見せないでください。</p>';
+  html += '<p class="hint" style="margin-top:10px">取り込み係は、あなたの Google アカウントの中で動き、JCB の利用通知メールの「日時・金額・利用先・カード名」の行だけを渡します。合言葉を知らない人には何も返しません。合言葉とスクリプトは人に見せないでください（バックアップには入りません）。</p>';
+  html += '<p class="hint">合言葉が漏れたかもしれないときは <button type="button" class="btn small ghost" data-action="mail-new-key">合言葉を作り直す</button> を押して、出てきたスクリプトを Google に貼り直し、「デプロイを管理」→ 鉛筆 →「新しいバージョン」で更新してください。古い合言葉は使えなくなります。</p>';
   html += '</details>';
   html += '</section>';
   return html;
@@ -403,6 +421,15 @@ function showMailScript() {
   findOne('#textDialogHint').textContent = '「コピーする」を押して、Google Apps Script（script.google.com）の新しいプロジェクトに貼り付けます。合言葉が入っているので、人には見せないでください。';
   findOne('#textDialogContent').value = buildMailScript(config.key);
   findOne('#textDialog').showModal();
+}
+
+/** 「合言葉を作り直す」: 新しい合言葉にして、スクリプトを出す（Google 側も貼り直しが必要） */
+function renewMailKey() {
+  const config = mailImportSettings();
+  config.key = makeMailKey();
+  saveProfile();
+  showMailScript();
+  findOne('#textDialogHint').textContent = '新しい合言葉が入ったスクリプトです。Google のスクリプトを全部これに置きかえて保存し、「デプロイ」→「デプロイを管理」→ 鉛筆 →「バージョン: 新バージョン」→「デプロイ」で更新してください。';
 }
 
 /** 「つなぐ」: URL などを保存して、すぐ問い合わせてみる */

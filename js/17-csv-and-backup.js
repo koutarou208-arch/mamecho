@@ -107,6 +107,18 @@ function csvCell(value) {
   return text;
 }
 
+/**
+ * 文字の列用のCSVの1マス。「=」「+」「-」「@」で始まる文字は、表計算ソフトで開いたときに
+ * 式として実行されてしまうことがあるので、先頭に ' を付けてただの文字にする（メールなどから来た文字の対策）。
+ */
+function csvTextCell(value) {
+  let text = String(value === undefined || value === null ? '' : value);
+  if (/^[=+\-@\t\r]/.test(text)) {
+    text = "'" + text;
+  }
+  return csvCell(text);
+}
+
 /** すべての入出金をCSVにする（マネーフォワード ME に近い列の並び） */
 function exportCsv() {
   const lines = [];
@@ -131,19 +143,19 @@ function exportCsv() {
       subName = '';
     }
     const row = [
-      isCounted(transaction) ? 1 : 0,
-      transaction.date.replace(/-/g, '/'),
-      transaction.description || '',
-      signedAmount,
-      accountName(transaction.account),
-      categoryName,
-      subName,
-      transaction.memo || '',
-      transaction.type === 'transfer' ? 1 : 0,
-      transaction.type === 'expense' ? paymentMethodLabel(transaction) : '',
-      transaction.id,
+      csvCell(isCounted(transaction) ? 1 : 0),
+      csvCell(transaction.date.replace(/-/g, '/')),
+      csvTextCell(transaction.description || ''),
+      csvCell(signedAmount),
+      csvTextCell(accountName(transaction.account)),
+      csvTextCell(categoryName),
+      csvTextCell(subName),
+      csvTextCell(transaction.memo || ''),
+      csvCell(transaction.type === 'transfer' ? 1 : 0),
+      csvTextCell(transaction.type === 'expense' ? paymentMethodLabel(transaction) : ''),
+      csvTextCell(transaction.id),
     ];
-    lines.push(row.map(csvCell).join(','));
+    lines.push(row.join(','));
   }
   // 先頭の ﻿ は、Excel で開いたときに文字化けしないための印
   offerDownload('mamecho-' + todayText() + '.csv', '﻿' + lines.join('\r\n'));
@@ -154,12 +166,25 @@ function exportCsv() {
    3. バックアップ（JSON）
    =========================================================== */
 
+/**
+ * バックアップに入れる設定（元のデータは変えずに写しを作る）。
+ * メール取り込みの合言葉と URL は「鍵」なので、バックアップには入れない
+ * （ファイルや文字を人に渡してしまっても、カードの利用メールまでは読まれないように）。
+ */
+function profileForExport(profile) {
+  const copy = JSON.parse(JSON.stringify(profile));
+  if (copy.settings) {
+    delete copy.settings.mailImport;
+  }
+  return copy;
+}
+
 function exportBackup() {
   const backup = {
     app: 'mamecho',
     version: 1,
     exportedAt: new Date().toISOString(),
-    profile: appState.profile,
+    profile: profileForExport(appState.profile),
     monthly: appState.monthly,
   };
   offerDownload('mamecho-backup-' + todayText() + '.json', JSON.stringify(backup, null, 1));
@@ -228,7 +253,7 @@ function showBackupText() {
     app: 'mamecho',
     version: 1,
     exportedAt: new Date().toISOString(),
-    profile: appState.profile,
+    profile: profileForExport(appState.profile),
     monthly: appState.monthly,
   };
   findOne('#textDialogTitle').textContent = 'バックアップの文字';
@@ -252,7 +277,14 @@ function restoreBackupConfirmed() {
   if (!pendingRestore) {
     return;
   }
-  replaceAllData(pendingRestore.profile, pendingRestore.monthly);
+  // バックアップにはメール取り込みの鍵が入っていないので、この端末の接続はそのまま残す
+  const restoredProfile = pendingRestore.profile;
+  const currentSettings = appState.profile && appState.profile.settings;
+  if (currentSettings && currentSettings.mailImport) {
+    restoredProfile.settings = restoredProfile.settings || {};
+    restoredProfile.settings.mailImport = currentSettings.mailImport;
+  }
+  replaceAllData(restoredProfile, pendingRestore.monthly);
   pendingRestore = null;
   findOne('#importDialog').close();
   showToast('バックアップから戻しました');

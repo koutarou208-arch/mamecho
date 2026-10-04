@@ -283,6 +283,7 @@ const ACTIONS = {
   // --- Gmail から自動で記録（22-mail-import.js） ---
   'mail-copy-script': () => showMailScript(),
   'mail-connect': () => connectMailImport(),
+  'mail-new-key': () => renewMailKey(),
   'mail-import-now': () => runMailImport(true),
   'mail-disconnect': () => {
     mailImportState.disconnectConfirm = true;

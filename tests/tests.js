@@ -530,6 +530,24 @@ for (let index = 0; index < 400; index++) {
 }
 same('取り込みの目印: 覚えるIDは新しい300件まで', updateMailCursor({ lastReceivedAt: 0, importedIds: [] }, manyIds).importedIds.length, 300);
 
+section('安全のための確認');
+const secretProfile = { accounts: [], settings: { startDay: 25, mailImport: { url: 'https://script.google.com/macros/s/X/exec', key: 'SECRETKEYSECRETKEY12', lastReceivedAt: 5 } } };
+const exported = profileForExport(secretProfile);
+check('書き出し: バックアップに合言葉を入れない', JSON.stringify(exported).indexOf('SECRETKEYSECRETKEY12') === -1);
+check('書き出し: バックアップに取り込み係のURLを入れない', JSON.stringify(exported).indexOf('script.google.com') === -1);
+same('書き出し: ほかの設定はそのまま', exported.settings.startDay, 25);
+same('書き出し: 元のデータは変えない', secretProfile.settings.mailImport.key, 'SECRETKEYSECRETKEY12');
+same('CSV: = で始まる文字は式にならないようにする', csvTextCell('=HYPERLINK("http://x")'), '"\'=HYPERLINK(""http://x"")"');
+same('CSV: + で始まる文字も同じ', csvTextCell('+81'), "'+81");
+same('CSV: @ で始まる文字も同じ', csvTextCell('@SUM(1)'), "'@SUM(1)");
+same('CSV: ふつうの文字はそのまま', csvTextCell('スーパー'), 'スーパー');
+same('CSV: 金額（数字）はそのまま', csvCell(-1200), '-1200');
+const longMailTx = mailItemToTransaction({ id: 'z', receivedAt: 1, text: 'カード名称：JCB\nご利用金額：100円\nご利用先：' + 'ア'.repeat(500) }, [{ id: 'card1', kind: 'card', name: 'J', card: { company: 'jcb' } }], '', '2026-10-05', null);
+same('メール→記録: お店の名前は60文字まで', longMailTx.description.length, 60);
+const guardedScript = buildMailScript('abcDEF123456abcDEF');
+check('取り込み係: 合言葉が短すぎるときは何も返さない', guardedScript.indexOf('KEY.length < 16') !== -1);
+check('取り込み係: 失敗したときも中身を返さない', guardedScript.indexOf("error: 'server_error'") !== -1);
+
 /* ===========================================================
    結果
    =========================================================== */
