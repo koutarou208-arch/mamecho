@@ -61,7 +61,10 @@ function openTransactionDialog(transaction, preset) {
 
   // カテゴリ
   const categoryType = type === 'income' ? 'income' : 'expense';
-  const categoryId = transaction && transaction.category ? transaction.category : getCategoriesForType(categoryType)[0].id;
+  let categoryId = transaction && transaction.category ? transaction.category : getCategoriesForType(categoryType)[0].id;
+  if (!transaction && options.category && CATEGORY_BY_ID[options.category]) {
+    categoryId = options.category; // 「株の利益を記録」などから開いたときは、カテゴリを先に選んでおく
+  }
   fillCategorySelect(findOne('#transactionCategory'), categoryType, categoryId);
   fillSubcategorySelect(findOne('#transactionSubcategory'), categoryId, transaction ? transaction.sub : '');
 

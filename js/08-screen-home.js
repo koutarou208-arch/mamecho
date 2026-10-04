@@ -260,6 +260,9 @@ function homeTradeSafetyCardHtml(period) {
 
   let html = '<section class="card span-12 safety-card">';
   html += '<div class="card-head"><h2>株の利益の安心ライン</h2>' + chip + '</div>';
+  html += '<div class="row-gap" style="margin-bottom:10px">' +
+    '<button type="button" class="btn small primary" data-action="new-trade" data-kind="gain" data-icon="plus">株の利益を記録</button>' +
+    '<button type="button" class="btn small" data-action="new-trade" data-kind="loss" data-icon="plus">株の損失を記録</button></div>';
   html += '<p class="safety-headline">' + headline + '</p>';
   html += '<p class="small muted">安心ライン: ' + lineName + '</p>';
   html += '<div class="meter" style="margin-top:12px" role="img" aria-label="必要な利益の' + Math.round(percent) + '%まで届いています">' +

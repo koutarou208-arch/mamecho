@@ -280,6 +280,16 @@ const ACTIONS = {
   'start-own': () => startOwnLedger(),
 
   // --- 入出金 ---
+  'new-trade': (button) => {
+    // 株の売買の損益: 証券口座があればそれを選んでおく
+    const securities = appState.profile.accounts.find((account) => account.kind === 'securities');
+    const isGain = button.dataset.kind === 'gain';
+    openTransactionDialog(null, {
+      type: isGain ? 'income' : 'expense',
+      category: isGain ? 'trade' : 'tradeLoss',
+      account: securities ? securities.id : undefined,
+    });
+  },
   'new-transaction': (button) => openTransactionDialog(null, { account: button.dataset.account }),
   'edit-transaction': (button) => {
     const transaction = findTransaction(button.dataset.id);
