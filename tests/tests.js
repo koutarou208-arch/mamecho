@@ -503,6 +503,15 @@ const sampleForTest = createSampleData();
 check('サンプル: 固定費の一覧（空）がある（家計簿・設定の画面が落ちないように）', Array.isArray(sampleForTest.profile.recurring));
 check('サンプル: 読み込みの補いを通しても同じ形', Array.isArray(normalizeProfile(sampleForTest.profile).recurring));
 
+section('暗号化ロックのパスフレーズ');
+same('パスフレーズ: 12文字以上が必要', MIN_PASSPHRASE_LENGTH, 12);
+check('パスフレーズ: 短いものは断る', passphraseProblem('neko2026') !== '');
+check('パスフレーズ: 11文字も断る', passphraseProblem('abcdefghijk') !== '');
+check('パスフレーズ: 同じ文字のくり返しは断る', passphraseProblem('aaaaaaaaaaaaaaaa') !== '');
+check('パスフレーズ: 数字が並んでいるだけのものは断る', passphraseProblem('123456789012') !== '');
+same('パスフレーズ: 単語をつなげた長いものはOK', passphraseProblem('neko-sakura-umi-hoshi'), '');
+same('パスフレーズ: 日本語の文もOK', passphraseProblem('きょうはねこがよくねむる日'), '');
+
 /* ===========================================================
    結果
    =========================================================== */

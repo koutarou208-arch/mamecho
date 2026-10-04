@@ -39,7 +39,7 @@ const lockState = {
   justDisabledAt: 0, // オフにした直後の時刻
 };
 
-const MIN_PASSPHRASE_LENGTH = 8;
+const MIN_PASSPHRASE_LENGTH = 12; // 短いと、暗号文を盗まれたときに総当たりで当てられやすくなる
 const AUTO_LOCK_MINUTES = 10;   // 操作しないままこの時間がたつと自動でロック
 
 let isDisableLockConfirmOpen = false;
@@ -325,6 +325,24 @@ function noteActivity() {
    6. ロックをオンにする・オフにする（設定画面から）
    =========================================================== */
 
+/**
+ * 新しいパスフレーズが弱すぎないかを調べる。問題なければ ''、あれば理由の文を返す。
+ * （暗号そのものは破れなくても、パスフレーズが弱いと「当てずっぽう」で開けられてしまうため）
+ */
+function passphraseProblem(text) {
+  const value = String(text || '');
+  if (value.length < MIN_PASSPHRASE_LENGTH) {
+    return 'パスフレーズは' + MIN_PASSPHRASE_LENGTH + '文字以上にしてください（単語を4つ以上つなげると、覚えやすくて強くなります）。';
+  }
+  if (new Set(value).size <= 2) {
+    return '同じ文字のくり返しは当てられやすいので使えません。';
+  }
+  if (/^[0-9]+$/.test(value)) {
+    return '数字だけのパスフレーズは当てられやすいので使えません。文字や単語をまぜてください。';
+  }
+  return '';
+}
+
 async function enableLockFromForm() {
   const first = findOne('#lockNewPassphrase').value;
   const second = findOne('#lockNewPassphrase2').value;
@@ -335,8 +353,9 @@ async function enableLockFromForm() {
     errorArea.textContent = 'サンプル表示中は設定できません。先に「自分の家計簿をはじめる」を押してください。';
     return;
   }
-  if (first.length < MIN_PASSPHRASE_LENGTH) {
-    errorArea.textContent = 'パスフレーズは' + MIN_PASSPHRASE_LENGTH + '文字以上にしてください（長い文章のほうが安全です）。';
+  const problem = passphraseProblem(first);
+  if (problem) {
+    errorArea.textContent = problem;
     return;
   }
   if (first !== second) {
@@ -447,7 +466,7 @@ function lockCardHtml() {
 
   if (!lockState.enabled) {
     html += '<div class="lock-form">' +
-      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
+      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上・例: 単語を4つつなげる）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
       '<label class="field"><span>もう一度</span><input type="password" id="lockNewPassphrase2" autocomplete="new-password"></label>' +
       '<button type="button" class="btn primary" id="lockEnableButton" data-action="enable-lock">暗号化ロックをオンにする</button></div>';
     html += '<p class="form-error" id="lockSetupError" role="alert"></p>';

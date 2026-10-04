@@ -12,6 +12,18 @@
    いちばん下には「支払い方法のしくみ」の説明があります。
    =========================================================== */
 
+/** 全部のカードの「次の引き落とし」の合計 */
+function nextBillsTotal(cards) {
+  let total = 0;
+  for (const card of cards) {
+    const summary = cardSummary(card);
+    if (summary.nextBill) {
+      total = total + summary.nextBill.total;
+    }
+  }
+  return total;
+}
+
 const CardsScreen = {
   title: 'カード',
   usesPeriod: false,
@@ -22,6 +34,12 @@ const CardsScreen = {
     if (cards.length === 0) {
       html += '<section class="card span-12"><p class="empty-note">クレジットカードがまだ登録されていません。</p>' +
         '<div class="row-gap" style="justify-content:center"><button type="button" class="btn primary" data-action="add-account" data-kind="card">カードを登録する</button></div></section>';
+    }
+    // カードは何枚でも登録できる（1枚ごとに締め日・支払日・支払い方法を持つ）
+    if (cards.length > 0) {
+      html += '<div class="span-12 row-gap" style="justify-content:space-between; align-items:center">' +
+        '<span class="small muted">' + cards.length + '枚のカード' + (cards.length > 1 ? ' · 次の引き落とし合計 ' + formatYen(nextBillsTotal(cards)) : '') + '</span>' +
+        '<button type="button" class="btn small primary" data-action="add-account" data-kind="card" data-icon="plus">カードを追加</button></div>';
     }
     for (const card of cards) {
       html += cardPanelHtml(card);
