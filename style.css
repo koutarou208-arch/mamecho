@@ -831,6 +831,10 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .home-grid > .safety-card { order: 2; }
 }
 
+.recurring-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
+@media (max-width: 860px) { .recurring-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .recurring-form { grid-template-columns: minmax(0, 1fr); } }
+
 /* 株の利益の安心ライン */
 .safety-headline { margin: 4px 0 2px; font-size: clamp(18px, 4.6vw, 24px); font-weight: 700; line-height: 1.4; }
 

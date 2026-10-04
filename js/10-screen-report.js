@@ -201,7 +201,9 @@ function reportFixedCostCardHtml(period) {
     html += '<ul class="plain-list">';
     for (const item of recurring.slice(0, 10)) {
       const category = CATEGORY_BY_ID[item.category];
-      html += '<li><span class="grow"><span>' + escapeHtml(item.description) + '</span><span class="small muted">毎月' + item.day + '日ごろ · ' + escapeHtml(category ? category.name : '') + '</span></span><span class="num">' + formatYen(item.amount) + '</span></li>';
+      const alreadyRule = appState.profile.recurring.some((rule) => normalizeText(rule.description) === normalizeText(item.description));
+      html += '<li><span class="grow"><span>' + escapeHtml(item.description) + '</span><span class="small muted">毎月' + item.day + '日ごろ · ' + escapeHtml(category ? category.name : '') + '</span></span><span class="num">' + formatYen(item.amount) + '</span>' +
+        (alreadyRule ? '<span class="tag">固定費に登録ずみ</span>' : '<button type="button" class="btn small ghost" data-action="recur-from-found" data-index="' + recurring.indexOf(item) + '">固定費にする</button>') + '</li>';
     }
     html += '</ul>';
   }

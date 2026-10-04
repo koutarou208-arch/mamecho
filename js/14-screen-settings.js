@@ -20,6 +20,7 @@ const SettingsScreen = {
     html += settingsDataCardHtml();
     html += lockCardHtml();            // 21-encryption-lock.js
     html += rulesDataCardHtml();       // 20-rules-alerts.js
+    html += settingsRecurringCardHtml();
     html += settingsRulesCardHtml();
     html += settingsStorageCardHtml();
     html += '</div>';
@@ -49,6 +50,8 @@ const SettingsScreen = {
     fillCategorySelect(categorySelect, 'expense', '');
     fillSubcategorySelect(subSelect, categorySelect.value, '');
 
+    setupRecurringForm();
+
     // 直しているルールがあれば、その内容を入力欄に入れておく
     const editingRule = appState.profile.rules[editingRuleIndex];
     if (editingRuleIndex !== null && editingRule) {
@@ -62,6 +65,183 @@ const SettingsScreen = {
 
 // 今「直す」を押しているルールの番号（なければ null）
 let editingRuleIndex = null;
+
+
+/* -----------------------------------------------------------
+   固定費（家賃など）を毎月自動で記録する
+   登録すると、毎月の指定日に入出金として自動で記録される（記録の計算は 05-calculations.js、
+   自動で記録する処理は 04-state-and-storage.js の applyRecurringRules）。
+   ----------------------------------------------------------- */
+
+// 入力欄に入れておく内容: { index: 直している固定費の番号（新しく作るなら null）, values: {...} }（なければ null）
+let recurringFormState = null;
+// 「削除」を押して確認待ちになっている固定費の番号（なければ null）
+let deletingRecurringIndex = null;
+
+function recurringDayText(day) {
+  return Number(day) >= 31 ? '月末' : Number(day) + '日';
+}
+
+function settingsRecurringCardHtml() {
+  const list = appState.profile.recurring;
+  const isEditing = recurringFormState !== null && recurringFormState.index !== null;
+
+  let html = '<section class="card span-12" id="recurringCard">';
+  html += '<div class="card-head"><h2>固定費（毎月自動で記録）</h2><span class="sub">家賃・サブスクなど</span></div>';
+
+  // 登録ずみの一覧
+  if (list.length === 0) {
+    html += '<p class="hint">まだありません。下から登録すると、毎月の指定日に自動で記録されます。</p>';
+  } else {
+    html += '<ul class="plain-list">';
+    for (let index = 0; index < list.length; index++) {
+      const rule = list[index];
+      const category = CATEGORY_BY_ID[rule.category];
+      html += '<li><span class="grow"><span>' + escapeHtml(rule.description) + '</span><span class="small muted">毎月' + recurringDayText(rule.day) + ' · ' +
+        formatYen(rule.amount) + ' · ' + escapeHtml(category ? category.name : '') + ' · ' + escapeHtml(accountName(rule.account)) + '</span></span>' +
+        '<button type="button" class="btn small ghost" data-action="edit-recurring" data-index="' + index + '">直す</button>' +
+        '<button type="button" class="icon-btn" data-action="delete-recurring" data-index="' + index + '" aria-label="この固定費を削除">' + iconSvg('close') + '</button></li>';
+      if (deletingRecurringIndex === index) {
+        html += '<li class="confirm-box"><p>「' + escapeHtml(rule.description) + '」の固定費を削除します。これまでに記録された分は消えません。</p>' +
+          '<div class="row-gap"><button type="button" class="btn danger small" data-action="delete-recurring-yes" data-index="' + index + '">削除する</button>' +
+          '<button type="button" class="btn ghost small" data-action="delete-recurring-no">やめる</button></div></li>';
+      }
+    }
+    html += '</ul>';
+  }
+
+  // 追加・更新のフォーム
+  let dayOptions = '';
+  for (let day = 1; day <= 31; day++) {
+    dayOptions += '<option value="' + day + '">' + (day === 31 ? '月末' : day + '日') + '</option>';
+  }
+  html += '<p class="small muted" style="margin-block:14px 6px">' + (isEditing ? '固定費を直す' : '固定費を追加') + '</p>';
+  html += '<div class="recurring-form">' +
+    '<label class="field"><span>名前</span><input id="recurringName" autocomplete="off" placeholder="例: 家賃"></label>' +
+    '<label class="field"><span>金額</span><div class="amount-input"><span aria-hidden="true">¥</span><input id="recurringAmount" inputmode="numeric" autocomplete="off" placeholder="80000"></div></label>' +
+    '<label class="field"><span>毎月の日</span><select id="recurringDay">' + dayOptions + '</select></label>' +
+    '<label class="field"><span>大項目</span><select id="recurringCategory"></select></label>' +
+    '<label class="field"><span>中項目</span><select id="recurringSub"></select></label>' +
+    '<label class="field"><span>支払元の口座</span><select id="recurringAccount"></select></label>' +
+    '<label class="field"><span>いつの月から</span><input type="month" id="recurringStart"></label>' +
+    '</div>';
+  html += '<p class="form-error" id="recurringError" role="alert"></p>';
+  html += '<div class="row-gap" style="margin-top:8px"><button type="button" class="btn primary" data-action="save-recurring">' + (isEditing ? '更新' : '追加') + '</button>' +
+    (recurringFormState !== null ? '<button type="button" class="btn ghost" data-action="cancel-recurring">やめる</button>' : '') + '</div>';
+  html += '</section>';
+  return html;
+}
+
+/** 固定費フォームの選択肢を作り、直すときは内容を入れておく */
+function setupRecurringForm() {
+  const categorySelect = findOne('#recurringCategory');
+  const subSelect = findOne('#recurringSub');
+  const accountSelect = findOne('#recurringAccount');
+  if (!categorySelect) {
+    return;
+  }
+  const values = recurringFormState ? recurringFormState.values : {};
+
+  fillCategorySelect(categorySelect, 'expense', values.category || 'housing');
+  fillSubcategorySelect(subSelect, categorySelect.value, values.sub || '');
+  categorySelect.addEventListener('change', () => fillSubcategorySelect(subSelect, categorySelect.value, ''));
+
+  let accountHtml = '';
+  for (const account of appState.profile.accounts) {
+    const selected = account.id === values.account ? ' selected' : '';
+    accountHtml += '<option value="' + escapeHtml(account.id) + '"' + selected + '>' + escapeHtml(account.name) + '</option>';
+  }
+  accountSelect.innerHTML = accountHtml;
+
+  findOne('#recurringName').value = values.description || '';
+  findOne('#recurringAmount').value = values.amount ? String(values.amount) : '';
+  findOne('#recurringDay').value = String(values.day || 1);
+  findOne('#recurringStart').value = values.startMonth || todayText().slice(0, 7);
+}
+
+/** 「追加」「更新」が押されたとき */
+function saveRecurringFromForm() {
+  const errorArea = findOne('#recurringError');
+  const description = findOne('#recurringName').value.trim();
+  const amount = calculateAmount(findOne('#recurringAmount').value);
+  const startMonth = findOne('#recurringStart').value;
+  if (description === '') {
+    errorArea.textContent = '名前を入れてください（例: 家賃）。';
+    return;
+  }
+  if (amount === null || Number.isNaN(amount) || amount <= 0) {
+    errorArea.textContent = '金額を1円以上の数字で入れてください。';
+    return;
+  }
+  if (!/^\d{4}-\d{2}$/.test(startMonth)) {
+    errorArea.textContent = 'いつの月からかを選んでください。';
+    return;
+  }
+  const accountId = findOne('#recurringAccount').value;
+  if (!accountById[accountId]) {
+    errorArea.textContent = '口座を選んでください。';
+    return;
+  }
+
+  const fields = {
+    description: description,
+    amount: amount,
+    category: findOne('#recurringCategory').value,
+    sub: findOne('#recurringSub').value,
+    account: accountId,
+    day: Number(findOne('#recurringDay').value),
+    startMonth: startMonth,
+  };
+  const list = appState.profile.recurring;
+  if (recurringFormState !== null && recurringFormState.index !== null && list[recurringFormState.index]) {
+    // 直す: 記録ずみの月（generatedUntil）はそのまま。これからの月から新しい内容になる
+    Object.assign(list[recurringFormState.index], fields);
+    showToast('固定費を更新しました');
+  } else {
+    list.push({ id: makeId(), generatedUntil: '', ...fields });
+    showToast('固定費を追加しました');
+  }
+  recurringFormState = null;
+  saveProfile();
+  applyRecurringRules(); // 指定日がもう過ぎている月があれば、すぐ記録する
+}
+
+function startRecurringEdit(index) {
+  const rule = appState.profile.recurring[index];
+  if (!rule) {
+    return;
+  }
+  recurringFormState = { index: index, values: { ...rule } };
+  renderApp();
+  findOne('#recurringName').scrollIntoView({ block: 'center' });
+}
+
+/** 家計簿の「毎月の支払い・サブスク」から、固定費に登録する（入力欄に内容を入れた状態で設定画面を開く） */
+function startRecurringFromFound(index) {
+  const found = findRecurringPayments(appState.period)[index];
+  if (!found) {
+    return;
+  }
+  recurringFormState = {
+    index: null,
+    values: { description: found.description, amount: found.amount, category: found.category, sub: found.sub, day: found.day, account: '' },
+  };
+  goToScreen('settings');
+  findOne('#recurringName').scrollIntoView({ block: 'center' });
+}
+
+function cancelRecurringEdit() {
+  recurringFormState = null;
+  renderApp();
+}
+
+function deleteRecurringConfirmed(index) {
+  appState.profile.recurring.splice(index, 1);
+  deletingRecurringIndex = null;
+  recurringFormState = null;
+  saveProfile();
+  showToast('固定費を削除しました');
+}
 
 
 /* -----------------------------------------------------------

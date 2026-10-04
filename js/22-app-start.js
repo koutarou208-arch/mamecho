@@ -388,6 +388,19 @@ const ACTIONS = {
 
   // --- 設定 ---
   'add-rule': () => addRuleFromForm(),
+  'save-recurring': () => saveRecurringFromForm(),
+  'edit-recurring': (button) => startRecurringEdit(Number(button.dataset.index)),
+  'cancel-recurring': () => cancelRecurringEdit(),
+  'delete-recurring': (button) => {
+    deletingRecurringIndex = Number(button.dataset.index);
+    renderApp();
+  },
+  'delete-recurring-no': () => {
+    deletingRecurringIndex = null;
+    renderApp();
+  },
+  'delete-recurring-yes': (button) => deleteRecurringConfirmed(Number(button.dataset.index)),
+  'recur-from-found': (button) => startRecurringFromFound(Number(button.dataset.index)),
   'edit-rule': (button) => startRuleEdit(Number(button.dataset.index)),
   'cancel-rule-edit': () => cancelRuleEdit(),
   'delete-rule': (button) => deleteRule(Number(button.dataset.index)),

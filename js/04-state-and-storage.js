@@ -78,6 +78,7 @@ function createEmptyProfile() {
     ],
     budgets: {},          // 例: { food: 50000, daily: 8000 }
     rules: [],            // 自分で覚えさせた自動分類ルール
+    recurring: [],        // 毎月自動で記録する固定費（家賃など）
   };
 }
 
@@ -94,6 +95,7 @@ function normalizeProfile(raw) {
     accounts: Array.isArray(profile.accounts) ? profile.accounts : [],
     budgets: profile.budgets || {},
     rules: Array.isArray(profile.rules) ? profile.rules : [],
+    recurring: Array.isArray(profile.recurring) ? profile.recurring : [],
   };
 }
 
@@ -535,6 +537,7 @@ function finishLoading() {
   rebuildIndexes();
   setSaveStatus(appState.saveStatus);
   renderApp();
+  applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
 }
 
 
@@ -617,6 +620,56 @@ function deleteTransactionsWhere(shouldDelete) {
     }
   }
   return changedMonths;
+}
+
+/**
+ * 固定費（家賃など）の指定日が来ていたら、入出金として自動で記録する。
+ * アプリを開くたびに呼ばれる。同じ月を2回記録しないよう、固定費ごとに「どの月まで記録したか」を覚えている。
+ * 記録した分を消しても、作り直されない。サンプル表示中・ロック中は何もしない。
+ */
+function applyRecurringRules() {
+  if (!appState.profile || appState.isSample || appState.locked) {
+    return;
+  }
+  const rules = appState.profile.recurring || [];
+  const today = todayText();
+  const newTransactions = [];
+  let profileChanged = false;
+
+  for (const rule of rules) {
+    if (!accountById[rule.account]) {
+      continue; // 口座が消えているときは作らない（口座を直すと作られる）
+    }
+    const dueList = recurringDueList(rule, today);
+    if (dueList.length === 0) {
+      continue;
+    }
+    for (const due of dueList) {
+      const monthItems = appState.monthly[due.month] || [];
+      if (!hasSimilarTransaction(monthItems, rule, due.month)) {
+        newTransactions.push(makeRecurringTransaction(rule, due.month, due.date));
+      }
+      rule.generatedUntil = due.month;
+      profileChanged = true;
+    }
+  }
+
+  if (!profileChanged) {
+    return;
+  }
+  const changedMonths = new Set();
+  for (const transaction of newTransactions) {
+    const month = monthOfDate(transaction.date);
+    if (!appState.monthly[month]) {
+      appState.monthly[month] = [];
+    }
+    appState.monthly[month].push(transaction);
+    changedMonths.add(month);
+  }
+  afterDataChange([...changedMonths], true);
+  if (newTransactions.length > 0) {
+    showToast('固定費を ' + newTransactions.length + '件 記録しました');
+  }
 }
 
 /** 設定・口座・予算などを変えたあとに呼ぶ */

@@ -382,6 +382,35 @@ same('バックアップの文字: 空なら null', parseBackupText(''), null);
 same('バックアップの文字: 口座がない形は null', parseBackupText('{"profile":{},"monthly":{}}'), null);
 same('バックアップの文字: 入出金の入れ物がない形は null', parseBackupText('{"profile":{"accounts":[]}}'), null);
 
+section('固定費（毎月自動で記録）');
+const rentRule = { id: 'r1', description: '家賃', amount: 80000, category: 'housing', sub: '家賃・地代', account: 'bank1', day: 27, startMonth: '2026-08', generatedUntil: '' };
+const dueA = recurringDueList(rentRule, '2026-10-03');
+same('固定費: まだ来ていない今月分は作らない（件数）', dueA.length, 2);
+same('固定費: 開始月から作る', dueA[0].month, '2026-08');
+same('固定費: 日付は毎月の指定日', dueA[1].date, '2026-09-27');
+same('固定費: 指定日が来たらその月も作る', recurringDueList(rentRule, '2026-10-27').length, 3);
+same('固定費: 作った月の次から作る', recurringDueList({ ...rentRule, generatedUntil: '2026-09' }, '2026-10-27')[0].month, '2026-10');
+same('固定費: すべて作った後は何も作らない', recurringDueList({ ...rentRule, generatedUntil: '2026-10' }, '2026-10-27').length, 0);
+same('固定費: 開始月が先なら何も作らない', recurringDueList({ ...rentRule, startMonth: '2026-12' }, '2026-10-27').length, 0);
+const endRule = { ...rentRule, day: 31, startMonth: '2027-02' };
+same('固定費: 31日は月末（2月は28日）', recurringDueList(endRule, '2027-02-28')[0].date, '2027-02-28');
+same('固定費: 月末はまだ来ていなければ作らない', recurringDueList(endRule, '2027-02-27').length, 0);
+const recTx = makeRecurringTransaction(rentRule, '2026-09', '2026-09-27');
+same('固定費: 記録のID（別の端末で作っても重ならない）', recTx.id, 'rec-r1-2026-09');
+same('固定費: 支出として記録する', recTx.type, 'expense');
+same('固定費: 金額', recTx.amount, 80000);
+same('固定費: 日付', recTx.date, '2026-09-27');
+same('固定費: カテゴリ', recTx.category, 'housing');
+same('固定費: 口座', recTx.account, 'bank1');
+same('固定費: 名前を内容にする', recTx.description, '家賃');
+check('固定費: 元の固定費の印がつく', recTx.recurringId === 'r1');
+const monthItems = [{ type: 'expense', date: '2026-09-25', description: '家賃', amount: 80000, account: 'bank1' }];
+check('固定費: 同じ月に同じ内容・金額の記録があれば二重にしない', hasSimilarTransaction(monthItems, rentRule, '2026-09'));
+check('固定費: 金額がちがえば別の記録', !hasSimilarTransaction([{ ...monthItems[0], amount: 5000 }], rentRule, '2026-09'));
+check('固定費: ちがう月なら別の記録', !hasSimilarTransaction(monthItems, rentRule, '2026-10'));
+same('固定費: 保存データに固定費の一覧がなくても空で始まる', normalizeProfile({ accounts: [] }).recurring.length, 0);
+same('固定費: 保存データの固定費はそのまま残る', normalizeProfile({ accounts: [], recurring: [rentRule] }).recurring[0].amount, 80000);
+
 /* ===========================================================
    結果
    =========================================================== */

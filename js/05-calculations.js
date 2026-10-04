@@ -585,6 +585,68 @@ function replaceRuleAt(rules, index, newRule) {
 
 
 /* ===========================================================
+   固定費（家賃など）を毎月自動で記録するための計算
+   固定費1件の形:
+     { id, description, amount, category, sub, account,
+       day（毎月の日。31 は月末）, startMonth（"2026-08"）, generatedUntil（ここまで記録した月。まだなら ""）}
+   =========================================================== */
+
+/**
+ * 「これから記録する月」の一覧を返す（今日までに指定日が来ている月だけ）。
+ *   戻り値: [{ month: "2026-08", date: "2026-08-27" }, ...]（古い月から）
+ */
+function recurringDueList(rule, today) {
+  const list = [];
+  let month = rule.generatedUntil ? addMonths(rule.generatedUntil, 1) : rule.startMonth;
+  if (rule.startMonth && month < rule.startMonth) {
+    month = rule.startMonth;
+  }
+  const lastMonth = today.slice(0, 7);
+  for (let count = 0; count < 120 && month <= lastMonth; count++) {
+    const date = dayInMonthText(month, Number(rule.day) || 1);
+    if (date > today) {
+      break; // まだ指定日が来ていない
+    }
+    list.push({ month: month, date: date });
+    month = addMonths(month, 1);
+  }
+  return list;
+}
+
+/** 固定費から、入出金1件を作る（IDは固定費と月で決まるので、別の端末で作っても重ならない） */
+function makeRecurringTransaction(rule, month, date) {
+  const transaction = {
+    id: 'rec-' + rule.id + '-' + month,
+    date: date,
+    type: 'expense',
+    amount: Number(rule.amount),
+    account: rule.account,
+    category: rule.category,
+    sub: rule.sub || '',
+    description: rule.description,
+    memo: '固定費（毎月自動で記録）',
+    include: true,
+    createdAt: Date.now(),
+    recurringId: rule.id,
+  };
+  return transaction;
+}
+
+/** その月に、同じ内容・同じ金額の支出がもう記録されているか（手で先に入れていた分を二重にしないため） */
+function hasSimilarTransaction(monthItems, rule, month) {
+  for (const item of monthItems) {
+    if (item.type !== 'expense' || item.date.slice(0, 7) !== month) {
+      continue;
+    }
+    if (item.amount === Number(rule.amount) && normalizeText(item.description) === normalizeText(rule.description)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+
+/* ===========================================================
    7. 毎月の固定費・サブスクを見つける
    直近4か月のうち3か月以上、同じ内容・ほぼ同じ金額で出ている支出を探す。
    =========================================================== */
