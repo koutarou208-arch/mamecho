@@ -450,6 +450,47 @@ function dailySafetyRows(range, lastDate, goal) {
   return rows;
 }
 
+/**
+ * 「支出が給与でまかなえているか」のルール。まかなえなければ「アウト」（株の利益が出ていても、アウトはアウト）。
+ *   salaryNow     … この期間に入った給与
+ *   averageSalary … 直近の給与の平均（今月まだ給与が入っていないときに使う）
+ *   spending      … この期間の生活費の支出（投資の損失はのぞく）
+ * 返す形: { salary, basis, spending, gap, out }
+ *   basis … 'now'（今月の給与で見た） / 'average'（直近の平均で見た） / 'none'（給与の記録が全くない＝判定しない）
+ *   gap   … 支出 − 給与（プラスなら足りない額）
+ */
+function judgeSalaryRule(salaryNow, averageSalary, spending) {
+  let salary = 0;
+  let basis = 'none';
+  if (salaryNow > 0) {
+    salary = salaryNow;
+    basis = 'now';
+  } else if (averageSalary > 0) {
+    salary = averageSalary;
+    basis = 'average';
+  }
+  const gap = spending - salary;
+  const out = basis !== 'none' && spending > salary;
+  return { salary: salary, basis: basis, spending: spending, gap: gap, out: out };
+}
+
+/** 給与があった月だけで、給与の平均を出す（summaries は summarizeRange の結果の並び） */
+function averageSalaryOf(summaries) {
+  let total = 0;
+  let count = 0;
+  for (const summary of summaries) {
+    const salary = summary.categories.salary ? summary.categories.salary.total : 0;
+    if (salary > 0) {
+      total = total + salary;
+      count = count + 1;
+    }
+  }
+  if (count === 0) {
+    return 0;
+  }
+  return Math.round(total / count);
+}
+
 /** 直近 months か月（今の期間をのぞく）の「投資をのぞいた収支」の平均 */
 function averageBaseBalance(period, months) {
   let total = 0;

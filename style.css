@@ -836,6 +836,8 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 @media (max-width: 560px) { .recurring-form { grid-template-columns: minmax(0, 1fr); } }
 
 /* 株の利益の安心ライン */
+.safety-card.safety-out { border-color: var(--over); box-shadow: 0 0 0 2px color-mix(in oklab, var(--over) 30%, transparent); }
+.safety-card.safety-out .safety-headline { color: var(--over-text); }
 .safety-headline { margin: 4px 0 2px; font-size: clamp(18px, 4.6vw, 24px); font-weight: 700; line-height: 1.4; }
 
 /* スマホくらいの幅: 左メニューを消して、下にタブを出す */

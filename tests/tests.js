@@ -411,6 +411,41 @@ check('固定費: ちがう月なら別の記録', !hasSimilarTransaction(monthI
 same('固定費: 保存データに固定費の一覧がなくても空で始まる', normalizeProfile({ accounts: [] }).recurring.length, 0);
 same('固定費: 保存データの固定費はそのまま残る', normalizeProfile({ accounts: [], recurring: [rentRule] }).recurring[0].amount, 80000);
 
+section('支出が給与でまかなえなければアウト');
+const ruleOk = judgeSalaryRule(300000, 0, 250000);
+same('給与ルール: 給与が支出以上ならアウトではない', ruleOk.out, false);
+same('給与ルール: 差額（支出−給与）', ruleOk.gap, -50000);
+same('給与ルール: 今月の給与で見る', ruleOk.basis, 'now');
+const ruleOut = judgeSalaryRule(200000, 0, 250000);
+same('給与ルール: 支出が給与をこえたらアウト', ruleOut.out, true);
+same('給与ルール: 足りない額', ruleOut.gap, 50000);
+const ruleEdge = judgeSalaryRule(250000, 0, 250000);
+same('給与ルール: ちょうど同じならアウトではない', ruleEdge.out, false);
+const ruleAvg = judgeSalaryRule(0, 300000, 100000);
+same('給与ルール: 今月まだ給与がなければ直近の平均で見る', ruleAvg.basis, 'average');
+same('給与ルール: 平均の給与を使う', ruleAvg.salary, 300000);
+same('給与ルール: 平均で足りていればアウトではない', ruleAvg.out, false);
+const ruleAvgOut = judgeSalaryRule(0, 200000, 250000);
+same('給与ルール: 平均でも足りなければアウト', ruleAvgOut.out, true);
+const ruleUnknown = judgeSalaryRule(0, 0, 50000);
+same('給与ルール: 給与の記録が全くなければ判定しない（アウトにしない）', ruleUnknown.out, false);
+same('給与ルール: 判定できない印', ruleUnknown.basis, 'none');
+same('給与ルール: 支出もなければアウトではない', judgeSalaryRule(0, 0, 0).out, false);
+
+allTransactions = [
+  { id: 's1', type: 'income', date: '2026-07-25', amount: 300000, category: 'salary' },
+  { id: 's2', type: 'income', date: '2026-08-25', amount: 320000, category: 'salary' },
+  { id: 's3', type: 'income', date: '2026-08-26', amount: 50000, category: 'business' },
+  { id: 's4', type: 'income', date: '2026-09-25', amount: 0, category: 'salary' },
+];
+same('給与の平均: 給与があった月だけで平均する', averageSalaryOf([
+  summarizeRange({ start: '2026-07-01', end: '2026-08-01' }),
+  summarizeRange({ start: '2026-08-01', end: '2026-09-01' }),
+  summarizeRange({ start: '2026-09-01', end: '2026-10-01' }),
+]), 310000);
+same('給与の平均: 給与の記録がなければ0', averageSalaryOf([summarizeRange({ start: '2025-01-01', end: '2025-02-01' })]), 0);
+allTransactions = [];
+
 /* ===========================================================
    結果
    =========================================================== */

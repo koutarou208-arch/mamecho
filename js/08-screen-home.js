@@ -232,11 +232,20 @@ function homeTradeSafetyCardHtml(period) {
   const average = averageBaseBalance(period, 3);
   const lineName = goal > 0 ? '貯金目標 ' + formatYen(goal) : '赤字にならないこと';
 
+  // 給与のルール: 支出が給与でまかなえなければ「アウト」（株の利益では救えない）
+  const pastSummaries = [1, 2, 3].map((back) => summarizePeriod(shiftPeriod(period, -back)));
+  const salaryNow = summary.categories.salary ? summary.categories.salary.total : 0;
+  const salaryRule = judgeSalaryRule(salaryNow, averageSalaryOf(pastSummaries), summary.spending);
+
   // 大きな見出しの文と、色
   let headline = '';
   let meterClass = '';
   let chip = '';
-  if (hasNoRecords) {
+  if (salaryRule.out) {
+    headline = 'アウト：支出が給与でまかなえていません';
+    chip = statusChipHtml('over', 'アウト');
+    meterClass = 'over';
+  } else if (hasNoRecords) {
     headline = 'この期間の記録がまだありません';
     chip = statusChipHtml('warn', '記録待ち');
     meterClass = 'warn';
@@ -258,13 +267,26 @@ function homeTradeSafetyCardHtml(period) {
     percent = Math.max(0, Math.min(100, (summary.tradeNet / judge.needed) * 100));
   }
 
-  let html = '<section class="card span-12 safety-card">';
+  let html = '<section class="card span-12 safety-card' + (salaryRule.out ? ' safety-out' : '') + '">';
   html += '<div class="card-head"><h2>株の利益の安心ライン</h2>' + chip + '</div>';
   html += '<div class="row-gap" style="margin-bottom:10px">' +
     '<button type="button" class="btn small primary" data-action="new-trade" data-kind="gain" data-icon="plus">株の利益を記録</button>' +
     '<button type="button" class="btn small" data-action="new-trade" data-kind="loss" data-icon="plus">株の損失を記録</button></div>';
   html += '<p class="safety-headline">' + headline + '</p>';
   html += '<p class="small muted">安心ライン: ' + lineName + '</p>';
+
+  // 給与のルールの説明（1行）
+  if (salaryRule.basis === 'none') {
+    html += '<p class="small muted" style="margin-top:4px">給与の記録がないので、「支出が給与でまかなえるか」は判定していません。</p>';
+  } else {
+    const basisText = salaryRule.basis === 'now' ? '今月の給与' : '給与（直近の平均）';
+    if (salaryRule.out) {
+      html += '<p class="small" style="margin-top:6px"><strong>' + basisText + ' ' + formatYen(salaryRule.salary) + '</strong> に対して、支出 ' + formatYen(salaryRule.spending) +
+        '。<strong class="num">' + formatYen(salaryRule.gap) + '</strong> 足りません。株の利益が出ていても、アウトです。</p>';
+    } else {
+      html += '<p class="small muted" style="margin-top:4px">' + basisText + ' ' + formatYen(salaryRule.salary) + ' で、支出 ' + formatYen(salaryRule.spending) + ' をまかなえています（あと ' + formatYen(-salaryRule.gap) + '）</p>';
+    }
+  }
   html += '<div class="meter" style="margin-top:12px" role="img" aria-label="必要な利益の' + Math.round(percent) + '%まで届いています">' +
     '<div class="meter-fill ' + meterClass + '" style="width:' + percent.toFixed(1) + '%"></div></div>';
   html += '<div class="stats" style="margin-top:14px">' +
