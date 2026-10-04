@@ -276,7 +276,7 @@ function reportCalendarCardHtml(period, spanClass) {
     const ariaLabel = formatMonthDay(date) + ' 支出' + formatYen(expense) + (incomeDates.has(date) ? '・収入あり' : '');
     html += '<button type="button" class="' + classes + '" data-action="filter-date" data-date="' + date + '" aria-label="' + ariaLabel + '">' +
       '<span class="cal-date"><span>' + dayLabel + '</span>' + (incomeDates.has(date) ? '<span class="cal-income-dot" title="収入あり"></span>' : '') + '</span>' +
-      '<span class="cal-amount num">' + (expense > 0 ? formatNumber(expense) : '') + '</span></button>';
+      '<span class="cal-amount num">' + (expense > 0 ? '<span class="cal-full">' + formatNumber(expense) + '</span><span class="cal-short">' + calendarAmountShort(expense) + '</span>' : '') + '</span></button>';
     date = addDays(date, 1);
   }
   html += '</div>';

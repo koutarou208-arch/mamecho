@@ -86,6 +86,24 @@ function formatYenShort(amount) {
 }
 
 /**
+ * スマホのカレンダーの小さいマス用の、短い金額（0円は空）。
+ *   980 → "980"、1262 → "1.3千"、13870 → "1.4万"
+ * （パソコンでは、ふつうの金額をそのまま出す）
+ */
+function calendarAmountShort(amount) {
+  if (!amount) {
+    return '';
+  }
+  if (amount >= 10000) {
+    return (Math.round(amount / 1000) / 10) + '万';
+  }
+  if (amount >= 1000) {
+    return (Math.round(amount / 100) / 10) + '千';
+  }
+  return String(Math.round(amount));
+}
+
+/**
  * 金額の入力欄の文字を数字にする（かんたんな電卓つき）。
  *   "1,200"     → 1200
  *   "1200+380"  → 1580

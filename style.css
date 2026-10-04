@@ -632,7 +632,8 @@ main:focus { outline: none; }
 .cal-day.today { box-shadow: inset 0 0 0 2px var(--accent); border-color: var(--accent); }
 .cal-date { font-size: 12px; color: var(--ink-2); display: flex; justify-content: space-between; align-items: center; }
 .cal-income-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--income); }
-.cal-amount { font-size: 11px; font-weight: 600; text-align: right; color: var(--ink); }
+.cal-amount { font-size: 11px; font-weight: 600; text-align: right; color: var(--ink); overflow: hidden; }
+.cal-short { display: none; }
 /* 支出が多い日ほど色が濃くなる（1〜4段階） */
 .cal-day.level-1 { background: color-mix(in oklab, var(--expense) 10%, var(--surface)); }
 .cal-day.level-2 { background: color-mix(in oklab, var(--expense) 24%, var(--surface)); }
@@ -895,7 +896,19 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   /* 長い文字のボタンは折り返す（画面からはみ出すと、iPhone が画面全体を縮小してしまうため） */
   .btn { white-space: normal; max-width: 100%; text-align: center; }
   .card { padding: 16px; }
-  .stats { gap: 8px; }
+  /* 数字の並び（資産・負債・純資産など）は、スマホでは横に3つ並べると大きな金額が重なるので、
+     1行に1つずつ「名前 … 金額」の形にする */
+  .stats { grid-template-columns: minmax(0, 1fr) !important; gap: 0; }
+  .stat { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule); }
+  .stat:last-child { border-bottom: 0; }
+  .stat .label { grid-column: 1; grid-row: 1; font-size: 13px; }
+  .stat .value { grid-column: 2; grid-row: 1; text-align: right; font-size: 20px; }
+  .stat > :not(.label):not(.value) { grid-column: 1 / -1; }
+  /* カレンダーの小さいマスには、短い金額（1.4万 など）を出す */
+  .cal-full { display: none; }
+  .cal-short { display: inline; }
+  /* 設定の行は、名前の下にボタンを置く */
+  .setting { grid-template-columns: minmax(0, 1fr); }
   .field-row { grid-template-columns: minmax(0, 1fr); }
   .cat-row, .cat-head { grid-template-columns: minmax(0, 1.6fr) minmax(5em, 1fr) minmax(4.5em, 0.9fr); }
   .cat-row > span:nth-child(3), .cat-head > span:nth-child(3),
@@ -1000,6 +1013,12 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 
 /* スマホでタップしたときの、灰色の四角いハイライトを消す */
 html { -webkit-tap-highlight-color: transparent; }
+
+/* とても小さいスマホ（幅380以下・iPhone SE など）: カレンダーのマスを詰めて、短い金額が収まるようにする */
+@media (max-width: 380px) {
+  .cal-day { padding: 2px 1px; }
+  .cal-amount { font-size: 9px; letter-spacing: -0.02em; }
+}
 
 /* 動きを減らす設定の人には、アニメーションをしない */
 @media (prefers-reduced-motion: reduce) {
