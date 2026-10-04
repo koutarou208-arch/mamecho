@@ -436,6 +436,19 @@ const ACTIONS = {
     renderApp();
   },
   'disable-lock-yes': () => disableLockConfirmed(),
+  'unlock-biometric': () => unlockWithBiometric(),
+  'biometric-check': () => biometricCheckPassphrase(),
+  'biometric-register': () => biometricRegister(),
+  'biometric-confirm': () => biometricConfirm(),
+  'biometric-cancel': () => {
+    forgetBiometricPending();
+    renderApp();
+  },
+  'biometric-forget': () => {
+    forgetBiometric();
+    renderApp();
+    showToast('この端末の Face ID をやめました');
+  },
   'forget-lock': () => {
     findOne('#lockForgetConfirm').hidden = false;
   },

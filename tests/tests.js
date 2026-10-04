@@ -524,6 +524,17 @@ same('カレンダー（スマホ）: 1000円以上は「千」で短く', calen
 same('カレンダー（スマホ）: 1万円以上は「万」で短く', calendarAmountShort(13870), '1.4万');
 same('カレンダー（スマホ）: 10万円以上も短く', calendarAmountShort(125000), '12.5万');
 
+section('Face ID で開く');
+check('Face ID: ホーム画面のアプリ（https・WebAuthnあり）なら使える', biometricEnvironmentOk(true, false, true));
+check('Face ID: Claude の中では使わない', !biometricEnvironmentOk(true, true, true));
+check('Face ID: WebAuthn がない端末では使えない', !biometricEnvironmentOk(false, false, true));
+check('Face ID: https でなければ使えない', !biometricEnvironmentOk(true, false, false));
+const bioRecord = { credentialId: 'Y3JlZA==', prfSalt: 'c2FsdA==', iv: 'aXY=', data: 'ZGF0YQ==', lockSalt: 'LOCKSALT' };
+check('Face ID: 今のロックと同じ鍵の記録なら使える', biometricRecordUsable(bioRecord, 'LOCKSALT'));
+check('Face ID: ロックを作り直したあと（鍵がちがう）は使わない', !biometricRecordUsable(bioRecord, 'NEWSALT'));
+check('Face ID: 記録がなければ使わない', !biometricRecordUsable(null, 'LOCKSALT'));
+check('Face ID: 記録が欠けていれば使わない', !biometricRecordUsable({ ...bioRecord, data: '' }, 'LOCKSALT'));
+
 /* ===========================================================
    結果
    =========================================================== */
