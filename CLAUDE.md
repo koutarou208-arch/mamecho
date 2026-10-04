@@ -51,4 +51,5 @@
 ## 公開しているもの
 
 - アプリ: https://claude.ai/artifact/8UCLMJKkS3fhxxnJuxnMKK （`index.html` と `style.css` と `js/*.js` を公開）
-- リポジトリ: https://github.com/koutarou208-arch/mamecho （非公開）
+- リポジトリ: https://github.com/koutarou208-arch/mamecho （公開。GitHub Pages のため）
+- アプリ版（ホーム画面に置く版）: https://koutarou208-arch.github.io/mamecho/ （main ブランチをそのまま公開。push すると1〜2分で反映）
