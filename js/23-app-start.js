@@ -1,5 +1,5 @@
 /* ===========================================================
-   22-app-start.js  ―  アプリの「司令塔」
+   23-app-start.js  ―  アプリの「司令塔」
    -----------------------------------------------------------
    いちばん最後に読み込まれるファイルです。
      ・画面の一覧（SCREENS）とメニュー
@@ -29,6 +29,7 @@ const SCREENS = {
   budget: BudgetScreen,
   cards: CardsScreen,
   accounts: AccountsScreen,
+  takehome: TakeHomeScreen, // 22-take-home-pay.js
   settings: SettingsScreen,
 };
 
@@ -40,6 +41,7 @@ const NAV_ITEMS = [
   { screen: 'budget', label: '予算', icon: 'target', mobile: true },
   { screen: 'cards', label: 'カード', icon: 'card', mobile: true },
   { screen: 'accounts', label: '口座', icon: 'wallet', mobile: true },
+  { screen: 'takehome', label: '手取り計算', icon: 'calc', mobile: false }, // スマホでは上のバーの電卓ボタン
   { screen: 'settings', label: '設定', icon: 'settings', mobile: false },
 ];
 

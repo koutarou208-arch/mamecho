@@ -252,7 +252,7 @@ main:focus { outline: none; }
 .period-label strong { font-size: 15px; font-weight: 600; }
 .period-label span { font-size: 11px; color: var(--muted); }
 .top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-.only-mobile { display: none; }
+.only-mobile, .icon-btn.only-mobile { display: none; } /* .icon-btn の display より強くして、パソコンでは隠す */
 
 /* お知らせ帯 */
 #banner { max-width: 1160px; margin-inline: auto; }
@@ -856,7 +856,7 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .app { grid-template-columns: minmax(0, 1fr); }
   .side { display: none; }
   .brand-mobile { display: flex; }
-  .only-mobile { display: inline-grid; }
+  .only-mobile, .icon-btn.only-mobile { display: inline-grid; }
   .topbar { gap: 8px 12px; padding-block: 12px 10px; }
   .topbar h1 { font-size: 20px; }
   .period-bar { order: 3; width: 100%; justify-content: center; }
@@ -1004,6 +1004,26 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .bill-row > span:nth-child(3), .bill-row > span:nth-child(4) { display: none; }
 }
 
+/* -----------------------------------------------------------
+   18. 手取り計算
+   ----------------------------------------------------------- */
+.takehome-form { align-self: start; }
+.takehome-results { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.takehome-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: 12px; margin-top: 12px; }
+/* 扶養の2つは横いっぱいの1行（名前が左、選ぶところが右） */
+.takehome-row { grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 40px; font-size: 13px; color: var(--ink-2); }
+.takehome-row.check { justify-content: flex-start; }
+.takehome-row select { width: auto; flex: none; }
+#takeHomeConditions > summary { line-height: 1.5; }
+#takeHomeConditionText > span { white-space: nowrap; }
+.takehome-list { margin-top: 10px; }
+.takehome-list li { padding: 7px 0; font-size: 14px; }
+.takehome-list .num { color: var(--ink-2); }
+.takehome-list .takehome-total { border-top: 1px solid var(--rule-strong); font-weight: 700; }
+.takehome-list .takehome-total .num { color: var(--ink); }
+.takehome-notes { display: grid; gap: 4px; padding-inline: 4px; }
+.takehome-howto { display: grid; gap: 6px; margin: 8px 0 0; padding-left: 1.2em; font-size: 12px; color: var(--muted); }
+
 /* 画面を切りかえたときの、ふわっと現れる動き */
 /* 点滅して見えないように、透明にはせず横にすべるだけにしている（月の切りかえ専用） */
 @keyframes screen-from-right { from { transform: translateX(24px); } to { transform: none; } }
@@ -1018,6 +1038,14 @@ html { -webkit-tap-highlight-color: transparent; }
 @media (max-width: 380px) {
   .cal-day { padding: 2px 1px; }
   .cal-amount { font-size: 9px; letter-spacing: -0.02em; }
+}
+
+/* とても細いスマホ（幅320など）: 上のバーのボタンを少し詰めて、画面名と同じ1行に収める */
+@media (max-width: 359px) {
+  .topbar { column-gap: 8px; }
+  .top-actions { gap: 2px; }
+  .top-actions .icon-btn { width: 34px; }
+  #newTransactionButton { padding-inline: 10px; }
 }
 
 /* 動きを減らす設定の人には、アニメーションをしない */

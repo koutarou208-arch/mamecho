@@ -535,6 +535,105 @@ check('Face ID: ロックを作り直したあと（鍵がちがう）は使わ�
 check('Face ID: 記録がなければ使わない', !biometricRecordUsable(null, 'LOCKSALT'));
 check('Face ID: 記録が欠けていれば使わない', !biometricRecordUsable({ ...bioRecord, data: '' }, 'LOCKSALT'));
 
+section('手取り計算（2026年度の料率・税）');
+// 期待する値は、協会けんぽの保険料額表（東京・令和8年度）と国税庁の資料をもとに手で計算したもの
+same('手取り: 額面の読み取り（ふつうの数字）', takeHomeAmountOf('300,000'), 300000);
+same('手取り: 額面の読み取り（30万）', takeHomeAmountOf('30万'), 300000);
+same('手取り: 額面の読み取り（全角の３０．５万）', takeHomeAmountOf('３０．５万'), 305000);
+same('手取り: 額面の読み取り（30万5000）', takeHomeAmountOf('30万5000'), 305000);
+same('手取り: 額面の読み取り（空なら null）', takeHomeAmountOf(''), null);
+check('手取り: 額面の読み取り（文字だけなら NaN）', Number.isNaN(takeHomeAmountOf('ねこ')));
+same('手取り: 都道府県は47そろっている', TAKE_HOME_RULES.healthRates.length, 47);
+
+same('標準報酬月額: 30万円 → 30万円', standardMonthlyPayOf(300000), 300000);
+same('標準報酬月額: 289,999円 → 28万円', standardMonthlyPayOf(289999), 280000);
+same('標準報酬月額: 29万円ちょうど → 30万円', standardMonthlyPayOf(290000), 300000);
+same('標準報酬月額: 6万円 → いちばん下の5.8万円', standardMonthlyPayOf(60000), 58000);
+same('標準報酬月額: 150万円 → いちばん上の139万円', standardMonthlyPayOf(1500000), 1390000);
+same('厚生年金の標準報酬月額: 下は8.8万円', pensionStandardPayOf(58000), 88000);
+same('厚生年金の標準報酬月額: 上は65万円', pensionStandardPayOf(1390000), 650000);
+same('保険料の端数: ちょうど50銭は切り捨て', roundEmployeeShare(5713, 2), 2856);
+same('保険料の端数: 50銭より上は切り上げ', roundEmployeeShare(13340000, 200000), 67);
+
+same('給与所得: 74万1千円未満は0', salaryIncomeOf(741000 - 1), 0);
+same('給与所得: 200万円 → 126万円（2026年は74万円を引く）', salaryIncomeOf(2000000), 1260000);
+same('給与所得: 219万9,999円 → 145万6千円（国税庁の表）', salaryIncomeOf(2199999), 1456000);
+same('給与所得: 220万円 → 146万円', salaryIncomeOf(2200000), 1460000);
+same('給与所得: 360万円 → 244万円', salaryIncomeOf(3600000), 2440000);
+same('給与所得: 360万3,999円 → 244万円（4千円きざみ）', salaryIncomeOf(3603999), 2440000);
+same('給与所得: 700万円 → 520万円', salaryIncomeOf(7000000), 5200000);
+same('給与所得: 1200万円 → 1005万円（控除は195万円まで）', salaryIncomeOf(12000000), 10050000);
+same('所得税の基礎控除: 489万円以下は104万円', incomeTaxBasicDeductionOf(4890000), 1040000);
+same('所得税の基礎控除: 489万円をこえると67万円', incomeTaxBasicDeductionOf(4890001), 670000);
+same('所得税の基礎控除: 655万円をこえると62万円', incomeTaxBasicDeductionOf(6550001), 620000);
+same('所得税の基礎控除: 2500万円をこえると0', incomeTaxBasicDeductionOf(25000001), 0);
+same('住民税の基礎控除: 43万円', residentTaxBasicDeductionOf(5000000), 430000);
+
+// 例1: 月30万円・東京・40歳未満・扶養なし・ボーナスなし
+const pay30 = calculateTakeHomePay({ monthlyGross: 300000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り（月30万）: 健康保険', pay30.monthly.health, 14775);
+same('手取り（月30万）: 介護保険はなし', pay30.monthly.care, 0);
+same('手取り（月30万）: 子ども・子育て支援金', pay30.monthly.childSupport, 345);
+same('手取り（月30万）: 厚生年金', pay30.monthly.pension, 27450);
+same('手取り（月30万）: 雇用保険', pay30.monthly.employment, 1500);
+same('手取り（月30万）: 所得税（1年分）', pay30.yearly.incomeTax, 44400);
+same('手取り（月30万）: 所得税（月）', pay30.monthly.incomeTax, 3700);
+same('手取り（月30万）: 住民税（1年分）', pay30.yearly.residentTax, 150500);
+same('手取り（月30万）: 住民税（月）', pay30.monthly.residentTax, 12542);
+same('手取り（月30万）: 毎月の手取り', pay30.monthly.takeHome, 239688);
+same('手取り（月30万）: 1年の手取り', pay30.yearly.takeHome, 2876260);
+same('手取り（月30万）: ボーナスがなければ null', pay30.bonus, null);
+
+// 例2: 月30万円＋ボーナス年60万円・東京・45歳
+const pay30bonus = calculateTakeHomePay({ monthlyGross: 300000, bonusYearly: 600000, prefecture: '東京都', ageGroup: 'from40to64' });
+same('手取り（40〜64歳）: 健康保険は介護を別にする', pay30bonus.monthly.health, 14775);
+same('手取り（40〜64歳）: 介護保険', pay30bonus.monthly.care, 2430);
+same('手取り（ボーナス）: 社会保険料（2回分）', pay30bonus.bonus.socialInsurance, 93000);
+same('手取り（ボーナス）: 所得税（ボーナスで増える分）', pay30bonus.bonus.incomeTax, 19800);
+same('手取り（ボーナス）: ボーナスの手取り', pay30bonus.bonus.takeHome, 487200);
+same('手取り（ボーナス）: 所得税（月）', pay30bonus.monthly.incomeTax, 3575);
+same('手取り（ボーナス）: 所得税（1年分）', pay30bonus.yearly.incomeTax, 62700);
+same('手取り（ボーナス）: 住民税（1年分）', pay30bonus.yearly.residentTax, 186300);
+same('手取り（ボーナス）: 1年の手取り', pay30bonus.yearly.takeHome, 3300000);
+
+// 例3: 月100万円（標準報酬月額は98万円、厚生年金は65万円が上限）
+const pay100 = calculateTakeHomePay({ monthlyGross: 1000000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り（月100万）: 健康保険', pay100.monthly.health, 48265);
+same('手取り（月100万）: 厚生年金は上限', pay100.monthly.pension, 59475);
+same('手取り（月100万）: 所得税（1年分・税率23%）', pay100.yearly.incomeTax, 1244000);
+same('手取り（月100万）: 住民税（1年分）', pay100.yearly.residentTax, 827700);
+
+// 例4: 月40万円・配偶者と家族1人を扶養（50銭ちょうどの切り捨てもある）
+const pay40family = calculateTakeHomePay({ monthlyGross: 400000, prefecture: '東京都', ageGroup: 'under40', spouse: true, dependents: 1 });
+same('手取り（扶養あり）: 健康保険（20,192.5円 → 20,192円）', pay40family.monthly.health, 20192);
+same('手取り（扶養あり）: 支援金（471.5円 → 471円）', pay40family.monthly.childSupport, 471);
+same('手取り（扶養あり）: 所得税（1年分）', pay40family.yearly.incomeTax, 44700);
+same('手取り（扶養あり）: 住民税（1年分・調整控除も3人分）', pay40family.yearly.residentTax, 156100);
+
+// 例5: 月9万円（所得税も住民税もかからない）
+const pay9 = calculateTakeHomePay({ monthlyGross: 90000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り（月9万）: 社会保険料', pay9.monthly.socialInsurance, 12937);
+same('手取り（月9万）: 所得税は0', pay9.yearly.incomeTax, 0);
+same('手取り（月9万）: 住民税は0（非課税）', pay9.yearly.residentTax, 0);
+same('手取り（月9万）: 毎月の手取り', pay9.monthly.takeHome, 77063);
+
+// その他の条件
+const payCommute = calculateTakeHomePay({ monthlyGross: 300000, commute: 15000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り: 交通費（非課税）は社会保険料にはふくめる', payCommute.monthly.health, 14775);
+same('手取り: 交通費（非課税）は所得税からは外す', payCommute.yearly.incomeTax, 38000);
+same('手取り: 大阪府の健康保険料率（10.13%）', calculateTakeHomePay({ monthlyGross: 300000, prefecture: '大阪府', ageGroup: 'under40' }).monthly.health, 15195);
+same('手取り: 65〜69歳は介護保険を給料から引かない', calculateTakeHomePay({ monthlyGross: 300000, prefecture: '東京都', ageGroup: 'from65to69' }).monthly.care, 0);
+same('手取り: 70歳からは厚生年金なし', calculateTakeHomePay({ monthlyGross: 300000, prefecture: '東京都', ageGroup: 'from70' }).monthly.pension, 0);
+same('手取り: 知らない都道府県なら東京都で計算', calculateTakeHomePay({ monthlyGross: 300000, prefecture: '?', ageGroup: 'under40' }).monthly.health, 14775);
+const bigBonus = calculateTakeHomePay({ monthlyGross: 300000, bonusYearly: 4000000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り: ボーナスの厚生年金は1回150万円まで', bigBonus.bonus.pension, 274500);
+same('手取り: ボーナスの健康保険（2回分）', bigBonus.bonus.health, 197000);
+const hugeBonus = calculateTakeHomePay({ monthlyGross: 300000, bonusYearly: 12000000, prefecture: '東京都', ageGroup: 'under40' });
+same('手取り: ボーナスの健康保険は1年573万円まで', hugeBonus.bonus.health, 282202);
+same('住民税: 配偶者を扶養していて所得100万円なら非課税', residentTaxForYear(1740000, 0, { spouse: true, dependents: 0 }), 0);
+same('住民税: ひとりで所得100万円なら課税', residentTaxForYear(1740000, 0, { spouse: false, dependents: 0 }), 59500);
+same('住民税: 所得割は非課税でも均等割だけかかることがある', residentTaxForYear(1790000, 0, { spouse: true, dependents: 0 }), 5000);
+
 /* ===========================================================
    結果
    =========================================================== */
