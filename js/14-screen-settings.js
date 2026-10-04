@@ -97,6 +97,9 @@ function settingsDataCardHtml() {
     '<div class="setting"><span><strong>バックアップ</strong></span>' +
     '<span class="row-gap"><button type="button" class="btn small" data-action="export-backup" data-icon="download">保存</button>' +
     '<button type="button" class="btn small" data-action="restore-backup" data-icon="upload">戻す</button></span></div>' +
+    '<div class="setting"><span><strong>別のスマホ・アプリへ移す</strong></span>' +
+    '<span class="row-gap"><button type="button" class="btn small" data-action="show-backup-text">文字でコピー</button>' +
+    '<button type="button" class="btn small" data-action="open-paste-restore">貼り付けて戻す</button></span></div>' +
     '</div></section>';
 }
 

@@ -75,6 +75,7 @@ async function offerDownload(filename, text) {
 
   // (3) 画面に表示してコピーしてもらう
   findOne('#textDialogTitle').textContent = filename;
+  findOne('#textDialogHint').textContent = 'この環境ではファイルを保存できないため、内容を表示しています。コピーしてテキストファイルに貼り付けてください。';
   findOne('#textDialogContent').value = text;
   findOne('#textDialog').showModal();
 }
@@ -164,37 +165,87 @@ function exportBackup() {
   offerDownload('mamecho-backup-' + todayText() + '.json', JSON.stringify(backup, null, 1));
 }
 
+/** バックアップのデータを、貼り付けやすい1行の文字にする */
+function backupToText(backup) {
+  return JSON.stringify(backup);
+}
+
+/**
+ * バックアップの文字を読んで、データにして返す。読めなければ null。
+ * 前後の空白・改行や、先頭の目に見えない印（BOM）はむししてよい。
+ */
+function parseBackupText(text) {
+  let source = String(text || '').replace(/^\uFEFF/, '').trim();
+  if (source === '') {
+    return null;
+  }
+  let backup = null;
+  try {
+    backup = JSON.parse(source);
+  } catch (error) {
+    return null;
+  }
+  if (!backup || !backup.profile || !Array.isArray(backup.profile.accounts) || !backup.monthly || typeof backup.monthly !== 'object') {
+    return null;
+  }
+  return backup;
+}
+
 let pendingRestore = null; // 読み込んだバックアップ（確認待ち）
+
+/** バックアップの文字を読んで、「置きかえますか？」の確認を出す（ファイルでも貼り付けでも共通） */
+function askRestoreFromText(text) {
+  const backup = parseBackupText(text);
+  if (!backup) {
+    showToast('「まめ帳」のバックアップとして読めませんでした');
+    return;
+  }
+  pendingRestore = backup;
+  let count = 0;
+  for (const month of Object.keys(backup.monthly)) {
+    count = count + (backup.monthly[month] || []).length;
+  }
+  findOne('#importTitle').textContent = 'バックアップから戻す';
+  findOne('#importBody').innerHTML =
+    '<p>このバックアップ（口座 ' + backup.profile.accounts.length + '件・入出金 ' + count + '件' +
+    (backup.exportedAt ? '・' + escapeHtml(String(backup.exportedAt).slice(0, 10)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
+    '<div class="confirm-box"><p>今のデータは消えます。元に戻せません。</p><div class="row-gap">' +
+    '<button type="button" class="btn danger" data-action="restore-yes">置きかえる</button>' +
+    '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div></div>';
+  findOne('#importDialog').showModal();
+}
 
 /** バックアップのファイルが選ばれたとき */
 function readBackupFile(file) {
   const reader = new FileReader();
-  reader.onload = () => {
-    let backup = null;
-    try {
-      backup = JSON.parse(String(reader.result));
-    } catch (error) {
-      backup = null;
-    }
-    if (!backup || !backup.profile || !Array.isArray(backup.profile.accounts) || typeof backup.monthly !== 'object') {
-      showToast('このファイルは「まめ帳」のバックアップとして読めませんでした');
-      return;
-    }
-    pendingRestore = backup;
-    let count = 0;
-    for (const month of Object.keys(backup.monthly)) {
-      count = count + (backup.monthly[month] || []).length;
-    }
-    findOne('#importTitle').textContent = 'バックアップから戻す';
-    findOne('#importBody').innerHTML =
-      '<p>このバックアップ（口座 ' + backup.profile.accounts.length + '件・入出金 ' + count + '件' +
-      (backup.exportedAt ? '・' + escapeHtml(backup.exportedAt.slice(0, 10)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
-      '<div class="confirm-box"><p>今のデータは消えます。元に戻せません。</p><div class="row-gap">' +
-      '<button type="button" class="btn danger" data-action="restore-yes">置きかえる</button>' +
-      '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div></div>';
-    findOne('#importDialog').showModal();
-  };
+  reader.onload = () => askRestoreFromText(String(reader.result));
   reader.readAsText(file);
+}
+
+/** 「文字でコピー」: バックアップを画面に出して、コピーできるようにする（別の端末に貼り付けて使う） */
+function showBackupText() {
+  const backup = {
+    app: 'mamecho',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    profile: appState.profile,
+    monthly: appState.monthly,
+  };
+  findOne('#textDialogTitle').textContent = 'バックアップの文字';
+  findOne('#textDialogHint').textContent = '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。家計簿の中身がそのまま入っているので、人には見せないでください。';
+  findOne('#textDialogContent').value = backupToText(backup);
+  findOne('#textDialog').showModal();
+}
+
+/** 「貼り付けて戻す」: 貼り付ける欄を出す */
+function openPasteRestore() {
+  findOne('#importTitle').textContent = '貼り付けて戻す';
+  findOne('#importBody').innerHTML =
+    '<p>コピーしたバックアップの文字を、下の欄に貼り付けてください。</p>' +
+    '<textarea id="pasteBackupText" rows="8" placeholder="ここに貼り付け"></textarea>' +
+    '<div class="row-gap" style="margin-top:12px"><button type="button" class="btn primary" data-action="paste-restore-read">読み込む</button>' +
+    '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div>';
+  findOne('#importDialog').showModal();
 }
 
 function restoreBackupConfirmed() {

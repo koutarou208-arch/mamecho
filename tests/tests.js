@@ -370,6 +370,18 @@ const dayRowsEarly = dailySafetyRows({ start: '2026-10-01', end: '2026-10-03' },
 same('日ごと: 期間の最後の日までで止まる', dayRowsEarly.length, 2);
 allTransactions = [];
 
+section('バックアップを文字で受けわたす');
+const sampleBackup = { app: 'mamecho', version: 1, profile: { accounts: [{ id: 'a' }] }, monthly: { '2026-10': [{ id: 't' }] } };
+const backupText = backupToText(sampleBackup);
+check('バックアップの文字: 1行にまとまる（貼り付けやすい）', backupText.indexOf('\n') === -1);
+same('バックアップの文字: 読み戻すと口座の数が同じ', parseBackupText(backupText).profile.accounts.length, 1);
+same('バックアップの文字: 前後の空白・改行があっても読める', parseBackupText('  \n' + backupText + '\n ').monthly['2026-10'].length, 1);
+same('バックアップの文字: 先頭の目に見えない印（BOM）があっても読める', parseBackupText('\uFEFF' + backupText).app, 'mamecho');
+same('バックアップの文字: JSONでなければ null', parseBackupText('こんにちは'), null);
+same('バックアップの文字: 空なら null', parseBackupText(''), null);
+same('バックアップの文字: 口座がない形は null', parseBackupText('{"profile":{},"monthly":{}}'), null);
+same('バックアップの文字: 入出金の入れ物がない形は null', parseBackupText('{"profile":{"accounts":[]}}'), null);
+
 /* ===========================================================
    結果
    =========================================================== */
