@@ -138,6 +138,15 @@
         <span class="hint" id="receiptStatus" aria-live="polite"></span>
       </div>
 
+      <!-- カードの利用通知メール（JCBなど）の文章を貼り付けると、日付・金額・お店を自動で入れる -->
+      <details class="more" id="noticeRow">
+        <summary>カード利用のメールから入力</summary>
+        <div style="padding-top:8px">
+          <textarea id="noticeText" rows="5" placeholder="メールの文章を貼り付け（ご利用日時・ご利用金額・ご利用先 が入った部分）"></textarea>
+          <p class="hint" id="noticeStatus" aria-live="polite"></p>
+        </div>
+      </details>
+
       <label class="field">
         <span>金額</span>
         <div class="amount-input">

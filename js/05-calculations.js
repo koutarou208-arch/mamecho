@@ -407,6 +407,97 @@ function summarizePeriod(period) {
 }
 
 
+/* ===========================================================
+   カードの利用通知メールを読み取る
+   「ご利用日時」「ご利用金額」「ご利用先」「カード名称」のような行から、日付・金額・お店を取り出す。
+   メールの文章はこの端末の中だけで読み取り、どこにも送らない。
+   =========================================================== */
+
+/** 行の中の「ラベルのあとの値」を返す（【ご利用先】 値 / ご利用先： 値 の両方に対応） */
+function noticeValueOf(line) {
+  let value = line;
+  if (line.trim().startsWith('【')) {
+    const closing = line.indexOf('】');
+    value = closing === -1 ? line : line.slice(closing + 1);
+  } else {
+    const colon = line.indexOf(':');
+    value = colon === -1 ? line : line.slice(colon + 1);
+  }
+  return value.replace(/^[\s:：]+/, '').trim();
+}
+
+/**
+ * カードの利用通知メールの文章から { date, time, amount, merchant, cardName } を取り出す。
+ * 読めなければ null。today は日付がなかったとき（と年がないとき）に使う今日の日付。
+ */
+function parseCardNoticeEmail(text, today) {
+  const lines = String(text || '').normalize('NFKC').split(/\r?\n/);
+  let amount = null;
+  let date = '';
+  let time = '';
+  let merchant = '';
+  let cardName = '';
+
+  for (const line of lines) {
+    if (amount === null && /(利用金額|利用額|お支払金額|ご請求額)/.test(line)) {
+      const match = line.match(/([\d,]+)\s*円/) || line.match(/[¥￥]\s*([\d,]+)/);
+      if (match) {
+        amount = Number(match[1].replace(/,/g, ''));
+      }
+    }
+    if (date === '' && /(利用日|取引日)/.test(line)) {
+      const full = line.match(/(\d{4})[\/\-年.]\s*(\d{1,2})[\/\-月.]\s*(\d{1,2})/);
+      const short = line.match(/(\d{1,2})[\/月]\s*(\d{1,2})日?/);
+      if (full) {
+        date = full[1] + '-' + pad2(full[2]) + '-' + pad2(full[3]);
+      } else if (short) {
+        date = today.slice(0, 4) + '-' + pad2(short[1]) + '-' + pad2(short[2]);
+      }
+      const timeMatch = line.match(/(\d{1,2}):(\d{2})/);
+      if (timeMatch) {
+        time = pad2(timeMatch[1]) + ':' + timeMatch[2];
+      }
+    }
+    if (merchant === '' && /(利用先|加盟店|利用店舗)/.test(line)) {
+      merchant = noticeValueOf(line);
+    }
+    if (cardName === '' && /カード名/.test(line)) {
+      cardName = noticeValueOf(line);
+    }
+  }
+
+  if (amount === null || !Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+  if (date === '' || !isValidDateText(date)) {
+    date = today;
+  }
+  return { date: date, time: time, amount: amount, merchant: merchant, cardName: cardName };
+}
+
+/** メールのカード名（「JCBカード…」など）に合うカード口座を探す。なければ null */
+function findCardAccountForNotice(cardName, accounts) {
+  const text = normalizeText(cardName);
+  if (text === '') {
+    return null;
+  }
+  for (const company of CARD_COMPANIES) {
+    if (company.id === 'custom') {
+      continue;
+    }
+    if (!text.includes(normalizeText(company.name))) {
+      continue;
+    }
+    for (const account of accounts) {
+      if (account.kind === 'card' && cardSettings(account).company.id === company.id) {
+        return account;
+      }
+    }
+  }
+  return null;
+}
+
+
 /**
  * 「株の利益がどれくらいあれば安心か」を計算する（自分の数字だけを使った計算で、投資のおすすめではありません）。
  *   summary … summarizeRange / summarizePeriod の結果

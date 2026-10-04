@@ -446,6 +446,43 @@ same('給与の平均: 給与があった月だけで平均する', averageSalar
 same('給与の平均: 給与の記録がなければ0', averageSalaryOf([summarizeRange({ start: '2025-01-01', end: '2025-02-01' })]), 0);
 allTransactions = [];
 
+section('カード利用通知メールの読み取り');
+const noticeMail = [
+  'いつも【ＯＳ】ＪＣＢカードＷ　ｐｌｕｓ　Ｌをご利用いただきありがとうございます。',
+  'JCBカードのご利用がありましたのでご連絡します。',
+  '',
+  'カード名称　：　【ＯＳ】ＪＣＢカードＷ　ｐｌｕｓ　Ｌ',
+  '【ご利用日時(日本時間)】　2026/10/04 20:18',
+  '【ご利用金額】　1,000円',
+  '【ご利用先】　テストショウテン',
+  '',
+  '▼ご留意点',
+].join('\n');
+const noticeA = parseCardNoticeEmail(noticeMail, '2026-10-05');
+check('メール: 読み取れる', noticeA !== null);
+same('メール: 日付', noticeA.date, '2026-10-04');
+same('メール: 金額（カンマと「円」を取る）', noticeA.amount, 1000);
+same('メール: ご利用先', noticeA.merchant, 'テストショウテン');
+check('メール: カード名にJCBがふくまれる', noticeA.cardName.indexOf('JCB') !== -1);
+const noticeB = parseCardNoticeEmail('利用日：2026年9月3日\n利用金額：¥12,345\n利用先：サンプル書店', '2026-10-05');
+same('メール: 別の書き方の日付（年月日）', noticeB.date, '2026-09-03');
+same('メール: 別の書き方の金額（円マーク）', noticeB.amount, 12345);
+same('メール: 別の書き方のご利用先', noticeB.merchant, 'サンプル書店');
+const noticeC = parseCardNoticeEmail('ご利用日時：10/04 20:18\nご利用金額：500円\nご利用先：テスト', '2026-10-05');
+same('メール: 年がなければ今年', noticeC.date, '2026-10-04');
+check('メール: 金額がなければ読めない', parseCardNoticeEmail('ご利用日時：2026/10/04\nご利用先：テスト', '2026-10-05') === null);
+check('メール: 関係ない文章は読めない', parseCardNoticeEmail('こんにちは。今日はいい天気ですね。', '2026-10-05') === null);
+check('メール: 空は読めない', parseCardNoticeEmail('', '2026-10-05') === null);
+const noticeD = parseCardNoticeEmail('ご利用金額：800円\nご利用先：テスト', '2026-10-05');
+same('メール: 日付がなければ今日', noticeD.date, '2026-10-05');
+const noticeAccounts = [
+  { id: 'bank1', kind: 'bank', name: '銀行' },
+  { id: 'card1', kind: 'card', name: 'メインカード', card: { company: 'jcb' } },
+  { id: 'card2', kind: 'card', name: 'サブ', card: { company: 'smbc' } },
+];
+same('メール: カード名から口座を選ぶ（JCB）', findCardAccountForNotice('【OS】JCBカードW plus L', noticeAccounts).id, 'card1');
+check('メール: 合うカードがなければ null', findCardAccountForNotice('どこかのカード', noticeAccounts) === null);
+
 /* ===========================================================
    結果
    =========================================================== */

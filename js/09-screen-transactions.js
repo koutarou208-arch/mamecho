@@ -56,6 +56,7 @@ const TransactionsScreen = {
         '<button type="button" class="filter-chip" data-action="clear-date-filter">' + formatMonthDay(filters.date) + ' の記録だけ表示中 ' + iconSvg('close') + '</button></div>';
     }
 
+    html += '<div class="row-gap" style="margin-bottom:10px"><button type="button" class="btn small" data-action="new-from-email" data-icon="plus">カード利用のメールから記録</button></div>';
     html += '<div class="summary-line" id="transactionSummary"></div>';
     html += '<div class="tx-list" id="transactionListArea"></div>';
     html += '</section>';

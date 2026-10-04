@@ -280,6 +280,7 @@ const ACTIONS = {
   'start-own': () => startOwnLedger(),
 
   // --- 入出金 ---
+  'new-from-email': () => openTransactionDialog(null, { openNotice: true }),
   'new-trade': (button) => {
     // 株の売買の損益: 証券口座があればそれを選んでおく
     const securities = appState.profile.accounts.find((account) => account.kind === 'securities');

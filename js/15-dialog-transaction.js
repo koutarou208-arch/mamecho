@@ -87,10 +87,59 @@ function openTransactionDialog(transaction, preset) {
   findOne('#receiptStatus').textContent = '';
   findOne('#receiptRow').hidden = !canReadReceipts() || type === 'transfer' || type === 'adjust';
 
+  // カード利用のメールから入力（新しく記録するときだけ）
+  findOne('#noticeRow').hidden = Boolean(transaction) || type === 'transfer' || type === 'adjust';
+  findOne('#noticeRow').open = Boolean(options.openNotice);
+  findOne('#noticeText').value = '';
+  findOne('#noticeStatus').textContent = '';
+
   applyTypeToDialog(type);
   updateAmountHint();
   findOne('#transactionDialog').showModal();
-  setTimeout(() => findOne('#transactionAmount').focus(), 30);
+  setTimeout(() => findOne(options.openNotice ? '#noticeText' : '#transactionAmount').focus(), 30);
+}
+
+/** 貼り付けられた利用通知メールを読み取って、入力欄に入れる */
+function readNoticeText() {
+  const status = findOne('#noticeStatus');
+  const text = findOne('#noticeText').value;
+  if (text.trim() === '') {
+    status.textContent = '';
+    return;
+  }
+  const result = parseCardNoticeEmail(text, todayText());
+  if (!result) {
+    status.textContent = '読み取れませんでした。「ご利用金額」の行が入るように貼り付けてください。';
+    return;
+  }
+
+  // 支出として、日付・金額・お店を入れる
+  findOne('#transactionForm').elements.transactionType.value = 'expense';
+  applyTypeToDialog('expense');
+  findOne('#transactionDate').value = result.date;
+  findOne('#transactionAmount').value = String(result.amount);
+  if (result.merchant) {
+    findOne('#transactionDescription').value = result.merchant.slice(0, 60);
+  }
+
+  // カード名に合う口座があれば選ぶ
+  const account = findCardAccountForNotice(result.cardName, appState.profile.accounts);
+  if (account) {
+    findOne('#transactionAccount').value = account.id;
+    findOne('#transactionAccount').dispatchEvent(new Event('change'));
+  }
+
+  // お店の名前からカテゴリを選ぶ（まだ自分で選んでいなければ）
+  if (!transactionDialog.categoryTouched) {
+    fillCategorySelect(findOne('#transactionCategory'), 'expense', getCategoriesForType('expense')[0].id);
+    fillSubcategorySelect(findOne('#transactionSubcategory'), findOne('#transactionCategory').value, '');
+    applyAutoCategory();
+  }
+  updateAmountHint();
+  updatePaymentPreview();
+
+  const accountText = account ? '（口座: ' + account.name + '）' : '（口座は選びなおしてください）';
+  status.textContent = formatMonthDay(result.date) + ' ' + formatYen(result.amount) + ' を読み取りました' + accountText + '。内容を確かめて保存してください。';
 }
 
 /** 新しく記録するときの日付: 表示中の期間に今日があれば今日、なければ期間の最初の日 */
@@ -475,6 +524,7 @@ function setupTransactionDialog() {
     transactionDialog.categoryChanged = true;
   });
 
+  findOne('#noticeText').addEventListener('input', readNoticeText);
   findOne('#transactionAmount').addEventListener('input', updateAmountHint);
   findOne('#transactionDate').addEventListener('change', updatePaymentPreview);
 
