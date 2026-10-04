@@ -20,7 +20,8 @@ BUNDLE="$(mktemp -t mamecho-test.XXXXXX)"
 {
   echo "if (typeof print === 'undefined') { var print = function (text) { console.log(text); }; }"
   cat js/01-categories.js js/02-card-companies.js js/03-helpers.js js/04-state-and-storage.js \
-      js/05-calculations.js js/06-credit-card-billing.js js/17-csv-and-backup.js
+      js/05-calculations.js js/06-credit-card-billing.js js/17-csv-and-backup.js \
+      js/22-mail-import.js
   cat tests/tests.js
 } > "$BUNDLE"
 

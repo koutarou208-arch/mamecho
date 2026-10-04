@@ -538,6 +538,7 @@ function finishLoading() {
   setSaveStatus(appState.saveStatus);
   renderApp();
   applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
+  autoMailImport();      // Gmail の取り込み係とつないでいれば、新しいカード利用メールを記録する（22-mail-import.js）
 }
 
 

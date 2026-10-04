@@ -55,7 +55,8 @@ mamecho/
    ├─ 19-sample-data.js ……… 【機能】お試し用のサンプルデータ
    ├─ 20-rules-alerts.js …… 【機能】制度変更のお知らせ、不具合の報告文
    ├─ 21-encryption-lock.js 【機能】暗号化ロック（パスフレーズ）
-   └─ 22-app-start.js ………… 【司令塔】画面の切りかえ・ボタンの受付・起動
+   ├─ 22-mail-import.js …… 【機能】Gmail のカード利用メールから自動で記録
+   └─ 23-app-start.js ………… 【司令塔】画面の切りかえ・ボタンの受付・起動
 ```
 
 **迷ったら**: 「画面の見た目」なら `08〜14`、「数字の計算」なら `05`・`06`、「決まりごと」なら `01`・`02` を開いてください。
@@ -68,7 +69,7 @@ mamecho/
 
 ```
 ① ボタンを押す
-      ↓   （22-app-start.js の ACTIONS が受け取る）
+      ↓   （23-app-start.js の ACTIONS が受け取る）
 ② データを変える
       ↓   （04 の putTransaction など）
 ③ 計算し直す → 保存する → 画面を描き直す
@@ -132,7 +133,7 @@ mamecho/
 ### 新しいボタンを作りたい
 
 1. HTML に `data-action="my-button"` を付けたボタンを書く
-2. `js/22-app-start.js` の `ACTIONS` に同じ名前で「すること」を書く
+2. `js/23-app-start.js` の `ACTIONS` に同じ名前で「すること」を書く
 
 ```js
 'my-button': () => showToast('押されました'),
