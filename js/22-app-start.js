@@ -440,6 +440,23 @@ const ACTIONS = {
    4. 起動
    =========================================================== */
 
+/**
+ * アプリ本体のファイルを覚えておく係（sw.js）を登録する。
+ * Claude の中で開いているとき（window.claude がある）や、https でないときは何もしない。
+ */
+function registerServiceWorker() {
+  if (window.claude || !('serviceWorker' in navigator)) {
+    return;
+  }
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  if (location.protocol !== 'https:' && !isLocal) {
+    return;
+  }
+  navigator.serviceWorker.register('sw.js').catch(() => {
+    // 登録できなくても、アプリはふつうに使えるので何もしない
+  });
+}
+
 function start() {
   // 画面のどこかが押されたら、data-action の名前で ACTIONS を探して実行
   document.addEventListener('click', (event) => {
@@ -497,6 +514,7 @@ function start() {
     }
   });
 
+  registerServiceWorker(); // ホーム画面に追加したアプリを、電波が弱くても開けるようにする
   renderApp();        // まず「読み込み中」を表示
   startStorage();     // データを読み込む（終わったら自動で描き直す）
   connectDownloads(); // ファイル保存の機能を調べる

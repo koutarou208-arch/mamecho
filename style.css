@@ -142,6 +142,8 @@
    3. ページ全体
    ----------------------------------------------------------- */
 html, body { height: 100%; }
+/* hidden が付いた部品は必ず隠す（Claude の中で開くときは Claude 側でも同じ指定が入る） */
+[hidden] { display: none !important; }
 body {
   background: var(--bg);
   color: var(--ink);
