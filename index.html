@@ -15,6 +15,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<!--
+  安全のための約束（Content-Security-Policy）:
+  このアプリは、自分のファイル（同じサイトの中）以外とは通信しません。
+  もしプログラムにまちがいがあっても、ブラウザが外への送信やよそのプログラムの読み込みを止めます。
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>まめ帳 家計簿</title>
 
 <!-- スマホのホーム画面に「アプリ」として追加したときの設定（猫のアイコン・全画面表示） -->
@@ -27,9 +34,6 @@
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&family=Noto+Sans+JP:wght@400;500;700;900&display=swap">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -477,7 +481,6 @@
 <script src="js/19-sample-data.js"></script>
 <script src="js/20-rules-alerts.js"></script>
 <script src="js/21-encryption-lock.js"></script>
-<script src="js/22-mail-import.js"></script>
-<script src="js/23-app-start.js"></script>
+<script src="js/22-app-start.js"></script>
 </body>
 </html>

@@ -21,7 +21,6 @@ const SettingsScreen = {
     html += lockCardHtml();            // 21-encryption-lock.js
     html += rulesDataCardHtml();       // 20-rules-alerts.js
     html += settingsRecurringCardHtml();
-    html += mailImportCardHtml();      // 22-mail-import.js
     html += settingsRulesCardHtml();
     html += settingsStorageCardHtml();
     html += '</div>';

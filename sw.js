@@ -7,7 +7,7 @@
    ※ ファイルを大きく変えたら、下の CACHE_NAME の数字を上げてください
    =========================================================== */
 
-const CACHE_NAME = 'mamecho-v1';
+const CACHE_NAME = 'mamecho-v2';
 
 // 最初に覚えておくファイル（アプリ本体）
 const APP_FILES = [
@@ -44,16 +44,14 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   const url = new URL(request.url);
-  // 自分のサイトのファイルと、フォント（Google Fonts）だけ扱う
-  const isOwnFile = url.origin === self.location.origin;
-  const isFont = url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com';
-  if (!isOwnFile && !isFont) {
+  // 自分のサイトのファイルだけ扱う（このアプリは、よそとは通信しない）
+  if (url.origin !== self.location.origin) {
     return;
   }
   event.respondWith(
     fetch(request)
       .then((response) => {
-        if (response && (response.ok || response.type === 'opaque')) {
+        if (response && response.ok) {
           const copy = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
         }

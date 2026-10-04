@@ -483,53 +483,6 @@ const noticeAccounts = [
 same('メール: カード名から口座を選ぶ（JCB）', findCardAccountForNotice('【OS】JCBカードW plus L', noticeAccounts).id, 'card1');
 check('メール: 合うカードがなければ null', findCardAccountForNotice('どこかのカード', noticeAccounts) === null);
 
-section('Gmail から自動で記録（メール取り込み係）');
-const mailScript = buildMailScript('abcDEF123456');
-check('取り込み係: 合言葉が入ったスクリプトになる', mailScript.indexOf("const KEY = 'abcDEF123456';") !== -1);
-check('取り込み係: 入れ忘れの印が残っていない', mailScript.indexOf('__KEY__') === -1);
-check('取り込み係: アプリからの問い合わせに答える関数がある', mailScript.indexOf('function doGet(e)') !== -1);
-check('取り込み係: 読むのはJCBの利用のお知らせだけ', mailScript.indexOf('from:mail@qa.jcb.co.jp') !== -1);
-check('URL: Googleのウェブアプリなら正しい', isValidMailScriptUrl('https://script.google.com/macros/s/AKfycbx-ABC_123/exec'));
-check('URL: 最後が /exec でなければだめ', !isValidMailScriptUrl('https://script.google.com/macros/s/AKfycbx-ABC_123/dev'));
-check('URL: Google以外はだめ', !isValidMailScriptUrl('https://example.com/macros/s/AKfycbx/exec'));
-same('URL: 問い合わせの形', mailImportUrl('https://script.google.com/macros/s/AB/exec', 'k+y', 1700000000000), 'https://script.google.com/macros/s/AB/exec?key=k%2By&since=1700000000000');
-
-const mailAccounts = [
-  { id: 'bank1', kind: 'bank', name: '銀行' },
-  { id: 'card1', kind: 'card', name: 'メインカード', card: { company: 'jcb' } },
-];
-const mailItem = {
-  id: '18f00aa',
-  receivedAt: 1791100000000,
-  text: 'カード名称　：　【ＯＳ】ＪＣＢカードＷ\n【ご利用日時(日本時間)】　2026/10/04 20:18\n【ご利用金額】　1,000円\n【ご利用先】　テストショウテン',
-};
-const mailTx = mailItemToTransaction(mailItem, mailAccounts, '', '2026-10-05', { category: 'food', sub: '外食' });
-same('メール→記録: IDはメールごとに決まる（二重にならない）', mailTx.id, 'mail-18f00aa');
-same('メール→記録: 支出', mailTx.type, 'expense');
-same('メール→記録: 日付', mailTx.date, '2026-10-04');
-same('メール→記録: 金額', mailTx.amount, 1000);
-same('メール→記録: 内容はご利用先', mailTx.description, 'テストショウテン');
-same('メール→記録: カード名から口座を選ぶ', mailTx.account, 'card1');
-same('メール→記録: カテゴリの推測を使う', mailTx.category, 'food');
-same('メール→記録: カテゴリが分からなければ「その他」', mailItemToTransaction(mailItem, mailAccounts, '', '2026-10-05', null).category, 'other');
-same('メール→記録: カード名で見つからなければ、決めておいた口座', mailItemToTransaction({ ...mailItem, text: mailItem.text.replace('ＪＣＢ', 'ナゾ') }, mailAccounts, 'bank1', '2026-10-05', null).account, 'bank1');
-same('メール→記録: 口座が決められなければ記録しない', mailItemToTransaction({ ...mailItem, text: mailItem.text.replace('ＪＣＢ', 'ナゾ') }, [{ id: 'bank1', kind: 'bank' }], '', '2026-10-05', null), null);
-same('メール→記録: 「ご利用金額」がないメール（お支払いのお知らせなど）は記録しない', mailItemToTransaction({ ...mailItem, text: '【お支払金額】 50,000円\nカード名称：JCB' }, mailAccounts, '', '2026-10-05', null), null);
-
-check('二重チェック: 同じ日・同じ金額・同じお店がもうあれば二重', isDuplicateMailTransaction(mailTx, [{ id: 'x', type: 'expense', date: '2026-10-04', amount: 1000, description: 'テストショウテン' }]));
-check('二重チェック: 同じIDがもうあれば二重', isDuplicateMailTransaction(mailTx, [{ id: 'mail-18f00aa', type: 'expense', date: '2026-10-04', amount: 9, description: 'ちがう' }]));
-check('二重チェック: 金額がちがえば別', !isDuplicateMailTransaction(mailTx, [{ id: 'x', type: 'expense', date: '2026-10-04', amount: 2000, description: 'テストショウテン' }]));
-
-const cursor = updateMailCursor({ lastReceivedAt: 100, importedIds: ['a'] }, [{ id: 'b', receivedAt: 300 }, { id: 'c', receivedAt: 200 }]);
-same('取り込みの目印: いちばん新しいメールの時刻を覚える', cursor.lastReceivedAt, 300);
-same('取り込みの目印: 取り込んだメールのIDを覚える', cursor.importedIds.join(','), 'a,b,c');
-same('取り込みの目印: メールがなければそのまま', updateMailCursor({ lastReceivedAt: 100, importedIds: [] }, []).lastReceivedAt, 100);
-const manyIds = [];
-for (let index = 0; index < 400; index++) {
-  manyIds.push({ id: 'm' + index, receivedAt: index });
-}
-same('取り込みの目印: 覚えるIDは新しい300件まで', updateMailCursor({ lastReceivedAt: 0, importedIds: [] }, manyIds).importedIds.length, 300);
-
 section('安全のための確認');
 const secretProfile = { accounts: [], settings: { startDay: 25, mailImport: { url: 'https://script.google.com/macros/s/X/exec', key: 'SECRETKEYSECRETKEY12', lastReceivedAt: 5 } } };
 const exported = profileForExport(secretProfile);
@@ -537,16 +490,18 @@ check('書き出し: バックアップに合言葉を入れない', JSON.string
 check('書き出し: バックアップに取り込み係のURLを入れない', JSON.stringify(exported).indexOf('script.google.com') === -1);
 same('書き出し: ほかの設定はそのまま', exported.settings.startDay, 25);
 same('書き出し: 元のデータは変えない', secretProfile.settings.mailImport.key, 'SECRETKEYSECRETKEY12');
+same('読み込み: 古い版で保存されたメール取り込みの鍵は捨てる', normalizeProfile({ accounts: [], settings: { startDay: 25, mailImport: { key: 'OLDSECRETOLDSECRET', url: 'https://script.google.com/macros/s/X/exec' } } }).settings.mailImport, undefined);
+same('読み込み: ほかの設定は残る', normalizeProfile({ accounts: [], settings: { startDay: 25, mailImport: { key: 'x' } } }).settings.startDay, 25);
 same('CSV: = で始まる文字は式にならないようにする', csvTextCell('=HYPERLINK("http://x")'), '"\'=HYPERLINK(""http://x"")"');
 same('CSV: + で始まる文字も同じ', csvTextCell('+81'), "'+81");
 same('CSV: @ で始まる文字も同じ', csvTextCell('@SUM(1)'), "'@SUM(1)");
 same('CSV: ふつうの文字はそのまま', csvTextCell('スーパー'), 'スーパー');
 same('CSV: 金額（数字）はそのまま', csvCell(-1200), '-1200');
-const longMailTx = mailItemToTransaction({ id: 'z', receivedAt: 1, text: 'カード名称：JCB\nご利用金額：100円\nご利用先：' + 'ア'.repeat(500) }, [{ id: 'card1', kind: 'card', name: 'J', card: { company: 'jcb' } }], '', '2026-10-05', null);
-same('メール→記録: お店の名前は60文字まで', longMailTx.description.length, 60);
-const guardedScript = buildMailScript('abcDEF123456abcDEF');
-check('取り込み係: 合言葉が短すぎるときは何も返さない', guardedScript.indexOf('KEY.length < 16') !== -1);
-check('取り込み係: 失敗したときも中身を返さない', guardedScript.indexOf("error: 'server_error'") !== -1);
+
+section('サンプルのデータ');
+const sampleForTest = createSampleData();
+check('サンプル: 固定費の一覧（空）がある（家計簿・設定の画面が落ちないように）', Array.isArray(sampleForTest.profile.recurring));
+check('サンプル: 読み込みの補いを通しても同じ形', Array.isArray(normalizeProfile(sampleForTest.profile).recurring));
 
 /* ===========================================================
    結果

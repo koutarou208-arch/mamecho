@@ -1,5 +1,5 @@
 /* ===========================================================
-   23-app-start.js  ―  アプリの「司令塔」
+   22-app-start.js  ―  アプリの「司令塔」
    -----------------------------------------------------------
    いちばん最後に読み込まれるファイルです。
      ・画面の一覧（SCREENS）とメニュー
@@ -280,20 +280,6 @@ const ACTIONS = {
   'start-own': () => startOwnLedger(),
 
   // --- 入出金 ---
-  // --- Gmail から自動で記録（22-mail-import.js） ---
-  'mail-copy-script': () => showMailScript(),
-  'mail-connect': () => connectMailImport(),
-  'mail-new-key': () => renewMailKey(),
-  'mail-import-now': () => runMailImport(true),
-  'mail-disconnect': () => {
-    mailImportState.disconnectConfirm = true;
-    renderApp();
-  },
-  'mail-disconnect-no': () => {
-    mailImportState.disconnectConfirm = false;
-    renderApp();
-  },
-  'mail-disconnect-yes': () => disconnectMailImport(),
   'new-from-email': () => openTransactionDialog(null, { openNotice: true }),
   'new-trade': (button) => {
     // 株の売買の損益: 証券口座があればそれを選んでおく
@@ -538,13 +524,6 @@ function start() {
   if (SCREENS[hashScreen]) {
     appState.screen = hashScreen;
   }
-  // アプリに戻ってきたら、新しいカード利用メールがないか確かめる（22-mail-import.js）
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      autoMailImport();
-    }
-  });
-
   window.addEventListener('hashchange', () => {
     const screenName = location.hash.replace('#', '');
     if (SCREENS[screenName] && screenName !== appState.screen) {

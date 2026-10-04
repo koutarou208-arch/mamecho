@@ -168,8 +168,7 @@ function exportCsv() {
 
 /**
  * バックアップに入れる設定（元のデータは変えずに写しを作る）。
- * メール取り込みの合言葉と URL は「鍵」なので、バックアップには入れない
- * （ファイルや文字を人に渡してしまっても、カードの利用メールまでは読まれないように）。
+ * 以前の版にあった「Gmail から自動で記録」の鍵（合言葉と URL）が残っていても、書き出さない。
  */
 function profileForExport(profile) {
   const copy = JSON.parse(JSON.stringify(profile));
@@ -277,14 +276,7 @@ function restoreBackupConfirmed() {
   if (!pendingRestore) {
     return;
   }
-  // バックアップにはメール取り込みの鍵が入っていないので、この端末の接続はそのまま残す
-  const restoredProfile = pendingRestore.profile;
-  const currentSettings = appState.profile && appState.profile.settings;
-  if (currentSettings && currentSettings.mailImport) {
-    restoredProfile.settings = restoredProfile.settings || {};
-    restoredProfile.settings.mailImport = currentSettings.mailImport;
-  }
-  replaceAllData(restoredProfile, pendingRestore.monthly);
+  replaceAllData(pendingRestore.profile, pendingRestore.monthly);
   pendingRestore = null;
   findOne('#importDialog').close();
   showToast('バックアップから戻しました');

@@ -89,9 +89,12 @@ function createEmptyProfile() {
 function normalizeProfile(raw) {
   const empty = createEmptyProfile();
   const profile = raw || {};
+  const settings = { ...empty.settings, ...(profile.settings || {}) };
+  // 以前の版にあった「Gmail から自動で記録」の鍵（合言葉と URL）は、安全のため捨てる
+  delete settings.mailImport;
   return {
     version: 1,
-    settings: { ...empty.settings, ...(profile.settings || {}) },
+    settings: settings,
     accounts: Array.isArray(profile.accounts) ? profile.accounts : [],
     budgets: profile.budgets || {},
     rules: Array.isArray(profile.rules) ? profile.rules : [],
@@ -513,7 +516,7 @@ function showSampleData() {
   }
   const sample = createSampleData(); // 18-sample-data.js にある
   appState.isSample = true;
-  appState.profile = sample.profile;
+  appState.profile = normalizeProfile(sample.profile); // 足りない項目を補う（新しい機能の入れ物など）
   appState.monthly = sample.monthly;
 }
 
@@ -538,7 +541,6 @@ function finishLoading() {
   setSaveStatus(appState.saveStatus);
   renderApp();
   applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
-  autoMailImport();      // Gmail の取り込み係とつないでいれば、新しいカード利用メールを記録する（22-mail-import.js）
 }
 
 

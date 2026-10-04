@@ -61,9 +61,9 @@
   --passbook-rule: #cfe0d2;
 
   /* 文字の種類 */
-  --font-display: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, sans-serif;  /* 見出し（ふつうのゴシック体） */
-  --font-body: "Noto Sans JP", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; /* 本文（ふつうのゴシック体） */
-  --font-dot: "DotGothic16", "Osaka-Mono", "MS Gothic", monospace;                   /* 通帳のドット文字 */
+  --font-display: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic UI", Meiryo, sans-serif;  /* 見出し（端末に入っているゴシック体。外からは読み込まない） */
+  --font-body: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP", "Yu Gothic UI", Meiryo, system-ui, sans-serif; /* 本文（同上） */
+  --font-dot: "Osaka-Mono", "MS Gothic", "Noto Sans Mono CJK JP", ui-monospace, monospace;  /* 通帳の等幅文字（端末に入っているもの） */
 
   /* 角の丸み・余白 */
   --radius: 12px;
@@ -831,9 +831,6 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .home-grid > .safety-card { order: 2; }
 }
 
-.mail-steps { display: grid; gap: 8px; margin: 10px 0 12px; padding-left: 1.4em; font-size: 13px; }
-.mail-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: 10px; align-items: end; }
-@media (max-width: 860px) { .mail-form { grid-template-columns: minmax(0, 1fr); } }
 .recurring-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }
 @media (max-width: 860px) { .recurring-form { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 560px) { .recurring-form { grid-template-columns: minmax(0, 1fr); } }

@@ -270,6 +270,7 @@ function createSampleData() {
       health: 12000, utility: 15000, phone: 11000, housing: 84000, insurance: 7000, education: 4000,
     },
     rules: [],
+    recurring: [],        // 固定費（毎月自動で記録）。サンプルでは空
   };
   return { profile: profile, monthly: monthly };
 }
