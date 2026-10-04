@@ -39,7 +39,9 @@ const lockState = {
   justDisabledAt: 0, // オフにした直後の時刻
 };
 
-const MIN_PASSPHRASE_LENGTH = 12; // 短いと、暗号文を盗まれたときに総当たりで当てられやすくなる
+const MIN_PASSPHRASE_LENGTH = 8;           // これより短いパスフレーズは使えない
+const RECOMMENDED_PASSPHRASE_LENGTH = 12;  // これより短いと「当てられやすい」注意を出す（使うことはできる）
+let weakPassphraseAcknowledged = '';      // 注意を見たうえで「それでも使う」と2回目を押したパスフレーズ
 const AUTO_LOCK_MINUTES = 10;   // 操作しないままこの時間がたつと自動でロック
 
 let isDisableLockConfirmOpen = false;
@@ -211,19 +213,27 @@ async function unlockFromDialog() {
   button.disabled = true;
   errorArea.textContent = '確認しています…';
 
-  try {
-    const key = await deriveKey(passphrase, lockState.salt, lockState.iter);
-    // パスフレーズが合っているかを、確認用の暗号文で確かめる
-    const proof = await decryptJson(lockState.check, key);
-    if (!proof || proof.ok !== 'mamecho') {
-      throw new Error('mismatch');
+  // 打ったままのものと、全角・半角をそろえたものを順に試す
+  let foundKey = null;
+  for (const candidate of passphraseCandidates(passphrase)) {
+    try {
+      const key = await deriveKey(candidate, lockState.salt, lockState.iter);
+      // パスフレーズが合っているかを、確認用の暗号文で確かめる
+      const proof = await decryptJson(lockState.check, key);
+      if (proof && proof.ok === 'mamecho') {
+        foundKey = key;
+        break;
+      }
+    } catch (error) {
+      // 合わなかった。次の候補を試す
     }
-    lockState.key = key;
-  } catch (error) {
-    errorArea.textContent = 'パスフレーズが違います。';
+  }
+  if (!foundKey) {
+    errorArea.textContent = 'パスフレーズが違います。大文字・小文字や記号も区別します。';
     button.disabled = false;
     return;
   }
+  lockState.key = foundKey;
 
   try {
     if (appState.storageMode === 'cloud') {
@@ -325,22 +335,47 @@ function noteActivity() {
    6. ロックをオンにする・オフにする（設定画面から）
    =========================================================== */
 
-/**
- * 新しいパスフレーズが弱すぎないかを調べる。問題なければ ''、あれば理由の文を返す。
- * （暗号そのものは破れなくても、パスフレーズが弱いと「当てずっぽう」で開けられてしまうため）
- */
+/** 新しいパスフレーズが使えるかを調べる。使えなければ理由の文、使えれば '' */
 function passphraseProblem(text) {
-  const value = String(text || '');
-  if (value.length < MIN_PASSPHRASE_LENGTH) {
-    return 'パスフレーズは' + MIN_PASSPHRASE_LENGTH + '文字以上にしてください（単語を4つ以上つなげると、覚えやすくて強くなります）。';
-  }
-  if (new Set(value).size <= 2) {
-    return '同じ文字のくり返しは当てられやすいので使えません。';
-  }
-  if (/^[0-9]+$/.test(value)) {
-    return '数字だけのパスフレーズは当てられやすいので使えません。文字や単語をまぜてください。';
+  if (String(text || '').length < MIN_PASSPHRASE_LENGTH) {
+    return 'パスフレーズは' + MIN_PASSPHRASE_LENGTH + '文字以上にしてください。';
   }
   return '';
+}
+
+/**
+ * 使えるけれど、当てられやすいパスフレーズへの注意。なければ ''。
+ * （暗号そのものは破れなくても、パスフレーズが弱いと「当てずっぽう」で開けられてしまうため）
+ */
+function passphraseWarning(text) {
+  const value = String(text || '');
+  if (value.length < RECOMMENDED_PASSPHRASE_LENGTH) {
+    return RECOMMENDED_PASSPHRASE_LENGTH + '文字より短いパスフレーズは、暗号文を盗まれたときに当てられやすくなります。';
+  }
+  if (new Set(value).size <= 2) {
+    return '同じ文字のくり返しは当てられやすいです。';
+  }
+  if (/^[0-9]+$/.test(value)) {
+    return '数字だけのパスフレーズは当てられやすいです。';
+  }
+  return '';
+}
+
+/**
+ * ロックを解除するときに試すパスフレーズの候補。
+ * 打ったままのものに加えて、全角・半角をそろえたもの（NFKC）も試す
+ * （iPhone の日本語キーボードで、数字や英字が全角になってしまったときのため）。
+ */
+function passphraseCandidates(text) {
+  const raw = String(text || '');
+  const list = [raw, raw.normalize('NFKC'), raw.normalize('NFC')];
+  const unique = [];
+  for (const item of list) {
+    if (!unique.includes(item)) {
+      unique.push(item);
+    }
+  }
+  return unique;
 }
 
 async function enableLockFromForm() {
@@ -358,6 +393,14 @@ async function enableLockFromForm() {
     errorArea.textContent = problem;
     return;
   }
+  // 当てられやすいパスフレーズは、注意を見せて、もう一度押されたら使う
+  const warning = passphraseWarning(first);
+  if (warning && weakPassphraseAcknowledged !== first) {
+    weakPassphraseAcknowledged = first;
+    errorArea.textContent = warning + 'このまま使うときは、もう一度「暗号化ロックをオンにする」を押してください。';
+    return;
+  }
+  weakPassphraseAcknowledged = '';
   if (first !== second) {
     errorArea.textContent = '2回入れたパスフレーズが一致しません。';
     return;
@@ -371,7 +414,8 @@ async function enableLockFromForm() {
 
   try {
     const salt = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
-    const key = await deriveKey(first, salt, 600000);
+    // 全角・半角をそろえてから鍵を作る（あとでどちらで打っても開けるように）
+    const key = await deriveKey(first.normalize('NFKC'), salt, 600000);
     lockState.salt = salt;
     lockState.iter = 600000;
     lockState.key = key;
@@ -466,7 +510,7 @@ function lockCardHtml() {
 
   if (!lockState.enabled) {
     html += '<div class="lock-form">' +
-      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上・例: 単語を4つつなげる）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
+      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上。' + RECOMMENDED_PASSPHRASE_LENGTH + '文字以上・単語を4つつなげるのがおすすめ）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
       '<label class="field"><span>もう一度</span><input type="password" id="lockNewPassphrase2" autocomplete="new-password"></label>' +
       '<button type="button" class="btn primary" id="lockEnableButton" data-action="enable-lock">暗号化ロックをオンにする</button></div>';
     html += '<p class="form-error" id="lockSetupError" role="alert"></p>';

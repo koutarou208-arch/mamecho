@@ -504,13 +504,18 @@ check('サンプル: 固定費の一覧（空）がある（家計簿・設定�
 check('サンプル: 読み込みの補いを通しても同じ形', Array.isArray(normalizeProfile(sampleForTest.profile).recurring));
 
 section('暗号化ロックのパスフレーズ');
-same('パスフレーズ: 12文字以上が必要', MIN_PASSPHRASE_LENGTH, 12);
-check('パスフレーズ: 短いものは断る', passphraseProblem('neko2026') !== '');
-check('パスフレーズ: 11文字も断る', passphraseProblem('abcdefghijk') !== '');
-check('パスフレーズ: 同じ文字のくり返しは断る', passphraseProblem('aaaaaaaaaaaaaaaa') !== '');
-check('パスフレーズ: 数字が並んでいるだけのものは断る', passphraseProblem('123456789012') !== '');
-same('パスフレーズ: 単語をつなげた長いものはOK', passphraseProblem('neko-sakura-umi-hoshi'), '');
-same('パスフレーズ: 日本語の文もOK', passphraseProblem('きょうはねこがよくねむる日'), '');
+same('パスフレーズ: 前から使っている8文字以上はそのまま使える', MIN_PASSPHRASE_LENGTH, 8);
+check('パスフレーズ: 8文字より短いものは使えない', passphraseProblem('neko123') !== '');
+same('パスフレーズ: 8文字なら使える（注意は出る）', passphraseProblem('neko1234'), '');
+check('パスフレーズ: 12文字未満には注意を出す', passphraseWarning('neko1234') !== '');
+check('パスフレーズ: 数字だけには注意を出す', passphraseWarning('123456789012') !== '');
+check('パスフレーズ: 同じ文字のくり返しには注意を出す', passphraseWarning('aaaaaaaaaaaaaaaa') !== '');
+same('パスフレーズ: 単語をつなげた長いものは注意なし', passphraseWarning('neko-sakura-umi-hoshi'), '');
+same('パスフレーズ: 日本語の文も注意なし', passphraseWarning('きょうはねこがよくねむる日'), '');
+const candidatesA = passphraseCandidates('ｎｅｋｏ１２３４');
+check('パスフレーズ: 全角で打っても、半角の版も試す', candidatesA.indexOf('neko1234') !== -1);
+check('パスフレーズ: 打ったままの版も試す（前に全角で決めた人のため）', candidatesA.indexOf('ｎｅｋｏ１２３４') !== -1);
+same('パスフレーズ: 同じものは2回試さない', passphraseCandidates('neko1234').length, 1);
 
 /* ===========================================================
    結果
