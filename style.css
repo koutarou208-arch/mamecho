@@ -142,6 +142,13 @@
    3. ページ全体
    ----------------------------------------------------------- */
 html, body { height: 100%; }
+html {
+  /* 画面を2回トンと押したときの拡大をしない（指2本で広げる拡大はできる） */
+  touch-action: manipulation;
+  /* iPhone を横にしたときに、文字が勝手に大きくならないようにする */
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
 /* hidden が付いた部品は必ず隠す（Claude の中で開くときは Claude 側でも同じ指定が入る） */
 [hidden] { display: none !important; }
 body {
@@ -741,8 +748,11 @@ input, select, textarea {
   background: var(--surface);
   color: var(--ink);
   font: inherit;
+  /* 16px より小さいと、iPhone は入力欄を押したときに画面を勝手に拡大してしまう。
+     （そのあと自分で縮小しないといけなくなる）ので、入力欄の文字はすべて 16px にする */
+  font-size: 16px;
 }
-textarea { font-family: ui-monospace, Menlo, monospace; font-size: 12px; resize: vertical; }
+textarea { font-family: ui-monospace, Menlo, monospace; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
 .field { display: grid; gap: 6px; min-width: 0; }
@@ -882,6 +892,8 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 
 /* 小さいスマホ: さらに詰める */
 @media (max-width: 560px) {
+  /* 長い文字のボタンは折り返す（画面からはみ出すと、iPhone が画面全体を縮小してしまうため） */
+  .btn { white-space: normal; max-width: 100%; text-align: center; }
   .card { padding: 16px; }
   .stats { gap: 8px; }
   .field-row { grid-template-columns: minmax(0, 1fr); }
