@@ -1020,5 +1020,11 @@ function runImport() {
   putManyTransactions(result.ready);
   saveProfile();
   findOne('#importDialog').close();
-  showToast(result.ready.length + '件を取り込みました' + (appState.isSample ? '（サンプル表示中のため保存はされません）' : ''));
+  let message = result.ready.length + '件を取り込みました' + (appState.isSample ? '（サンプル表示中のため保存はされません）' : '');
+  // 月の支払い金額を手入力していたカードに明細が入ったら、仮を消す（相殺）よう知らせる
+  const offsetCards = cardsToOffset(result.ready);
+  if (offsetCards.length > 0) {
+    message += '。カード画面で、仮の入力と明細を比べて仮を消してください';
+  }
+  showToast(message);
 }

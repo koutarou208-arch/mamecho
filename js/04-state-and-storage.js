@@ -537,7 +537,11 @@ function finishLoading() {
   if (appState.period === null && appState.profile) {
     appState.period = periodOf(todayText());
   }
+  const upgradedMonths = upgradeAllManualBills(); // 古い形の「月の支払い金額の手入力」を、支出の形に直す
   rebuildIndexes();
+  if (upgradedMonths.length > 0) {
+    saveChanges(upgradedMonths, false);
+  }
   setSaveStatus(appState.saveStatus);
   renderApp();
   applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する

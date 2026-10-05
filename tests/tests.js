@@ -250,6 +250,77 @@ bill = billOf(account, [{ id: 'm1', date: '2026-10-03', type: 'adjust', amount: 
 same('手入力: 指定した月に金額が出る', bill && bill.principal, 150000);
 same('手入力: 内訳の種類は manual', bill && bill.parts.manual, 150000);
 
+// 月ごとの手入力は「仮の支出」として数える（CSVの明細が届いたら、あとで相殺する）
+section('カードの仮の支出（月の支払い金額の手入力）');
+account = makeCard('jcb');
+const provisional = manualBillRecord(account, '2026-10', 150000, null, '2026-09-20');
+same('仮の支出: 種類は支出', provisional.type, 'expense');
+same('仮の支出: 金額はプラスの整数', provisional.amount, 150000);
+same('仮の支出: 日付は入力した日', provisional.date, '2026-09-20');
+same('仮の支出: そのカードの支出になる', provisional.account, 'test-card');
+same('仮の支出: カテゴリ', provisional.category + '/' + provisional.sub, 'other/カード引き落とし（仮）');
+check('仮の支出: 「仮」の印と請求月が付く', provisional.manualBill === true && provisional.billMonth === '2026-10');
+const provisionalAgain = manualBillRecord(account, '2026-10', 160000, provisional, '2026-09-25');
+same('仮の支出: 入れ直すと同じ記録を上書き（id そのまま）', provisionalAgain.id, provisional.id);
+same('仮の支出: 入れ直しても日付は最初のまま', provisionalAgain.date, '2026-09-20');
+
+// 請求への出方は、新しい形でも古い形でも同じ
+bill = billOf(account, [provisional], '2026-10');
+same('仮の支出: 請求の「手入力」の欄に出る', bill && bill.parts.manual, 150000);
+same('仮の支出: 1回払いの欄には重ねて出ない', bill && bill.parts.once, 0);
+
+// 古い形（残高修正として保存されたもの）を、支出の形に直す
+const legacyManual = { id: 'old1', date: '2026-09-18', type: 'adjust', amount: -150000, account: 'test-card', description: '支払い予定（手入力）2026年10月', memo: '', include: true, createdAt: 1, manualBill: true, billMonth: '2026-10' };
+check('古い手入力: 直す対象と判定される', upgradeManualBill(legacyManual) === true);
+same('古い手入力: 支出になる', legacyManual.type, 'expense');
+same('古い手入力: 金額はプラスになる', legacyManual.amount, 150000);
+same('古い手入力: カテゴリが付く', legacyManual.category + '/' + legacyManual.sub, 'other/カード引き落とし（仮）');
+same('古い手入力: 日付・請求月は変わらない', legacyManual.date + '/' + legacyManual.billMonth, '2026-09-18/2026-10');
+check('古い手入力: 2回目は何もしない', upgradeManualBill(legacyManual) === false && legacyManual.amount === 150000);
+const ordinaryAdjust = { id: 'adj1', date: '2026-09-18', type: 'adjust', amount: -500, account: 'test-card', description: '残高修正', memo: '', include: true, createdAt: 1 };
+check('古い手入力: ふつうの残高修正には手を付けない', upgradeManualBill(ordinaryAdjust) === false && ordinaryAdjust.type === 'adjust' && ordinaryAdjust.amount === -500);
+same('古い手入力: 直したあとも請求の金額は同じ', billOf(account, [legacyManual], '2026-10').parts.manual, 150000);
+same('古い手入力: カードの残高への効き方も同じ（借金が増える）', transactionEffect(legacyManual, 'test-card'), -150000);
+
+// 支出として集計される
+allTransactions = [provisional];
+let provisionalSummary = summarizeRange({ start: '2026-09-01', end: '2026-10-01' });
+same('仮の支出: 入力した月の支出に入る', provisionalSummary.spending, 150000);
+same('仮の支出: 「その他」に入る', provisionalSummary.categories.other.total, 150000);
+same('仮の支出: 引き落とし月（10月）にはまだ数えない', summarizeRange({ start: '2026-10-01', end: '2026-11-01' }).spending, 0);
+allTransactions = [];
+
+// 明細（CSV）が届いたあとの比べ方
+const detailRows = [buy('2026-09-10', 100000), buy('2026-09-14', 48320)];
+let check1 = manualBillCheck(account, provisional, [provisional, ...detailRows]);
+same('相殺の確認: 仮の金額', check1.manualAmount, 150000);
+same('相殺の確認: 明細の合計（仮は含めない）', check1.detailAmount, 148320);
+same('相殺の確認: 差（仮 − 明細）', check1.difference, 1680);
+check('相殺の確認: 明細があると判定される', check1.hasDetail === true);
+check1 = manualBillCheck(account, provisional, [provisional]);
+check('相殺の確認: 明細がまだ無いと判定される', check1.hasDetail === false && check1.detailAmount === 0);
+const otherMonthRows = [buy('2026-08-10', 3000)];
+check('相殺の確認: 別の請求月の明細は混ぜない', manualBillCheck(account, provisional, [provisional, ...otherMonthRows]).hasDetail === false);
+
+// CSVを取り込んだあと、仮の入力と比べるよう知らせる対象のカード
+accountById = { 'test-card': account };
+allTransactions = [provisional, ...detailRows];
+same('取り込み後の知らせ: 仮の入力がある月に明細が入ったカードが対象', cardsToOffset(detailRows).length, 1);
+same('取り込み後の知らせ: 対象のカード', cardsToOffset(detailRows)[0].id, 'test-card');
+allTransactions = [...detailRows];
+same('取り込み後の知らせ: 仮の入力が無ければ対象なし', cardsToOffset(detailRows).length, 0);
+allTransactions = [provisional, ...otherMonthRows];
+same('取り込み後の知らせ: 仮の月と違う明細だけなら対象なし', cardsToOffset(otherMonthRows).length, 0);
+allTransactions = [];
+accountById = {};
+
+// 仮を消す（相殺）と、請求は明細だけになる
+bill = billOf(account, detailRows, '2026-10');
+same('相殺したあと: 請求は明細の合計だけ', bill && bill.total, 148320);
+same('相殺したあと: 手入力の欄は0', bill && bill.parts.manual, 0);
+bill = billOf(account, [provisional, ...detailRows], '2026-10');
+same('相殺する前: 仮と明細が両方入って二重になる（だから消す）', bill && bill.total, 298320);
+
 // 引き落としの記録で消し込まれる
 const paid = buildCardBills(account, [
   buy('2026-09-10', 5000),

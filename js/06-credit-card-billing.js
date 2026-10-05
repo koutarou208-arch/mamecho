@@ -331,9 +331,9 @@ function buildCardBills(account, records) {
   const cardRecords = records || transactionsOfAccount(account.id);
 
   for (const transaction of cardRecords) {
-    // 「月ごとの金額だけ」を手入力した支払い予定（金額はマイナスで保存されている）
-    if (transaction.type === 'adjust' && transaction.manualBill && transaction.account === account.id) {
-      addToBill(transaction.billMonth, 'manual', transaction, '手入力の支払い予定', -transaction.amount, 0);
+    // 「月ごとの金額だけ」を手入力した支払い予定（新しい形は支出、古い形は残高修正）
+    if (transaction.manualBill && transaction.account === account.id) {
+      addToBill(transaction.billMonth, 'manual', transaction, '手入力の支払い予定（仮）', manualBillAmountOf(transaction), 0);
       continue;
     }
     // カードの利用（支出）と、カードからのチャージ（振替元がカード）だけが請求の対象
@@ -482,7 +482,7 @@ function cardSummary(account) {
     const range = periodRange(periodOf(today));
     let used = 0;
     for (const transaction of allTransactions) {
-      if (transaction.account === account.id && transaction.type === 'expense' && transaction.date >= range.start && transaction.date < range.end) {
+      if (transaction.account === account.id && transaction.type === 'expense' && !transaction.manualBill && transaction.date >= range.start && transaction.date < range.end) {
         used = used + transaction.amount;
       }
     }
@@ -639,13 +639,134 @@ function recordBillPayment(account, bill) {
    カードの残高（未払い＝負債）にも足され、引き落としを記録すると
    ふつうの請求と同じように消えます。
    同じ月にもう一度入れると、金額が上書きされます（0円か空欄で削除）。
+
+   【仮の支出】
+   入れた金額は、そのカードの「支出」としても数えます（入力した日の支出）。
+   明細のCSVが届くまで1か月ほどかかるので、その間も支出・予算に出すためです。
+   CSVを取り込んだら、カード画面で明細の合計と比べて、仮の支出を消します（相殺）。
+   消さないと、仮と明細の両方が入って二重になります。
    =========================================================== */
+
+/** 仮の支出につける中項目の名前（「その他」の中。01-categories.js の subs にも入れてある） */
+const MANUAL_BILL_SUB = 'カード引き落とし（仮）';
+
+/**
+ * 手入力した支払い予定の金額（プラスの数）を返す。
+ * 古い保存データは「残高修正」（マイナスの金額）の形なので、どちらの形でも読めるようにする。
+ */
+function manualBillAmountOf(transaction) {
+  return transaction.type === 'adjust' ? -transaction.amount : transaction.amount;
+}
+
+/**
+ * 古い形（残高修正）で保存された手入力を、支出の形に直す。直したら true を返す。
+ * 日付・請求月・id はそのまま。2回呼んでも2回目は何もしない。
+ */
+function upgradeManualBill(transaction) {
+  if (!transaction.manualBill || transaction.type !== 'adjust') {
+    return false;
+  }
+  transaction.type = 'expense';
+  transaction.amount = -transaction.amount;
+  transaction.category = 'other';
+  transaction.sub = MANUAL_BILL_SUB;
+  return true;
+}
+
+/** 読み込んだ全データの古い手入力を直す。直した月のリストを返す（保存し直すため） */
+function upgradeAllManualBills() {
+  const changedMonths = [];
+  for (const month of Object.keys(appState.monthly)) {
+    let isChanged = false;
+    for (const transaction of appState.monthly[month]) {
+      if (upgradeManualBill(transaction)) {
+        isChanged = true;
+      }
+    }
+    if (isChanged) {
+      changedMonths.push(month);
+    }
+  }
+  return changedMonths;
+}
 
 /** そのカードの、手入力した支払い予定の一覧（月の順） */
 function manualBillsOf(account) {
   const list = allTransactions.filter((item) => item.manualBill && item.account === account.id);
   list.sort((a, b) => (a.billMonth < b.billMonth ? -1 : 1));
   return list;
+}
+
+/**
+ * 手入力1件分の記録（仮の支出）を作る。
+ *   existing … 同じ月にすでに入れていた記録（あれば、id と日付を引き継いで上書きする）
+ *   dateText … 新しく作るときの日付（ふつうは今日＝入力した日）
+ */
+function manualBillRecord(account, month, amount, existing, dateText) {
+  return {
+    id: existing ? existing.id : makeId(),
+    date: existing ? existing.date : dateText,
+    type: 'expense',
+    amount: amount,
+    account: account.id,
+    category: 'other',
+    sub: MANUAL_BILL_SUB,
+    description: '支払い予定（仮）' + formatMonthText(month),
+    memo: '月ごとの合計金額だけを入力。CSVを取り込んだら、カード画面で仮を消す（相殺）',
+    include: true,
+    createdAt: existing ? existing.createdAt : Date.now(),
+    manualBill: true,
+    billMonth: month,
+  };
+}
+
+/**
+ * 仮の入力と、取り込んだ明細を比べる（相殺してよいかの確認用）。
+ *   entry   … 手入力の記録
+ *   records … 比べる元の入出金（省略するとそのカードの全部）
+ * 返すもの: { manualAmount: 仮の金額, detailAmount: 明細の合計, detailCount: 明細の件数, difference: 仮 − 明細, hasDetail }
+ * 明細の合計は、同じ請求月に入っている手入力以外のもの（手数料つきの分割なども含む）。
+ */
+function manualBillCheck(account, entry, records) {
+  const bill = buildCardBills(account, records).find((item) => item.month === entry.billMonth);
+  const manualAmount = manualBillAmountOf(entry);
+  let detailAmount = 0;
+  let detailCount = 0;
+  if (bill) {
+    detailAmount = bill.total - bill.parts.manual;
+    for (const detail of bill.details) {
+      if (!(detail.transaction && detail.transaction.manualBill)) {
+        detailCount = detailCount + 1;
+      }
+    }
+  }
+  return {
+    manualAmount: manualAmount,
+    detailAmount: detailAmount,
+    detailCount: detailCount,
+    difference: manualAmount - detailAmount,
+    hasDetail: detailCount > 0,
+  };
+}
+
+/**
+ * 取り込んだ明細（records）のうち、仮の入力と比べられるようになったカードの一覧を返す。
+ * 取り込みのあとに「カード画面で仮を消してください」と知らせるために使う。
+ */
+function cardsToOffset(records) {
+  const found = [];
+  const checkedIds = new Set();
+  for (const record of records) {
+    const account = accountById[record.account];
+    if (!account || account.kind !== 'card' || checkedIds.has(account.id)) {
+      continue;
+    }
+    checkedIds.add(account.id);
+    if (manualBillsOf(account).some((entry) => manualBillCheck(account, entry).hasDetail)) {
+      found.push(account);
+    }
+  }
+  return found;
 }
 
 /** 手入力の金額を保存する。amount が 0 なら削除。エラーのときは文を返す */
@@ -658,19 +779,7 @@ function saveManualBill(account, month, amount) {
     }
     return '金額を入れてください。';
   }
-  const transaction = {
-    id: existing ? existing.id : makeId(),
-    date: existing ? existing.date : todayText(),
-    type: 'adjust',
-    amount: -amount,                 // カードの残高はマイナスが「借りている」
-    account: account.id,
-    description: '支払い予定（手入力）' + formatMonthText(month),
-    memo: '月ごとの合計金額だけを入力',
-    include: true,
-    createdAt: existing ? existing.createdAt : Date.now(),
-    manualBill: true,
-    billMonth: month,
-  };
+  const transaction = manualBillRecord(account, month, amount, existing, todayText());
   putTransaction(transaction, existing ? existing.date : null);
   return '';
 }

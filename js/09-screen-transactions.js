@@ -196,7 +196,8 @@ function transactionRowHtml(transaction, options) {
     tags += '<span class="tag">計算対象外</span>';
   }
   const account = accountById[transaction.account];
-  if (account && account.kind === 'card' && transaction.type === 'expense') {
+  // 月の支払い金額の手入力（仮の支出）には、支払い方法の札を付けない（名前と中項目に「仮」と入っている）
+  if (!transaction.manualBill && account && account.kind === 'card' && transaction.type === 'expense') {
     const methodLabel = paymentMethodLabel(transaction);
     if (methodLabel) {
       tags += '<span class="tag">' + escapeHtml(methodLabel) + '</span>';

@@ -389,7 +389,9 @@ const ACTIONS = {
   },
   'record-bill': (button) => recordBillFromButton(button.dataset.id, button.dataset.month),
   'save-manual-bill': (button) => saveManualBillFromForm(button.dataset.id),
-  'delete-manual-bill': (button) => deleteManualBillById(button.dataset.id),
+  'delete-manual-bill': (button) => askDeleteManualBill(button.dataset.id),
+  'delete-manual-bill-yes': (button) => deleteManualBillById(button.dataset.id),
+  'delete-manual-bill-no': () => askDeleteManualBill(''),
 
   // --- 取り込み・書き出し ---
   'open-import': () => openImportDialog(),

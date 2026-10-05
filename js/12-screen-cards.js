@@ -64,6 +64,9 @@ const CardsScreen = {
 // 「支払い予定をまとめて入力」の欄を開いたままにするカード（口座id → true）
 const openManualPanels = {};
 
+// 「仮を消す」の確認を出している手入力の記録の id（出していなければ ''）
+let manualOffsetConfirmId = '';
+
 
 /** カード1枚分のパネル */
 function cardPanelHtml(account) {
@@ -278,15 +281,47 @@ function manualBillFormHtml(account, settings) {
   html += '<p class="form-error" data-manual-error="' + escapeHtml(account.id) + '" role="alert"></p>';
 
   if (entries.length > 0) {
+    html += '<p class="hint">ここで入れた金額は「仮の支出」として、入力した日の支出にも数えています。明細のCSVを取り込んだら、明細と比べて仮を消してください（消さないと二重になります）。</p>';
     html += '<ul class="plain-list">';
     for (const entry of entries) {
-      html += '<li><button type="button" class="grow row-edit" data-action="edit-transaction" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の金額を直す"><span>' + formatMonthText(entry.billMonth) + '</span>' +
-        '<strong class="num">' + formatYen(-entry.amount) + '</strong></button>' +
-        '<button type="button" class="icon-btn" data-action="delete-manual-bill" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の手入力を削除">' + iconSvg('close') + '</button></li>';
+      html += '<li class="manual-entry"><button type="button" class="grow row-edit" data-action="edit-transaction" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の金額を直す"><span>' + formatMonthText(entry.billMonth) + '払い（仮）</span>' +
+        '<strong class="num">' + formatYen(manualBillAmountOf(entry)) + '</strong></button>' +
+        '<button type="button" class="icon-btn" data-action="delete-manual-bill" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の仮を消す">' + iconSvg('close') + '</button>' +
+        manualCheckHtml(account, entry) + '</li>';
     }
     html += '</ul>';
   }
   html += '</details>';
+  return html;
+}
+
+/**
+ * 手入力1件の下に出す、明細との比べ方と「仮を消す」の確認。
+ * 明細がまだ無いときは、取り込んだら比べられることだけを知らせる。
+ */
+function manualCheckHtml(account, entry) {
+  const check = manualBillCheck(account, entry); // 06-credit-card-billing.js
+  let html = '<div class="manual-check">';
+  if (check.hasDetail) {
+    let differenceText = '仮と明細はぴったり一致しています';
+    if (check.difference > 0) {
+      differenceText = '仮のほうが ' + formatYen(check.difference) + ' 多い（手数料や、まだ届いていない明細かもしれません）';
+    } else if (check.difference < 0) {
+      differenceText = '明細のほうが ' + formatYen(-check.difference) + ' 多い';
+    }
+    html += '<p class="hint">取り込んだ明細 <strong class="num">' + formatYen(check.detailAmount) + '</strong>（' + check.detailCount + '件）。' + escapeHtml(differenceText) + '。</p>';
+  } else {
+    html += '<p class="hint">この月の明細はまだ取り込まれていません。CSVを取り込むと、ここで比べられます。</p>';
+  }
+  if (manualOffsetConfirmId === entry.id) {
+    const keepText = check.hasDetail ? '取り込んだ明細は残ります。' : '明細がまだ無いので、この月の支出と引き落とし予定がその分へります。';
+    html += '<div class="confirm-box"><p>仮の ' + formatYen(check.manualAmount) + ' を消します。' + keepText + '</p>' +
+      '<div class="row-gap"><button type="button" class="btn danger" data-action="delete-manual-bill-yes" data-id="' + escapeHtml(entry.id) + '">仮を消す</button>' +
+      '<button type="button" class="btn ghost" data-action="delete-manual-bill-no">やめる</button></div></div>';
+  } else if (check.hasDetail) {
+    html += '<div class="row-gap"><button type="button" class="btn small" data-action="delete-manual-bill" data-id="' + escapeHtml(entry.id) + '">仮を消して明細にする（相殺）</button></div>';
+  }
+  html += '</div>';
   return html;
 }
 
@@ -312,11 +347,18 @@ function saveManualBillFromForm(accountId) {
   showToast(formatMonthText(month) + 'の支払い予定を ' + formatYen(amount) + ' にしました');
 }
 
-/** 手入力した1件を消す */
+/** 「仮を消す」の確認を出す（id が '' なら確認を閉じる） */
+function askDeleteManualBill(id) {
+  manualOffsetConfirmId = id;
+  renderApp();
+}
+
+/** 手入力した1件（仮の支出）を消す。確認で「仮を消す」が押されたあとに呼ぶ */
 function deleteManualBillById(id) {
+  manualOffsetConfirmId = '';
   const entry = findTransaction(id);
   if (entry) {
     deleteTransaction(entry);
-    showToast('削除しました');
+    showToast('仮の支出を消しました');
   }
 }

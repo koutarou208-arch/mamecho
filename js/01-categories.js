@@ -40,7 +40,7 @@ const EXPENSE_CATEGORIES = [
   { id: 'housing',   name: '住宅',         mark: '住', tone: 'fixed', subs: ['家賃・地代', '住宅ローン', '管理費・積立金'], fixed: true },
   { id: 'insurance', name: '保険',         mark: '保', tone: 'fixed', subs: ['生命保険', '医療保険', 'その他保険'], fixed: true },
   { id: 'tax',       name: '税・社会保障', mark: '税', tone: 'fixed', subs: ['所得税・住民税', '年金保険料', '健康保険', 'その他税'], fixed: true },
-  { id: 'other',     name: 'その他',       mark: '他', subs: ['未分類', '雑費', 'カード手数料', '仕送り', '使途不明金'] },
+  { id: 'other',     name: 'その他',       mark: '他', subs: ['未分類', '雑費', 'カード手数料', 'カード引き落とし（仮）', '仕送り', '使途不明金'] },
   // 株式などの売買で出た損。収支には入るが、生活費ではないので予算の対象にはしない（investment: true）
   { id: 'tradeLoss', name: '投資の損失',   mark: '損', subs: ['株式の売却損', '投資信託の売却損', '先物・FX', 'その他の損失'], investment: true },
 ];
