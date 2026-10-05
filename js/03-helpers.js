@@ -226,6 +226,15 @@ function formatDigitsWithCommas(text, caret) {
   return { text: formatted, caret: newCaret };
 }
 
+/**
+ * データを消す前の確認: 「削除」（ひらがなの「さくじょ」でもよい）と入力されているか。
+ * 指が当たっただけでは消えないように、消すボタンはこれが true のときだけ押せるようにする。
+ */
+function isDeleteWordTyped(text) {
+  const word = String(text || '').normalize('NFKC').trim();
+  return word === '削除' || word === 'さくじょ';
+}
+
 /** 端末で「視差効果を減らす（動きを減らす）」が選ばれているか。true ならアニメーションをしない */
 function prefersReducedMotion() {
   if (typeof window === 'undefined' || !window.matchMedia) {
@@ -432,6 +441,7 @@ const ICON_PATHS = {
   card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
   settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  face: '<path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2"/><path d="M9 9v1.5M15 9v1.5M12 9v4h-1M9.5 15.5c1.4 1.1 3.6 1.1 5 0"/>',
   calc: '<rect x="5" y="2.5" width="14" height="19" rx="2.5"/><path d="M8.5 6.5h7"/><path d="M9 11h.01M12 11h.01M15 11h.01M9 14.5h.01M12 14.5h.01M15 14.5h.01M9 18h.01M12 18h.01M15 18h.01"/>',
   'chevron-left': '<path d="m15 6-6 6 6 6"/>',
   'chevron-right': '<path d="m9 6 6 6-6 6"/>',

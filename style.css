@@ -989,6 +989,18 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 /* 暗号化ロックの設定 */
 .lock-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 10px; align-items: end; margin-top: 12px; }
 
+/* ロック画面: Face ID を大きく、パスフレーズはその下、削除（忘れたとき）はいちばん下に離して置く */
+.lock-faceid { display: grid; gap: 8px; }
+.lock-faceid-button { min-height: 56px; font-size: 17px; }
+.lock-faceid-button .icon { width: 24px; height: 24px; }
+.lock-faceid .hint:empty { display: none; }
+.lock-or { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 12px; color: var(--muted); }
+.lock-or::before, .lock-or::after { content: ""; flex: 1; height: 1px; background: var(--rule); }
+.lock-passphrase-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
+.lock-passphrase-row .btn { min-height: 42px; }
+.lock-forget { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--rule); }
+details.lock-forget > summary { color: var(--muted); font-weight: 500; } /* 目立たせない（details.more の緑より強く指定） */
+
 /* ホームの「はじめに」 */
 .welcome-steps { display: grid; gap: 10px; margin: 0; padding-left: 1.4em; }
 .welcome-steps li { padding-left: 4px; }

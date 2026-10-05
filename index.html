@@ -421,30 +421,41 @@
       <h2 id="lockDialogTitle">ロックされています</h2>
     </header>
     <div class="sheet-body">
-      <p>パスフレーズを入れると、家計簿が開きます。</p>
-      <label class="field">
-        <span>パスフレーズ</span>
-        <input type="password" id="lockPassphrase" autocomplete="current-password">
-      </label>
+      <!-- Face ID（この端末に登録してあるときだけ出る）。ロック画面が出ると、自動で Face ID が始まる -->
+      <div class="lock-faceid" id="lockFaceIdArea" hidden>
+        <button type="button" class="btn primary lock-faceid-button" data-action="unlock-biometric" id="biometricUnlockButton" data-icon="face">Face ID で開く</button>
+        <p class="hint" id="lockFaceIdStatus" aria-live="polite"></p>
+        <p class="lock-or">または、パスフレーズで</p>
+      </div>
+      <p id="lockPassphraseLead">パスフレーズを入れると、家計簿が開きます。</p>
+      <div class="lock-passphrase-row">
+        <label class="field">
+          <span>パスフレーズ</span>
+          <input type="password" id="lockPassphrase" autocomplete="current-password">
+        </label>
+        <button type="submit" class="btn primary" id="lockSubmit">開く</button>
+      </div>
       <p class="form-error" id="lockError" role="alert"></p>
-      <details class="more">
+
+      <!-- 忘れたとき（データの削除）は、開くボタンから離して、いちばん下に置く。
+           消すボタンは「削除」と入力するまで押せない（指が当たっただけで消えないように） -->
+      <details class="more lock-forget" id="lockForgetDetails">
         <summary>パスフレーズを忘れたとき</summary>
         <p class="hint" style="margin-top:8px">パスフレーズを忘れると、暗号化されたデータはだれにも元に戻せません。バックアップのファイルがあれば、新しく始めたあとに「設定」から戻せます。</p>
-        <p style="margin-top:8px"><button type="button" class="btn small ghost danger-text" data-action="forget-lock">暗号化されたデータを削除して新しく始める</button></p>
+        <p style="margin-top:8px"><button type="button" class="btn small ghost danger-text" data-action="forget-lock">データを削除して新しく始める…</button></p>
         <div class="confirm-box" id="lockForgetConfirm" hidden>
           <p>暗号化されたデータをすべて削除します。元に戻せません。</p>
+          <label class="field">
+            <span>まちがえて消さないように、「削除」と入力してください</span>
+            <input id="lockForgetWord" autocomplete="off" autocapitalize="off" spellcheck="false">
+          </label>
           <div class="row-gap">
-            <button type="button" class="btn danger" data-action="forget-lock-yes">削除して新しく始める</button>
+            <button type="button" class="btn danger" data-action="forget-lock-yes" id="lockForgetYes" disabled>削除して新しく始める</button>
             <button type="button" class="btn ghost" data-action="forget-lock-no">やめる</button>
           </div>
         </div>
       </details>
     </div>
-    <footer class="sheet-foot">
-      <button type="button" class="btn" data-action="unlock-biometric" id="biometricUnlockButton" hidden>Face ID で開く</button>
-      <span class="spacer"></span>
-      <button type="submit" class="btn primary" id="lockSubmit">開く</button>
-    </footer>
   </form>
 </dialog>
 

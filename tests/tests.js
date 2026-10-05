@@ -535,6 +535,24 @@ check('Face ID: ロックを作り直したあと（鍵がちがう）は使わ�
 check('Face ID: 記録がなければ使わない', !biometricRecordUsable(null, 'LOCKSALT'));
 check('Face ID: 記録が欠けていれば使わない', !biometricRecordUsable({ ...bioRecord, data: '' }, 'LOCKSALT'));
 
+section('開くときに自動で Face ID を出す');
+const autoBase = { usable: true, locked: true, dialogOpen: true, visible: true, alreadyTried: false, inProgress: false };
+check('自動 Face ID: ロック画面が出ていて、この端末に登録ずみなら出す', shouldAutoStartBiometric(autoBase));
+check('自動 Face ID: 登録していなければ出さない', !shouldAutoStartBiometric({ ...autoBase, usable: false }));
+check('自動 Face ID: アプリが裏にあるときは出さない', !shouldAutoStartBiometric({ ...autoBase, visible: false }));
+check('自動 Face ID: 1回やめたら、勝手にくり返さない', !shouldAutoStartBiometric({ ...autoBase, alreadyTried: true }));
+check('自動 Face ID: 確認している途中は、重ねて出さない', !shouldAutoStartBiometric({ ...autoBase, inProgress: true }));
+check('自動 Face ID: ロックしていないときは出さない', !shouldAutoStartBiometric({ ...autoBase, locked: false }));
+check('自動 Face ID: ロック画面が閉じていれば出さない', !shouldAutoStartBiometric({ ...autoBase, dialogOpen: false }));
+
+section('まちがえて消さないための確認（「削除」と入力）');
+check('削除の確認: 「削除」と入れたら押せる', isDeleteWordTyped('削除'));
+check('削除の確認: ひらがなの「さくじょ」でも押せる', isDeleteWordTyped('さくじょ'));
+check('削除の確認: 前後の空白は気にしない', isDeleteWordTyped(' 削除　'));
+check('削除の確認: 空では押せない', !isDeleteWordTyped(''));
+check('削除の確認: 途中まででは押せない', !isDeleteWordTyped('さくじ'));
+check('削除の確認: ちがう言葉では押せない', !isDeleteWordTyped('はい'));
+
 section('手取り計算（2026年度の料率・税）');
 // 期待する値は、協会けんぽの保険料額表（東京・令和8年度）と国税庁の資料をもとに手で計算したもの
 same('手取り: 額面の読み取り（ふつうの数字）', takeHomeAmountOf('300,000'), 300000);

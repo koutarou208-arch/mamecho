@@ -52,6 +52,14 @@ const SettingsScreen = {
 
     setupRecurringForm();
 
+    // 「すべてのデータを削除」: 「削除」と入力したときだけ、消すボタンを押せるようにする
+    const wipeWord = findOne('#wipeConfirmWord');
+    if (wipeWord) {
+      wipeWord.addEventListener('input', () => {
+        findOne('#wipeYesButton').disabled = !isDeleteWordTyped(wipeWord.value);
+      });
+    }
+
     // 直しているルールがあれば、その内容を入力欄に入れておく
     const editingRule = appState.profile.rules[editingRuleIndex];
     if (editingRuleIndex !== null && editingRule) {
@@ -396,7 +404,8 @@ function settingsStorageCardHtml() {
     html += '<div class="row-gap" style="margin-top:12px"><button type="button" class="btn ghost danger-text" data-action="wipe">すべてのデータを削除</button></div>';
   } else {
     html += '<div class="confirm-box" style="margin-top:12px"><p>口座・入出金・予算・ルールをすべて削除します。元に戻せません。先にバックアップを保存することをおすすめします。</p>' +
-      '<div class="row-gap"><button type="button" class="btn danger" data-action="wipe-yes">すべて削除する</button>' +
+      '<label class="field"><span>まちがえて消さないように、「削除」と入力してください</span><input id="wipeConfirmWord" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
+      '<div class="row-gap"><button type="button" class="btn danger" data-action="wipe-yes" id="wipeYesButton" disabled>すべて削除する</button>' +
       '<button type="button" class="btn ghost" data-action="wipe-no">やめる</button></div></div>';
   }
   html += '</section>';

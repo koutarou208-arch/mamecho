@@ -416,6 +416,11 @@ const ACTIONS = {
     renderApp();
   },
   'wipe-yes': () => {
+    // 「削除」と入力したときだけ消す（ボタンも、入力するまで押せない）
+    const word = findOne('#wipeConfirmWord');
+    if (!word || !isDeleteWordTyped(word.value)) {
+      return;
+    }
     isWipeConfirmOpen = false;
     replaceAllData(createEmptyProfile(), {});
     showToast('すべてのデータを削除しました');
@@ -453,11 +458,15 @@ const ACTIONS = {
   },
   'forget-lock': () => {
     findOne('#lockForgetConfirm').hidden = false;
+    findOne('#lockForgetWord').focus();
   },
-  'forget-lock-no': () => {
-    findOne('#lockForgetConfirm').hidden = true;
+  'forget-lock-no': () => resetForgetConfirm(),
+  'forget-lock-yes': () => {
+    // 「削除」と入力したときだけ消す（ボタンも、入力するまで押せない）
+    if (isDeleteWordTyped(findOne('#lockForgetWord').value)) {
+      wipeEncryptedData();
+    }
   },
-  'forget-lock-yes': () => wipeEncryptedData(),
 
   // --- AI ---
   'run-review': () => runMonthlyReview(),
