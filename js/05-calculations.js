@@ -663,7 +663,8 @@ function findAutoCategory(description, type) {
   }
 
   // 1. 自分で覚えさせたルールを先に見る
-  for (const rule of appState.profile.rules) {
+  const myRules = appState.profile ? appState.profile.rules : []; // 家計簿を読み込む前は、はじめからのルールだけ
+  for (const rule of myRules) {
     if (rule.type === type && text.includes(rule.keyword)) {
       return { category: rule.category, sub: rule.sub };
     }

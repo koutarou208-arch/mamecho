@@ -6,8 +6,11 @@
 
    取り込みの流れ:
      1. ファイルを選ぶ（文字コード Shift_JIS / UTF-8 は自動で判定）
-     2. どの列が「日付」「内容」「金額」かを選ぶ（見出しから自動で推測）
-     3. プレビューを確かめて取り込む（同じ記録がすでにあれば飛ばす）
+     2. CSV を表にする（よそで作られた部品 PapaParse を使う。js/vendor）
+     3. どの列が「日付」「内容」「金額」かを選ぶ（見出しから自動で推測）
+     4. 件数と合計額を明細と見くらべてから取り込む
+        ・金額は文字から整数で読む（小数で計算しない）。小数や読めない行は理由つきで飛ばす
+        ・同じ口座・同じ日付・同じ金額・同じ摘要の明細が、すでにある数だけ飛ばす（重複）
 
    マネーフォワード ME の「入出金履歴」CSV は、
    大項目・中項目・保有金融機関まで自動で読み取ります。
@@ -300,51 +303,18 @@ function decodeCsvBytes(buffer) {
   }
 }
 
-/** CSVの文字を、行と列の表（2重の配列）にする */
+/**
+ * CSVの文字を、行と列の表（2重の配列）にする。
+ * 読み取りは PapaParse（js/vendor）。区切り（カンマ・タブ）の判定、"" で囲んだ中のカンマや改行も任せる。
+ * 中身が空の行は飛ばす。
+ */
 function parseCsv(text) {
-  // 区切りがカンマかタブかを、1行目で判定する
-  const firstLine = text.split(/\r?\n/)[0] || '';
-  const delimiter = (firstLine.split('\t').length > firstLine.split(',').length) ? '\t' : ',';
-
+  const parsed = Papa.parse(String(text), { skipEmptyLines: 'greedy' });
   const rows = [];
-  let row = [];
-  let cell = '';
-  let insideQuotes = false;
-  for (let index = 0; index < text.length; index++) {
-    const char = text[index];
-    if (insideQuotes) {
-      if (char === '"') {
-        if (text[index + 1] === '"') {
-          cell = cell + '"'; // "" は " 1文字の意味
-          index = index + 1;
-        } else {
-          insideQuotes = false;
-        }
-      } else {
-        cell = cell + char;
-      }
-    } else if (char === '"') {
-      insideQuotes = true;
-    } else if (char === delimiter) {
-      row.push(cell);
-      cell = '';
-    } else if (char === '\n' || char === '\r') {
-      if (char === '\r' && text[index + 1] === '\n') {
-        index = index + 1;
-      }
-      row.push(cell);
-      if (row.some((value) => value.trim() !== '')) {
-        rows.push(row);
-      }
-      row = [];
-      cell = '';
-    } else {
-      cell = cell + char;
+  for (const row of parsed.data) {
+    if (row.some((value) => String(value).trim() !== '')) {
+      rows.push(row.map((value) => String(value)));
     }
-  }
-  row.push(cell);
-  if (row.some((value) => value.trim() !== '')) {
-    rows.push(row);
   }
   return rows;
 }
@@ -378,23 +348,41 @@ function makeDateText(year, month, day) {
 }
 
 /**
- * いろいろな書き方の金額を数字にする。読めなければ null。
- * 「△1,200」「▲1,200」「(1,200)」「-1,200」はマイナスとして読む（会計の書き方）
+ * 金額のマスが読めないときの理由を返す（読めるなら空文字）。
+ * 小数で計算しないように、金額は「数字の並び」として調べる。
  */
-function parseAmountCell(value) {
+function amountCellProblem(value) {
   const text = String(value || '').normalize('NFKC').trim();
   if (text === '') {
+    return '金額が空';
+  }
+  // マイナスの印・カッコ・円記号・カンマ・空白をとった残り
+  const body = text.replace(/[△▲\-−+()¥\\円,\s]/g, '');
+  if (/^\d+\.\d+$/.test(body)) {
+    return /^\d+\.0+$/.test(body) ? '' : '小数の金額'; // 1200.00 は 1200 として読む
+  }
+  if (!/^\d+$/.test(body)) {
+    return '金額が読めない';
+  }
+  if (body.length > 15) {
+    return '金額が大きすぎる';
+  }
+  return '';
+}
+
+/**
+ * いろいろな書き方の金額を、整数（円）にする。読めなければ null。
+ * 「△1,200」「▲1,200」「(1,200)」「-1,200」「1,200-」はマイナスとして読む（会計の書き方）。
+ * 小数の金額（1234.5 など）は、勝手に丸めずに null にする（理由は amountCellProblem）。
+ */
+function parseAmountCell(value) {
+  if (amountCellProblem(value) !== '') {
     return null;
   }
-  let isNegative = /^[△▲\-−]/.test(text) || /^\(.*\)$/.test(text);
-  const digits = text.replace(/[^\d.]/g, '');
-  if (digits === '') {
-    return null;
-  }
-  const number = Math.round(parseFloat(digits));
-  if (!Number.isFinite(number)) {
-    return null;
-  }
+  const text = String(value).normalize('NFKC').trim();
+  const isNegative = /^[△▲\-−]/.test(text) || /^\(.*\)$/.test(text) || /[\-−]$/.test(text);
+  const digits = text.replace(/[^\d.]/g, '').split('.')[0]; // 「.00」のうしろは捨てる
+  const number = Number(digits); // 数字だけの文字なので、ぴったり整数になる
   return isNegative ? -number : number;
 }
 
@@ -406,7 +394,8 @@ function parseAmountCell(value) {
 const importState = {
   step: 'choose',     // 'choose'（ファイル選び）か 'map'（列の対応づけ）
   fileName: '',
-  rows: [],           // CSVの表
+  lineOffset: 0,      // 見出しの前にあって読み飛ばした説明の行の数
+  rows: [],           // CSVの表（説明の行を除いたもの）
   hasHeader: true,    // 1行目が見出しか
   amountMode: 'signed', // 'signed'（金額が1列）か 'split'（出金と入金が別の列）
   invert: false,      // プラスの金額を支出として扱うか（カード明細）
@@ -470,7 +459,8 @@ function renderImport() {
     accountOptions += '<option value="' + escapeHtml(account.id) + '"' + (account.id === importState.accountId ? ' selected' : '') + '>' + escapeHtml(account.name) + '</option>';
   }
 
-  let html = '<p class="small muted">' + escapeHtml(importState.fileName) + ' · ' + importState.rows.length + '行</p>';
+  let html = '<p class="small muted">' + escapeHtml(importState.fileName) + ' · ' + importState.rows.length + '行' +
+    (importState.lineOffset > 0 ? ' · 先頭の説明の' + importState.lineOffset + '行は読み飛ばしました' : '') + '</p>';
   html += '<label class="check"><input type="checkbox" id="importHasHeader"' + (importState.hasHeader ? ' checked' : '') + '><span>1行目は見出し（列の名前）</span></label>';
   html += '<div class="field-row">' +
     '<label class="field"><span>日付の列</span><select data-import-column="date">' + columnOptions(columns.date, false) + '</select></label>' +
@@ -498,10 +488,28 @@ function renderImport() {
 
   // --- プレビュー ---
   const result = convertImportRows();
-  html += '<p class="small"><strong>' + result.ready.length + '件</strong>を取り込めます' +
-    (result.duplicates ? ' · すでにある記録 ' + result.duplicates + '件は飛ばします' : '') +
-    (result.transfers ? ' · 振替 ' + result.transfers + '件は飛ばします' : '') +
-    (result.invalid ? ' · 読めない行 ' + result.invalid + '件' : '') + '</p>';
+  const totals = result.totals;
+  // このファイルの明細の合計（明細書・ご利用明細の合計と、1円まで見くらべられるように）
+  html += '<div class="import-summary">' +
+    '<p class="small muted">このファイルの明細（明細書の合計と見くらべてください）</p>' +
+    '<div class="import-totals">' +
+    '<div><span class="small muted">支出 ' + totals.expenseCount + '件</span><strong class="num">' + formatYen(totals.expense) + '</strong></div>' +
+    '<div><span class="small muted">収入・返金 ' + totals.incomeCount + '件</span><strong class="num">' + formatYen(totals.income) + '</strong></div>' +
+    '<div><span class="small muted">差し引き（支出−収入）</span><strong class="num">' + formatYen(totals.expense - totals.income) + '</strong></div>' +
+    '</div>' +
+    importTotalCheckHtml(statementTotalCheck(result)) +
+    '<p class="small"><strong>' + result.ready.length + '件</strong>を取り込みます' +
+    (result.duplicates ? ' · すでにある ' + result.duplicates + '件は飛ばします（重複）' : '') +
+    (result.transfers ? ' · 振替 ' + result.transfers + '件は飛ばします' : '') + '</p>';
+  if (result.skipped.length > 0) {
+    html += '<details class="more"><summary>読めずに飛ばした行 ' + result.skipped.length + '件（合計に入っていません）</summary><ul class="plain-list">';
+    for (const skipped of result.skipped.slice(0, 50)) {
+      html += '<li><span class="grow"><span>' + skipped.line + '行目: ' + escapeHtml(skipped.reason) + '</span>' +
+        '<span class="small muted">' + escapeHtml(skipped.text) + '</span></span></li>';
+    }
+    html += '</ul></details>';
+  }
+  html += '</div>';
   html += '<div class="preview-table"><table class="data"><thead><tr><th>日付</th><th>内容</th><th>金額</th><th>分類</th></tr></thead><tbody>';
   for (const transaction of result.ready.slice(0, 8)) {
     const category = CATEGORY_BY_ID[transaction.category];
@@ -546,18 +554,93 @@ function renderImport() {
   });
 }
 
+/**
+ * 見出しの行を探す。銀行やカードの CSV には、見出しの前に「○○カード ご利用明細」
+ * 「お名前」などの説明の行があることが多いので、それを読み飛ばすため。
+ * 返す値: { index: 見出しの行の番号（なければ -1）, dataStart: 明細が始まる行の番号 }
+ */
+function findHeaderRow(rows) {
+  const limit = Math.min(rows.length, 15);
+  // 「日付」と「金額（出金・入金）」の名前が両方ある行を、見出しとみなす
+  for (let index = 0; index < limit; index++) {
+    const cells = rows[index].map((cell) => String(cell).trim());
+    const hasDateName = cells.some((cell) => HEADER_PATTERNS.date.test(cell) && parseDateCell(cell) === null);
+    const hasMoneyName = cells.some((cell) => HEADER_PATTERNS.amount.test(cell) || HEADER_PATTERNS.out.test(cell) || HEADER_PATTERNS.in.test(cell));
+    if (hasDateName && hasMoneyName) {
+      return { index: index, dataStart: index + 1 };
+    }
+  }
+  // 見出しがなければ、日付が入っている最初の行から明細とみなす
+  for (let index = 0; index < limit; index++) {
+    if (rows[index].some((cell) => parseDateCell(cell) !== null)) {
+      return { index: -1, dataStart: index };
+    }
+  }
+  return { index: -1, dataStart: 0 };
+}
+
+/**
+ * カードの明細か（金額のプラスが「支払い」の意味）を見分ける。
+ * 見出しにカードらしい名前（利用金額・利用店・支払区分など）があればカード。
+ * なければ、金額のほとんど（9割より多く）がプラスならカード（返品の分だけマイナスになる）。
+ */
+function looksLikeCardStatement(headerRow, amounts) {
+  const cardWords = /利用金額|ご利用金額|利用店|ご利用先|加盟店|支払区分|お支払い区分|ご利用者/;
+  if (headerRow.some((cell) => cardWords.test(String(cell)))) {
+    return true;
+  }
+  if (amounts.length === 0) {
+    return false;
+  }
+  const positives = amounts.filter((value) => value > 0).length;
+  return positives / amounts.length > 0.9;
+}
+
+/**
+ * ファイルの「合計」の行と、計算した合計を見くらべる（明細と1円まで合っているかの確認）。
+ * 返す値: { status: 'match'（一致）/ 'mismatch'（ちがう）/ 'none'（合計の行がない）, fileTotal, computed, difference }
+ */
+function statementTotalCheck(result) {
+  if (result.totalRows.length === 0) {
+    return { status: 'none', fileTotal: 0, computed: 0, difference: 0 };
+  }
+  const fileTotal = result.totalRows[result.totalRows.length - 1].amount;
+  const net = Math.abs(result.totals.expense - result.totals.income);
+  // 合計の行は「差し引き」のことも、「支出だけ（返品を引かない）」のこともある
+  if (fileTotal === net || fileTotal === result.totals.expense || fileTotal === result.totals.income) {
+    return { status: 'match', fileTotal: fileTotal, computed: fileTotal, difference: 0 };
+  }
+  return { status: 'mismatch', fileTotal: fileTotal, computed: net, difference: Math.abs(fileTotal - net) };
+}
+
+/** 合計の行との照合の結果を、1行で出す */
+function importTotalCheckHtml(check) {
+  if (check.status === 'match') {
+    return '<p>' + statusChipHtml('good', 'ファイルの合計行（' + formatYen(check.fileTotal) + '）と1円まで一致') + '</p>';
+  }
+  if (check.status === 'mismatch') {
+    return '<p>' + statusChipHtml('over', '合計行は ' + formatYen(check.fileTotal) + '、計算は ' + formatYen(check.computed) + '（差 ' + formatYen(check.difference) + '）') + '</p>' +
+      '<p class="hint">飛ばした行と、「プラスの金額を支出として読む」の設定を確かめてください。</p>';
+  }
+  return '';
+}
+
 /** ファイルを読んで、列の意味を推測する */
 function readImportFile(file) {
   const reader = new FileReader();
   reader.onload = () => {
     const text = decodeCsvBytes(reader.result);
-    const rows = parseCsv(text);
-    if (rows.length === 0) {
+    const allRows = parseCsv(text);
+    if (allRows.length === 0) {
       showToast('このファイルには読める行がありませんでした');
       return;
     }
+    // 見出しの前の説明の行は読み飛ばす（何行飛ばしたかは、行番号のずれとして覚えておく）
+    const header = findHeaderRow(allRows);
+    const firstRow = header.index >= 0 ? header.index : header.dataStart;
     importState.fileName = file.name;
-    importState.rows = rows;
+    importState.lineOffset = firstRow;
+    importState.rows = allRows.slice(firstRow);
     guessImportColumns();
     importState.step = 'map';
     renderImport();
@@ -630,12 +713,11 @@ function guessImportColumns() {
     columns.amount = Math.min(first.length - 1, 1);
   }
 
-  // 金額がほとんどプラスなら、カードの明細（プラス＝支払い）と考える
+  // カードの明細（プラス＝支払い）なら、プラスを支出として読む
   importState.invert = false;
   if (importState.amountMode === 'signed') {
     const amounts = sample.map((row) => parseAmountCell(row[columns.amount])).filter((value) => value !== null);
-    const positives = amounts.filter((value) => value > 0).length;
-    importState.invert = amounts.length > 0 && positives / amounts.length > 0.9;
+    importState.invert = looksLikeCardStatement(importState.hasHeader ? first : [], amounts);
   }
 
   // 取り込み先の口座の初期値:
@@ -682,48 +764,101 @@ function categoryFromNames(mainName, subName, type) {
   return null;
 }
 
-/** 同じ記録かどうかを見分けるための「指紋」 */
+/**
+ * 同じ明細かどうかを見分けるための「指紋」: 日付・金額（収入か支出か）・口座・摘要。
+ * 摘要は全角半角・大文字小文字・前後の空白のちがいをそろえて比べる。
+ */
 function duplicateKey(transaction) {
   return [transaction.date, transaction.type, transaction.amount, transaction.account, normalizeText(transaction.description)].join('|');
 }
 
-/**
- * 今の設定でCSVの行を入出金に変換する。
- * 返す形: { ready: [取り込む入出金], duplicates, transfers, invalid }
- */
+/** 今の画面の設定で、CSVの行を入出金に変換する（中身は convertCsvRows） */
 function convertImportRows() {
-  const columns = importState.columns;
-  const dataRows = importState.hasHeader ? importState.rows.slice(1) : importState.rows;
-  const existing = new Set(allTransactions.map(duplicateKey));
-  const result = { ready: [], duplicates: 0, transfers: 0, invalid: 0 };
+  return convertCsvRows(importState.rows, importState, allTransactions, appState.profile.accounts);
+}
+
+/**
+ * CSVの表を入出金に変換する（画面にさわらないので、テストできる）。
+ *   rows     … parseCsv の結果
+ *   settings … { hasHeader, columns: { date, description, amount, out, in, ... の列番号 }, amountMode, invert, accountId }
+ *   existingTransactions … すでにある入出金（重複を見つけるため）
+ *   accounts … 口座の一覧（口座名の列があるときに使う。なくてよい）
+ * 返す形: {
+ *   totalRows  … ファイルにある「合計」の行 [{ line, amount }]（照合用）
+ *   ready      … 取り込む入出金
+ *   duplicates … すでにあるので飛ばした件数
+ *   transfers  … 振替の印があって飛ばした件数
+ *   skipped    … 読めずに飛ばした行 [{ line: 何行目, reason: 理由, text: 行の中身 }]
+ *   totals     … このファイルの明細の合計（重複もふくむ。明細と見くらべる用）
+ *                { expense, expenseCount, income, incomeCount }（すべて整数の円）
+ * }
+ */
+function convertCsvRows(rows, settings, existingTransactions, accounts) {
+  const columns = settings.columns;
+  const accountList = accounts || [];
+  const result = { ready: [], duplicates: 0, transfers: 0, skipped: [], totalRows: [], totals: { expense: 0, expenseCount: 0, income: 0, incomeCount: 0 } };
+  const lineOffset = settings.lineOffset || 0; // 読み飛ばした説明の行の数
+
+  // すでにある明細の「指紋」ごとの件数（同じ明細が2件あれば2）
+  const existingCounts = new Map();
+  for (const transaction of existingTransactions) {
+    const key = duplicateKey(transaction);
+    existingCounts.set(key, (existingCounts.get(key) || 0) + 1);
+  }
 
   function cellOf(row, key) {
     const index = columns[key];
     return index >= 0 ? String(row[index] === undefined ? '' : row[index]).trim() : '';
   }
+  function skip(line, reason, row) {
+    result.skipped.push({ line: line, reason: reason, text: row.join(' / ').slice(0, 80) });
+  }
 
-  for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex++) {
-    const row = dataRows[rowIndex];
+  for (let rowIndex = settings.hasHeader ? 1 : 0; rowIndex < rows.length; rowIndex++) {
+    const row = rows[rowIndex];
+    const line = lineOffset + rowIndex + 1; // ファイルの何行目か（空の行は数えない）
     const date = parseDateCell(cellOf(row, 'date'));
     if (!date) {
-      result.invalid = result.invalid + 1;
+      // 「ご利用合計」などの合計の行は、明細に入れずに、照合のために金額を覚えておく
+      const rowText = normalizeText(row.join(' '));
+      const totalText = settings.amountMode === 'split' ? (cellOf(row, 'out') || cellOf(row, 'in')) : cellOf(row, 'amount');
+      const totalAmount = parseAmountCell(totalText);
+      if (rowText.includes('合計') && totalAmount !== null) {
+        result.totalRows.push({ line: line, amount: Math.abs(totalAmount) });
+        skip(line, '合計の行（明細には入れない）', row);
+        continue;
+      }
+      skip(line, '日付が読めない', row);
       continue;
     }
 
     // 金額（プラス＝収入、マイナス＝支出 にそろえる）
-    let signed = null;
-    if (importState.amountMode === 'split') {
-      const outAmount = parseAmountCell(cellOf(row, 'out')) || 0;
-      const inAmount = parseAmountCell(cellOf(row, 'in')) || 0;
-      signed = inAmount - Math.abs(outAmount);
+    let signed = 0;
+    if (settings.amountMode === 'split') {
+      const outText = cellOf(row, 'out');
+      const inText = cellOf(row, 'in');
+      const problem = (outText === '' ? '' : amountCellProblem(outText)) || (inText === '' ? '' : amountCellProblem(inText));
+      if (problem) {
+        skip(line, problem, row);
+        continue;
+      }
+      const outAmount = outText === '' ? 0 : Math.abs(parseAmountCell(outText));
+      const inAmount = inText === '' ? 0 : parseAmountCell(inText);
+      signed = inAmount - outAmount;
     } else {
-      signed = parseAmountCell(cellOf(row, 'amount'));
-      if (signed !== null && importState.invert) {
+      const amountText = cellOf(row, 'amount');
+      const problem = amountCellProblem(amountText);
+      if (problem) {
+        skip(line, problem, row);
+        continue;
+      }
+      signed = parseAmountCell(amountText);
+      if (settings.invert) {
         signed = -signed;
       }
     }
-    if (signed === null || signed === 0) {
-      result.invalid = result.invalid + 1;
+    if (signed === 0) {
+      skip(line, '金額が0円', row);
       continue;
     }
     if (cellOf(row, 'transfer') === '1') {
@@ -732,13 +867,14 @@ function convertImportRows() {
     }
 
     const type = signed < 0 ? 'expense' : 'income';
+    const amount = Math.abs(signed);
     const description = cellOf(row, 'description');
 
     // 口座: 口座名の列があって名前が合えばその口座、なければ選んだ口座
-    let accountId = importState.accountId;
+    let accountId = settings.accountId;
     const accountText = normalizeText(cellOf(row, 'account'));
     if (accountText) {
-      for (const account of appState.profile.accounts) {
+      for (const account of accountList) {
         const name = normalizeText(account.name);
         if (name === accountText || accountText.includes(name) || name.includes(accountText)) {
           accountId = account.id;
@@ -759,7 +895,7 @@ function convertImportRows() {
       id: makeId(),
       date: date,
       type: type,
-      amount: Math.abs(signed),
+      amount: amount,
       account: accountId,
       category: found.category,
       sub: found.sub,
@@ -768,7 +904,21 @@ function convertImportRows() {
       include: cellOf(row, 'include') !== '0',
       createdAt: Date.now() + rowIndex,
     };
-    if (existing.has(duplicateKey(transaction))) {
+
+    // 明細の合計（重複もふくめて、このファイルにある分すべて）
+    if (type === 'expense') {
+      result.totals.expense = result.totals.expense + amount;
+      result.totals.expenseCount = result.totals.expenseCount + 1;
+    } else {
+      result.totals.income = result.totals.income + amount;
+      result.totals.incomeCount = result.totals.incomeCount + 1;
+    }
+
+    // 重複: 同じ指紋の明細が、すでにある数だけ飛ばす
+    const key = duplicateKey(transaction);
+    const remaining = existingCounts.get(key) || 0;
+    if (remaining > 0) {
+      existingCounts.set(key, remaining - 1);
       result.duplicates = result.duplicates + 1;
       continue;
     }

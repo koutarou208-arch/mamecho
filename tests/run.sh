@@ -19,6 +19,10 @@ BUNDLE="$(mktemp -t mamecho-test.XXXXXX)"
 # 1行目: node で動かすときの print の代役（jsc には最初から print がある）
 {
   echo "if (typeof print === 'undefined') { var print = function (text) { console.log(text); }; }"
+  # CSV を読む部品（PapaParse）。node では module.exports に入るので、Papa という名前でも使えるようにする
+  cat js/vendor/papaparse.min.js
+  echo ""
+  echo "if (typeof Papa === 'undefined' && typeof module !== 'undefined') { var Papa = module.exports; }"
   cat js/01-categories.js js/02-card-companies.js js/03-helpers.js js/04-state-and-storage.js \
       js/05-calculations.js js/06-credit-card-billing.js js/07-charts.js js/17-csv-and-backup.js \
       js/19-sample-data.js js/21-encryption-lock.js js/22-take-home-pay.js

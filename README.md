@@ -40,6 +40,7 @@ mamecho/
 ├─ tests/ …………………… 自動テスト（sh tests/run.sh で実行）
 └─ tools/UPDATE_RULES.md … 毎月のデータ見直しの手順書
    js/
+   ├─ vendor/ ……………… 【よその部品】PapaParse（CSVを読む）。中身は書きかえない（vendor/README.md）
    ├─ 01-categories.js ………… 【辞書】カテゴリ・口座の種類・自動分類ルール
    ├─ 02-card-companies.js …… 【辞書】カード会社の締め日・支払日・手数料
    ├─ 03-helpers.js …………… 【道具】金額や日付を扱う小さな関数

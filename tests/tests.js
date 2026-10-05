@@ -284,6 +284,90 @@ same('CSV: 行の数', csv.length, 3);
 same('CSV: カンマをふくむ文字', csv[1][1], '店,名');
 same('CSV: " のエスケープ', csv[2][1], 'A"B');
 
+section('CSV取り込み（PapaParse・文字コード・整数の金額・重複・合計）');
+// 文字コード: Shift_JIS のバイト（「日付,内容,金額 / 2026/9/1,スーパー,1200」）を Python で作ったもの
+const sjisBytes = new Uint8Array([0x93, 0xfa, 0x95, 0x74, 0x2c, 0x93, 0xe0, 0x97, 0x65, 0x2c, 0x8b, 0xe0, 0x8a, 0x7a, 0x0a, 0x32, 0x30, 0x32, 0x36, 0x2f, 0x39, 0x2f, 0x31, 0x2c, 0x83, 0x58, 0x81, 0x5b, 0x83, 0x70, 0x81, 0x5b, 0x2c, 0x31, 0x32, 0x30, 0x30, 0x0a]);
+same('文字コード: Shift_JIS を読める', decodeCsvBytes(sjisBytes.buffer), '日付,内容,金額\n2026/9/1,スーパー,1200\n');
+const utf8Bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...Array.from(new TextEncoder().encode('日付,内容\n'))]);
+same('文字コード: UTF-8（BOMつき）を読める・BOMは消す', decodeCsvBytes(utf8Bytes.buffer), '日付,内容\n');
+same('PapaParse: タブ区切りも読める', parseCsv('日付\t内容\t金額\n2026/9/1\tA\t100\n')[1][2], '100');
+same('PapaParse: 引用符の中の改行も1つのマスとして読む', parseCsv('日付,内容,金額\n2026/9/1,"1行目\n2行目",100\n')[1][1], '1行目\n2行目');
+same('PapaParse: 空の行は飛ばす', parseCsv('日付,金額\n\n2026/9/1,100\n\n').length, 2);
+
+// 金額は文字から整数で読む（小数で計算しない）
+same('整数の金額: 1,234', parseAmountCell('1,234'), 1234);
+same('整数の金額: ¥ 12,000', parseAmountCell('¥ 12,000'), 12000);
+same('整数の金額: 1200.00 は 1200', parseAmountCell('1200.00'), 1200);
+same('整数の金額: 小数（1234.5）は取り込まない', parseAmountCell('1234.5'), null);
+same('整数の金額: 小数の理由を出す', amountCellProblem('1234.5'), '小数の金額');
+same('整数の金額: 後ろのマイナス（1,200-）', parseAmountCell('1,200-'), -1200);
+same('整数の金額: 空は null', parseAmountCell(''), null);
+same('整数の金額: 大きすぎる数は読まない', parseAmountCell('12345678901234567'), null);
+
+// 取り込みの変換（カードの明細: プラス＝支払い）
+const importCardRows = parseCsv([
+  '利用日,利用店名,利用金額',
+  '2026/9/1,スーパーまるみや,1200',
+  '2026/9/3,カフェ,480',
+  '2026/9/3,カフェ,480',        // 同じ日・同じ店・同じ金額が2回（本当に2回買った）
+  '2026/9/10,返品,-300',         // 返品（マイナス）
+  'ご利用合計,,1860',             // 合計の行（日付がない）
+  '2026/9/12,外貨の店,10.5',      // 小数
+].join('\n'));
+function importCardRowsTotal() {
+  const result = convertCsvRows(importCardRows, importCardSettings, []);
+  return result.totalRows.length > 0 ? result.totalRows[0].amount : null;
+}
+const importCardSettings = { hasHeader: true, columns: { date: 0, description: 1, amount: 2, out: -1, in: -1, category: -1, sub: -1, memo: -1, account: -1, transfer: -1, include: -1 }, amountMode: 'signed', invert: true, accountId: 'card-a' };
+const firstImport = convertCsvRows(importCardRows, importCardSettings, []);
+same('取り込み: 4件を取り込む', firstImport.ready.length, 4);
+same('取り込み: 同じ明細が2回あれば、2件とも入れる', firstImport.ready.filter((t) => t.description === 'カフェ').length, 2);
+same('取り込み: 支出の合計（1円まで）', firstImport.totals.expense, 2160);
+same('取り込み: 収入（返品）の合計', firstImport.totals.income, 300);
+same('取り込み: 差し引き＝明細の合計', firstImport.totals.expense - firstImport.totals.income, 1860);
+check('取り込み: 金額は整数', firstImport.ready.every((t) => Number.isInteger(t.amount)));
+same('取り込み: 飛ばした行は2つ', firstImport.skipped.length, 2);
+same('取り込み: 合計の行は明細に入れずに飛ばす', firstImport.skipped[0].reason, '合計の行（明細には入れない）');
+same('取り込み: 小数の行は理由つきで飛ばす', firstImport.skipped[1].reason, '小数の金額');
+same('取り込み: 飛ばした行が何行目か', firstImport.skipped[0].line, 6);
+
+// 重複: 日付＋金額＋摘要（＋口座）。件数で比べる
+const secondImport = convertCsvRows(importCardRows, importCardSettings, firstImport.ready);
+same('重複: 同じ明細を取り込み直しても増えない', secondImport.ready.length, 0);
+same('重複: 4件とも「すでにある」', secondImport.duplicates, 4);
+same('重複: ファイルの合計はそのまま出す（照合用）', secondImport.totals.expense, 2160);
+const overlapRows = parseCsv('利用日,利用店名,利用金額\n2026/9/3,カフェ,480\n2026/9/3,カフェ,480\n2026/9/3,カフェ,480\n2026/9/20,本屋,1500\n');
+const overlapImport = convertCsvRows(overlapRows, importCardSettings, firstImport.ready);
+same('重複: 同じ明細が1回ふえていたら、ふえた1件だけ入れる', overlapImport.ready.length, 2);
+same('重複: 前と重なる2件は飛ばす', overlapImport.duplicates, 2);
+const otherCard = convertCsvRows(importCardRows, { ...importCardSettings, accountId: 'card-b' }, firstImport.ready);
+same('重複: ちがうカード（口座）なら別の明細', otherCard.ready.length, 4);
+const spacedRows = parseCsv('利用日,利用店名,利用金額\n2026/9/1,ｽｰﾊﾟｰまるみや ,"1,200"\n');
+same('重複: 全角半角・前後の空白のちがいは同じとみなす', convertCsvRows(spacedRows, { ...importCardSettings, columns: { ...importCardSettings.columns } }, firstImport.ready).duplicates, 1);
+
+// 見出しの前に説明の行があるCSV（カード会社の明細に多い）
+const titledRows = parseCsv('テストカード ご利用明細\nお名前 テスト様\n利用日,利用店名,利用金額\n2026/9/1,A,100\n');
+same('見出しさがし: 説明の行のあとの見出しを見つける', findHeaderRow(titledRows).index, 2);
+same('見出しさがし: 明細はその次の行から', findHeaderRow(titledRows).dataStart, 3);
+const noHeaderRows = parseCsv('明細\n2026/9/1,A,100\n2026/9/2,B,200\n');
+same('見出しさがし: 見出しがなければ、日付のある行から', findHeaderRow(noHeaderRows).dataStart, 1);
+same('見出しさがし: 見出しがないときは -1', findHeaderRow(noHeaderRows).index, -1);
+const offsetImport = convertCsvRows(parseCsv('利用日,利用店名,利用金額\n2026/9/1,A,100\n合計,,100\n'), { ...importCardSettings, lineOffset: 2 }, []);
+same('取り込み: 読み飛ばした説明の行の分も数えて、何行目かを出す', offsetImport.skipped[0].line, 5);
+
+// カードの明細かどうか（プラス＝支払い）。返品があっても、見出しがカードらしければカード
+same('カードの見分け: 見出しが「利用金額」ならカード（返品があっても）', looksLikeCardStatement(['利用日', '利用店名', '利用金額'], [1200, 480, 480, -300, 12345]), true);
+same('カードの見分け: ほとんどプラスならカード', looksLikeCardStatement(['日付', '内容', '金額'], [100, 200, 300, 400]), true);
+same('カードの見分け: マイナスが多ければ銀行', looksLikeCardStatement(['日付', '内容', '金額'], [-100, -200, 3000, -400]), false);
+
+// 明細の合計行と、計算した合計の照合
+same('合計行: 「ご利用合計」の行の金額を見つける', importCardRowsTotal(), 1860);
+const totalCheck = convertCsvRows(importCardRows, importCardSettings, []);
+same('合計行: 計算した合計と一致すれば match', statementTotalCheck(totalCheck).status, 'match');
+const wrongTotal = convertCsvRows(parseCsv('利用日,利用店名,利用金額\n2026/9/1,A,100\n合計,,150\n'), importCardSettings, []);
+same('合計行: 一致しなければ差額を出す', statementTotalCheck(wrongTotal).difference, 50);
+same('合計行: 合計の行がなければ none', statementTotalCheck(convertCsvRows(parseCsv('利用日,利用店名,利用金額\n2026/9/1,A,100\n'), importCardSettings, [])).status, 'none');
+
 same('日付: 月の足し算（年またぎ）', addMonths('2026-11', 3), '2027-02');
 same('日付: 月末の補正', dayInMonthText('2027-02', 31), '2027-02-28');
 same('日付: 和暦', toWarekiText('2026-09-14'), 'R8.09.14');
