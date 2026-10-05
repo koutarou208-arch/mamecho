@@ -193,6 +193,47 @@ function calculateAmount(text) {
   }
 }
 
+/**
+ * 金額の入力欄に、打ちながら3けたごとのカンマを入れる（「300000」→「300,000」）。
+ *   text  … 入力欄の今の文字
+ *   caret … カーソルの位置（何文字目のうしろにあるか）
+ * 返す値: { text: カンマを入れた文字, caret: カンマを入れたあとのカーソルの位置 }
+ * 数字とカンマだけのときに整える（「30万」や「1200+380」のような書き方はそのまま返す）。
+ */
+function formatDigitsWithCommas(text, caret) {
+  const normalized = String(text).normalize('NFKC'); // 全角の数字を半角にする（1文字は1文字のまま）
+  if (!/^[\d,]*$/.test(normalized)) {
+    return { text: text, caret: caret };
+  }
+  // カーソルより左にある数字の数を数えておく
+  let digitsBeforeCaret = 0;
+  for (let index = 0; index < caret && index < normalized.length; index++) {
+    if (normalized[index] !== ',') {
+      digitsBeforeCaret = digitsBeforeCaret + 1;
+    }
+  }
+  const digits = normalized.replace(/,/g, '');
+  const formatted = digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  // 同じ数の数字のうしろに、カーソルを戻す
+  let newCaret = 0;
+  let digitsSeen = 0;
+  while (newCaret < formatted.length && digitsSeen < digitsBeforeCaret) {
+    if (formatted[newCaret] !== ',') {
+      digitsSeen = digitsSeen + 1;
+    }
+    newCaret = newCaret + 1;
+  }
+  return { text: formatted, caret: newCaret };
+}
+
+/** 端末で「視差効果を減らす（動きを減らす）」が選ばれているか。true ならアニメーションをしない */
+function prefersReducedMotion() {
+  if (typeof window === 'undefined' || !window.matchMedia) {
+    return false;
+  }
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 /** 数の並びの「真ん中の値」（中央値）。極端な値に引っぱられにくい平均 */
 function median(numbers) {
   if (numbers.length === 0) {

@@ -9,6 +9,7 @@
      drawIncomeExpenseChart  … 月ごとの収入と支出（上下の棒グラフ）
      assetCompositionHtml    … 資産の内訳（横一本の積み上げバー）
      rankingBarsHtml         … カテゴリ別の支出（横棒ランキング）
+     createMoneyColumn3d     … 手取り計算の「立体の積み上げ柱」（指で回せる）
 
    グラフにマウスをのせる（スマホならタップする）と、吹き出しで数字が出ます。
    =========================================================== */
@@ -651,4 +652,372 @@ function drawDailySafetyChart(container, rows) {
   }
   svg += '</svg>';
   container.innerHTML = svg;
+}
+
+
+/* ===========================================================
+   立体の積み上げ柱（手取り計算）
+   -----------------------------------------------------------
+   額面を「手取り・社会保険料・税金」に分けて、1本の立体の柱で見せます。
+   3Dのライブラリは使わず、柱の角の点を計算して、SVG の四角形で描いています。
+     ・左右になぞると回る（離すと少しすべってから止まる）。キーボードなら ← →
+     ・額面が変わると、段の高さがなめらかに変わる
+     ・段（または横の説明）にさわると、その段だけを目立たせる
+   高さは「額面に対する割合」です。少し上から見下ろすだけで遠近法は使わないので、
+   どの向きから見ても、段の高さの割合はゆがみません。
+   =========================================================== */
+
+const COLUMN_TILT = 24 * Math.PI / 180;         // 見下ろす角度
+const COLUMN_START_ANGLE = -32 * Math.PI / 180; // はじめの向き
+
+/** 長さ1の向き（ベクトル）にする */
+function normalizeVector3d(x, y, z) {
+  const length = Math.hypot(x, y, z);
+  return { x: x / length, y: y / length, z: z / length };
+}
+
+// 光が来る向き（画面の左上・手前から）。面がこの向きに近いほど明るい
+const COLUMN_LIGHT = normalizeVector3d(-0.45, 0.75, 0.5);
+
+/**
+ * 立体の点 (x, y, z) を、画面の上の点にする（y が高さ）。
+ *   angle … 縦の軸のまわりに回す角度（ラジアン）
+ *   tilt  … 少し上から見下ろす角度（ラジアン）
+ * 返す値: { x: 横（右が+）, y: 縦（上が+）, depth: 奥行き（手前ほど大きい） }
+ */
+function project3d(x, y, z, angle, tilt) {
+  const turnedX = x * Math.cos(angle) + z * Math.sin(angle);
+  const turnedZ = -x * Math.sin(angle) + z * Math.cos(angle);
+  return {
+    x: turnedX,
+    y: y * Math.cos(tilt) - turnedZ * Math.sin(tilt),
+    depth: y * Math.sin(tilt) + turnedZ * Math.cos(tilt),
+  };
+}
+
+// 箱の面（底は見えないので使わない）。normal は面が向いている方向、corners は4つの角
+// 角は [横, 高さ（0なら下・1なら上）, 奥行き] で、横と奥行きは -1 か 1
+const BOX_SIDES = [
+  { side: 'front', normal: [0, 0, 1], corners: [[-1, 0, 1], [1, 0, 1], [1, 1, 1], [-1, 1, 1]] },
+  { side: 'right', normal: [1, 0, 0], corners: [[1, 0, 1], [1, 0, -1], [1, 1, -1], [1, 1, 1]] },
+  { side: 'back', normal: [0, 0, -1], corners: [[1, 0, -1], [-1, 0, -1], [-1, 1, -1], [1, 1, -1]] },
+  { side: 'left', normal: [-1, 0, 0], corners: [[-1, 0, -1], [-1, 0, 1], [-1, 1, 1], [-1, 1, -1]] },
+  { side: 'top', normal: [0, 1, 0], corners: [[-1, 1, 1], [1, 1, 1], [1, 1, -1], [-1, 1, -1]] },
+];
+
+/**
+ * 箱（柱の1段）の、こちらから見えている面だけを返す。
+ *   box = { halfWidth: 底の正方形の半分の幅, bottom: 下の高さ, top: 上の高さ }
+ * 返す値: [{ side: 'front' など, points: 画面の点4つ [{x, y}], light: 明るさ 0〜1 }]
+ */
+function boxFaces3d(box, angle, tilt) {
+  const faces = [];
+  for (const face of BOX_SIDES) {
+    // 面の向きを、見ている人から見た向きに直す。奥を向いている面は見えない
+    const normal = project3d(face.normal[0], face.normal[1], face.normal[2], angle, tilt);
+    if (normal.depth <= 0.001) {
+      continue;
+    }
+    const points = [];
+    for (const corner of face.corners) {
+      const height = corner[1] === 1 ? box.top : box.bottom;
+      const point = project3d(corner[0] * box.halfWidth, height, corner[2] * box.halfWidth, angle, tilt);
+      points.push({ x: point.x, y: point.y });
+    }
+    // 光の向きに近いほど明るい
+    const facing = normal.x * COLUMN_LIGHT.x + normal.y * COLUMN_LIGHT.y + normal.depth * COLUMN_LIGHT.z;
+    faces.push({ side: face.side, points: points, light: Math.max(0, Math.min(1, facing)) });
+  }
+  return faces;
+}
+
+/**
+ * 立体の積み上げ柱を作る。
+ *   container … 柱を入れる場所（div）
+ * 返す値: {
+ *   update(parts, animate) … 段の中身を変える。parts = [{ key, label, value, color }]（下の段から順に）
+ *   highlight(key)         … その段だけ目立たせる（null で元に戻す）
+ *   onHighlight            … 柱にさわって目立たせる段が変わったときに呼ぶ関数（使う側が入れる）
+ * }
+ */
+function createMoneyColumn3d(container) {
+  const viewWidth = 150;
+  const viewHeight = 214;
+  const halfWidth = 34;     // 柱の太さの半分
+  const columnHeight = 150; // 柱の高さ（額面ぜんぶ）
+  const gap = 2.5;          // 段と段のすき間（色の境目をはっきりさせる）
+  const centerX = viewWidth / 2;
+  const baseY = viewHeight - 34; // 柱の底の真ん中の、画面での位置
+  const reduceMotion = prefersReducedMotion(); // 03-helpers.js
+
+  // 今の状態
+  const state = {
+    parts: [],         // [{ key, label, color, share: 目標の割合, shown: 今見せている割合 }]
+    angle: COLUMN_START_ANGLE,
+    spin: 0,           // 回る速さ（ラジアン/秒）。0に近づいて止まる
+    highlighted: null, // 目立たせている段の key
+    drag: null,        // なぞっている最中の情報
+    running: false,    // 動きの計算をしているか
+    lastTime: 0,
+  };
+
+  // SVG を作る。段は3つまで。1段の見える面は3つまでなので、面ごとに「色」と「陰」の四角を用意しておく
+  let svgHtml = '<svg class="money3d-svg" viewBox="0 0 ' + viewWidth + ' ' + viewHeight + '" role="img" tabindex="0">' +
+    '<defs><radialGradient id="money3dShadow"><stop offset="0" stop-color="#000" stop-opacity="0.2"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient></defs>' +
+    '<ellipse cx="' + centerX + '" cy="' + (baseY + 6) + '" rx="66" ry="17" fill="url(#money3dShadow)"/>';
+  for (let partIndex = 0; partIndex < 3; partIndex++) {
+    svgHtml += '<g class="money3d-part" data-index="' + partIndex + '">';
+    for (let faceIndex = 0; faceIndex < 3; faceIndex++) {
+      svgHtml += '<polygon class="money3d-face"/><polygon class="money3d-shade"/>';
+    }
+    svgHtml += '</g>';
+  }
+  svgHtml += '</svg>';
+  container.innerHTML = svgHtml;
+  const svg = container.querySelector('svg');
+  const groups = svg.querySelectorAll('.money3d-part');
+
+  /** 今の状態で、柱を描く */
+  function draw() {
+    let visibleCount = 0;
+    for (const part of state.parts) {
+      if (part.shown > 0.002) {
+        visibleCount = visibleCount + 1;
+      }
+    }
+    const usableHeight = columnHeight - gap * Math.max(visibleCount - 1, 0);
+    let bottom = 0;
+    for (let partIndex = 0; partIndex < groups.length; partIndex++) {
+      const group = groups[partIndex];
+      const part = state.parts[partIndex];
+      if (!part || part.shown <= 0.002) {
+        group.style.display = 'none';
+        continue;
+      }
+      group.style.display = '';
+      const top = bottom + part.shown * usableHeight;
+      const faces = boxFaces3d({ halfWidth: halfWidth, bottom: bottom, top: top }, state.angle, COLUMN_TILT);
+      bottom = top + gap;
+
+      const polygons = group.querySelectorAll('polygon');
+      for (let faceIndex = 0; faceIndex < 3; faceIndex++) {
+        const facePolygon = polygons[faceIndex * 2];
+        const shadePolygon = polygons[faceIndex * 2 + 1];
+        const face = faces[faceIndex];
+        if (!face) {
+          facePolygon.style.display = 'none';
+          shadePolygon.style.display = 'none';
+          continue;
+        }
+        let pointsText = '';
+        for (const point of face.points) {
+          pointsText += (centerX + point.x).toFixed(1) + ',' + (baseY - point.y).toFixed(1) + ' ';
+        }
+        facePolygon.setAttribute('points', pointsText);
+        shadePolygon.setAttribute('points', pointsText);
+        facePolygon.style.display = '';
+        shadePolygon.style.display = '';
+        facePolygon.style.fill = part.color;
+        // 上の面は白を少し重ねて明るく、横の面は光から遠いほど黒を重ねて暗くする
+        if (face.side === 'top') {
+          shadePolygon.style.fill = '#fff';
+          shadePolygon.style.fillOpacity = '0.16';
+        } else {
+          shadePolygon.style.fill = '#000';
+          shadePolygon.style.fillOpacity = (0.06 + 0.4 * (1 - face.light)).toFixed(3);
+        }
+      }
+    }
+  }
+
+  /** 高さの変化や、回したあとのすべりが終わるまで、少しずつ動かす */
+  function step(now) {
+    if (!svg.isConnected) {
+      state.running = false; // 画面が切りかわったら止める
+      return;
+    }
+    const seconds = Math.min((now - state.lastTime) / 1000, 0.05);
+    state.lastTime = now;
+    let moving = false;
+    for (const part of state.parts) {
+      const difference = part.share - part.shown;
+      if (Math.abs(difference) > 0.0005) {
+        part.shown = part.shown + difference * (1 - Math.exp(-seconds / 0.13));
+        moving = true;
+      } else {
+        part.shown = part.share;
+      }
+    }
+    if (!state.drag && Math.abs(state.spin) > 0.03) {
+      state.angle = state.angle + state.spin * seconds;
+      state.spin = state.spin * Math.exp(-seconds / 0.45);
+      moving = true;
+    } else if (!state.drag) {
+      state.spin = 0;
+    }
+    draw();
+    if (moving) {
+      requestAnimationFrame(step);
+    } else {
+      state.running = false;
+    }
+  }
+
+  /** 動きの計算を始める（もう動いていれば何もしない） */
+  function startMoving() {
+    if (state.running) {
+      return;
+    }
+    state.running = true;
+    state.lastTime = performance.now();
+    requestAnimationFrame(step);
+  }
+
+  /** 目立たせる段を変える */
+  function setHighlight(key, tellOutside) {
+    state.highlighted = key;
+    for (let partIndex = 0; partIndex < groups.length; partIndex++) {
+      const part = state.parts[partIndex];
+      groups[partIndex].classList.toggle('is-dim', key !== null && Boolean(part) && part.key !== key);
+    }
+    if (tellOutside && column.onHighlight) {
+      column.onHighlight(key);
+    }
+  }
+
+  /** 画面のどの段にさわったか（段の外なら null） */
+  function partKeyOf(target) {
+    const group = target.closest ? target.closest('.money3d-part') : null;
+    if (!group) {
+      return null;
+    }
+    const part = state.parts[Number(group.dataset.index)];
+    return part ? part.key : null;
+  }
+
+  // なぞって回す（縦になぞったときは、ふつうに画面がスクロールする）
+  svg.addEventListener('pointerdown', (event) => {
+    state.drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastTime: performance.now(), moved: false, key: partKeyOf(event.target) };
+    state.spin = 0;
+    try {
+      svg.setPointerCapture(event.pointerId);
+    } catch (error) {
+      // つかめない環境では、そのまま
+    }
+  });
+  svg.addEventListener('pointermove', (event) => {
+    if (!state.drag) {
+      if (event.pointerType === 'mouse') {
+        const key = partKeyOf(event.target);
+        if (key !== state.highlighted) {
+          setHighlight(key, true);
+        }
+      }
+      return;
+    }
+    const now = performance.now();
+    const moveX = event.clientX - state.drag.lastX;
+    if (Math.abs(event.clientX - state.drag.startX) > 6 || Math.abs(event.clientY - state.drag.startY) > 6) {
+      state.drag.moved = true;
+    }
+    const turn = moveX * 0.012;
+    state.angle = state.angle + turn;
+    const elapsed = Math.max(now - state.drag.lastTime, 1) / 1000;
+    state.spin = Math.max(-12, Math.min(12, turn / elapsed));
+    state.drag.lastX = event.clientX;
+    state.drag.lastTime = now;
+    draw();
+  });
+  function endDrag(event, canceled) {
+    if (!state.drag) {
+      return;
+    }
+    const drag = state.drag;
+    state.drag = null;
+    if (!drag.moved && !canceled) {
+      // なぞらずに押しただけ: その段を目立たせる（もう一度押すと元に戻す）
+      setHighlight(drag.key === state.highlighted ? null : drag.key, true);
+      state.spin = 0;
+      return;
+    }
+    // 指を止めてから離したときや、動きを減らす設定のときは、すべらせない
+    if (canceled || reduceMotion || performance.now() - drag.lastTime > 80) {
+      state.spin = 0;
+    }
+    startMoving();
+  }
+  svg.addEventListener('pointerup', (event) => endDrag(event, false));
+  svg.addEventListener('pointercancel', (event) => endDrag(event, true));
+  svg.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'mouse' && !state.drag && state.highlighted !== null) {
+      setHighlight(null, true);
+    }
+  });
+  // キーボードの ← → で回す
+  svg.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
+    event.preventDefault();
+    const direction = event.key === 'ArrowLeft' ? -1 : 1;
+    if (reduceMotion) {
+      state.angle = state.angle + direction * 0.4;
+      draw();
+      return;
+    }
+    state.spin = direction * 4;
+    startMoving();
+  });
+
+  const column = {
+    onHighlight: null,
+
+    update(parts, animate) {
+      let total = 0;
+      for (const part of parts) {
+        total = total + Math.max(part.value, 0);
+      }
+      const isFirst = state.parts.length === 0;
+      const newParts = [];
+      for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+        const part = parts[partIndex];
+        const old = state.parts[partIndex];
+        newParts.push({
+          key: part.key,
+          label: part.label,
+          color: part.color,
+          share: total > 0 ? Math.max(part.value, 0) / total : 0,
+          shown: old && old.key === part.key ? old.shown : 0,
+        });
+      }
+      state.parts = newParts;
+
+      // 読み上げ用の説明
+      let description = '';
+      for (let partIndex = parts.length - 1; partIndex >= 0; partIndex--) {
+        description += parts[partIndex].label + formatYen(parts[partIndex].value) + '（' + Math.round(newParts[partIndex].share * 100) + '%）';
+        description += partIndex > 0 ? '、' : '。';
+      }
+      svg.setAttribute('aria-label', '額面の内訳の立体の柱: ' + description + '左右になぞるか、← → キーで回せます。');
+
+      if (!animate || reduceMotion) {
+        for (const part of state.parts) {
+          part.shown = part.share;
+        }
+        draw();
+        return;
+      }
+      if (isFirst) {
+        // はじめて出すときは、下から伸びながら少し回って止まる
+        state.angle = COLUMN_START_ANGLE - 0.9;
+        state.spin = 2.0;
+      }
+      startMoving();
+    },
+
+    highlight(key) {
+      setHighlight(key, false);
+    },
+  };
+  return column;
 }

@@ -465,8 +465,32 @@ function calculateTakeHomePay(input) {
 }
 
 
+/**
+ * 毎月の額面を「手取り・社会保険料・税金」の3つに分ける（立体の柱で下から積む順）。
+ * 色はグラフの色（色の見分けにくさにも配慮して確かめた組み合わせ）。
+ */
+function takeHomeParts(result) {
+  const monthly = result.monthly;
+  return [
+    { key: 'takeHome', label: '手取り', value: monthly.takeHome, color: 'var(--chart-3)' },
+    { key: 'insurance', label: '社会保険料', value: monthly.socialInsurance, color: 'var(--chart-1)' },
+    { key: 'tax', label: '税金', value: monthly.incomeTax + monthly.residentTax, color: 'var(--chart-2)' },
+  ];
+}
+
+/** 額面が1万円増えたら、毎月の手取りはいくら増えるか（input は calculateTakeHomePay と同じ形） */
+function marginalTakeHome(input) {
+  const now = calculateTakeHomePay(input);
+  const more = calculateTakeHomePay({ ...input, monthlyGross: Number(input.monthlyGross) + 10000 });
+  return more.monthly.takeHome - now.monthly.takeHome;
+}
+
+
 /* ===========================================================
    3. 画面
+   -----------------------------------------------------------
+   入力（額面・つまみ・条件）が変わるたびに、画面全体ではなく
+   数字と立体の柱だけを書きかえます（入力中の欄や、開いている所がそのまま残るように）。
    =========================================================== */
 
 // 入力欄の中身（アプリを開いている間だけ覚えておく。家計簿のデータには保存しない）
@@ -479,10 +503,19 @@ const takeHomeForm = {
   spouse: false,
   dependents: 0,
   conditionsOpen: false, // 「条件」を開いているか
+  detailsOpen: false,    // 「くわしい内訳」を開いているか
 };
 
 // いま画面に出している結果のもとになった入力（同じなら描き直さない）
 let takeHomeShownValues = '';
+// 結果を一度でも出したか（打っている途中で額面が小さいときは、前の結果をうすく残す）
+let takeHomeHasResult = false;
+// 立体の柱（07-charts.js の createMoneyColumn3d で作る）と、目立たせている段
+let takeHomeColumn = null;
+let takeHomeHighlighted = null;
+
+const TAKE_HOME_MIN_GROSS = 50000; // これより小さい額面は計算しない（「300000」を打つ途中の「3」「30」など）
+const TAKE_HOME_SLIDER = { min: 50000, max: 1000000, step: 5000 }; // つまみで動かせる額面の範囲
 
 const TAKE_HOME_AGE_GROUPS = [
   { id: 'under40', label: '40歳未満' },
@@ -496,24 +529,82 @@ const TakeHomeScreen = {
   usesPeriod: false,
 
   html() {
-    takeHomeShownValues = takeHomeFormValues();
     return '<div class="grid">' + takeHomeFormHtml() +
-      '<div class="span-7 takehome-results" id="takeHomeResult">' + takeHomeResultHtml() + '</div></div>';
+      '<div class="span-7 takehome-results" id="takeHomeResult">' + takeHomeResultSkeletonHtml() + '</div></div>';
   },
 
   afterRender() {
-    // 入力が変わるたびに、結果だけを描き直す（入力中の欄はそのまま）
+    // 入力が変わるたびに、結果だけを書きかえる
     const form = findOne('#takeHomeForm');
     form.addEventListener('input', readTakeHomeForm);
     form.addEventListener('change', readTakeHomeForm);
+
+    // 金額の欄: 打ちながらカンマを入れる（日本語入力の変換中はさわらない）
+    for (const selector of ['#takeHomeGross', '#takeHomeBonus', '#takeHomeCommute']) {
+      const input = findOne(selector);
+      input.addEventListener('input', (event) => {
+        if (!event.isComposing) {
+          putCommasInto(input);
+        }
+      });
+      input.addEventListener('compositionend', () => {
+        putCommasInto(input);
+        readTakeHomeForm();
+      });
+    }
+
+    // つまみを動かしたら、額面の欄に入れる（そのあと上の input の受け取りで計算される）
+    const slider = findOne('#takeHomeSlider');
+    slider.addEventListener('input', () => {
+      findOne('#takeHomeGross').value = formatNumber(Number(slider.value));
+    });
+
+    // 開いている所を覚えておく（描き直しても閉じないように）
     const conditions = findOne('#takeHomeConditions');
     conditions.addEventListener('toggle', () => {
       takeHomeForm.conditionsOpen = conditions.open;
     });
+    const details = findOne('#takeHomeDetails');
+    details.addEventListener('toggle', () => {
+      takeHomeForm.detailsOpen = details.open;
+    });
+
+    // 立体の柱と、となりの説明（どちらにさわっても、同じ段が目立つ）
+    takeHomeColumn = createMoneyColumn3d(findOne('#takeHomeFigure'));
+    takeHomeColumn.onHighlight = (key) => {
+      takeHomeHighlighted = key;
+      markTakeHomeLegend();
+    };
+    const legend = findOne('#takeHomeLegend');
+    legend.addEventListener('pointerover', (event) => {
+      const item = event.target.closest('li');
+      if (event.pointerType === 'mouse' && item) {
+        highlightTakeHomePart(item.dataset.key);
+      }
+    });
+    legend.addEventListener('pointerleave', (event) => {
+      if (event.pointerType === 'mouse') {
+        highlightTakeHomePart(null);
+      }
+    });
+    // 指でタップしたとき（マウスはのせるだけで目立つので除く）。スクロールのための指の動きでは反応しない
+    let legendPointerType = 'mouse';
+    legend.addEventListener('pointerdown', (event) => {
+      legendPointerType = event.pointerType;
+    });
+    legend.addEventListener('click', (event) => {
+      const item = event.target.closest('li');
+      if (legendPointerType !== 'mouse' && item) {
+        highlightTakeHomePart(item.dataset.key === takeHomeHighlighted ? null : item.dataset.key);
+      }
+    });
+
+    takeHomeHighlighted = null;
+    updateTakeHomeResult(true);
   },
 };
 
-/** 入力欄のかたまり */
+/** 入力欄のかたまり（額面・つまみ・条件） */
 function takeHomeFormHtml() {
   let ageOptions = '';
   for (const group of TAKE_HOME_AGE_GROUPS) {
@@ -530,7 +621,10 @@ function takeHomeFormHtml() {
 
   return '<section class="card span-5 takehome-form" id="takeHomeForm">' +
     '<label class="field"><span>額面（1か月の総支給額）</span>' +
-    '<div class="amount-input"><span aria-hidden="true">¥</span><input id="takeHomeGross" inputmode="numeric" autocomplete="off" placeholder="300000" value="' + escapeHtml(takeHomeForm.monthlyGross) + '"></div></label>' +
+    '<div class="amount-input"><span aria-hidden="true">¥</span><input id="takeHomeGross" inputmode="numeric" autocomplete="off" placeholder="300,000" value="' + escapeHtml(takeHomeForm.monthlyGross) + '"></div></label>' +
+    '<input type="range" id="takeHomeSlider" class="takehome-slider" min="' + TAKE_HOME_SLIDER.min + '" max="' + TAKE_HOME_SLIDER.max + '" step="' + TAKE_HOME_SLIDER.step + '" value="300000" aria-label="額面をつまみで変える">' +
+    '<div class="takehome-slider-scale" aria-hidden="true"><span>5万</span><span>100万</span></div>' +
+    '<p class="takehome-input-note" id="takeHomeInputNote" aria-live="polite"></p>' +
     '<details class="more" id="takeHomeConditions"' + (takeHomeForm.conditionsOpen ? ' open' : '') + '>' +
     '<summary>条件: <span id="takeHomeConditionText">' + takeHomeConditionHtml() + '</span></summary>' +
     '<div class="takehome-fields">' +
@@ -546,13 +640,59 @@ function takeHomeFormHtml() {
     '</section>';
 }
 
+/** 結果を入れる場所（中の数字は updateTakeHomeResult が入れる） */
+function takeHomeResultSkeletonHtml() {
+  return '<section class="card" id="takeHomeEmpty"><p class="empty-note">額面を入れるか、つまみを動かすと、手取りがすぐに出ます。</p></section>' +
+    '<div class="takehome-cards" id="takeHomeCards" hidden>' +
+    // 毎月
+    '<section class="card takehome-monthly">' +
+    '<div class="card-head"><h2>毎月の手取り</h2><span class="sub" id="takeHomeMonthlyRate"></span></div>' +
+    '<div class="hero-number"><span class="yen">¥</span><span id="takeHomeMonthlyValue">0</span></div>' +
+    '<p class="takehome-marginal" id="takeHomeMarginal"></p>' +
+    '<div class="money3d">' +
+    '<div class="money3d-figure chart" id="takeHomeFigure"></div>' +
+    '<ul class="money3d-legend" id="takeHomeLegend"></ul>' +
+    '</div>' +
+    '<details class="more" id="takeHomeDetails"' + (takeHomeForm.detailsOpen ? ' open' : '') + '><summary>くわしい内訳</summary><div id="takeHomeMonthlyRows"></div></details>' +
+    '</section>' +
+    // ボーナス
+    '<section class="card" id="takeHomeBonusCard" hidden>' +
+    '<div class="card-head"><h2>ボーナスの手取り</h2><span class="sub" id="takeHomeBonusRate"></span></div>' +
+    '<div class="hero-number"><span class="yen">¥</span><span id="takeHomeBonusValue">0</span></div>' +
+    '<div id="takeHomeBonusRows"></div>' +
+    '</section>' +
+    // 1年
+    '<section class="card">' +
+    '<div class="card-head"><h2>1年の手取り</h2><span class="sub" id="takeHomeYearRate"></span></div>' +
+    '<div class="hero-number"><span class="yen">¥</span><span id="takeHomeYearValue">0</span></div>' +
+    '<div id="takeHomeYearRows"></div>' +
+    '</section>' +
+    takeHomeNotesHtml() +
+    '</div>';
+}
+
+/** 金額の欄に、3けたごとのカンマを入れる（カーソルの位置はそのまま） */
+function putCommasInto(input) {
+  const caret = input.selectionStart === null ? input.value.length : input.selectionStart;
+  const formatted = formatDigitsWithCommas(input.value, caret);
+  if (formatted.text === input.value) {
+    return;
+  }
+  input.value = formatted.text;
+  try {
+    input.setSelectionRange(formatted.caret, formatted.caret);
+  } catch (error) {
+    // カーソルを動かせない欄では何もしない
+  }
+}
+
 /** 入力欄の中身を1つの文字にまとめる（変わったかどうかを比べるため） */
 function takeHomeFormValues() {
   return JSON.stringify([takeHomeForm.monthlyGross, takeHomeForm.bonusYearly, takeHomeForm.commute,
     takeHomeForm.ageGroup, takeHomeForm.prefecture, takeHomeForm.spouse, takeHomeForm.dependents]);
 }
 
-/** 入力欄が変わったとき: 中身を覚えて、条件の1行と結果を描き直す */
+/** 入力欄が変わったとき: 中身を覚えて、条件の1行と結果を書きかえる */
 function readTakeHomeForm() {
   takeHomeForm.monthlyGross = findOne('#takeHomeGross').value;
   takeHomeForm.bonusYearly = findOne('#takeHomeBonus').value;
@@ -562,15 +702,221 @@ function readTakeHomeForm() {
   takeHomeForm.spouse = findOne('#takeHomeSpouse').checked;
   takeHomeForm.dependents = Number(findOne('#takeHomeDependents').value);
 
-  // 入力欄から指を離しただけ（change）で中身が同じなら、描き直さない。
-  // 描き直すと、ちょうどタップした「条件」などが入れかわって、タップが効かなくなるため。
-  const values = takeHomeFormValues();
-  if (values === takeHomeShownValues) {
+  // 入力欄から指を離しただけ（change）で中身が同じなら、何もしない。
+  // 書きかえると、ちょうどタップした「条件」などが入れかわって、タップが効かなくなるため。
+  if (takeHomeFormValues() === takeHomeShownValues) {
     return;
   }
-  takeHomeShownValues = values;
   findOne('#takeHomeConditionText').innerHTML = takeHomeConditionHtml();
-  findOne('#takeHomeResult').innerHTML = takeHomeResultHtml();
+  updateTakeHomeResult(true);
+}
+
+/**
+ * 入力欄の中身を読んで、計算できるかを調べる。
+ * 返す値: {
+ *   status  … 'empty'（額面が空）/ 'small'（打っている途中などで小さい）/ 'error'（読めない）/ 'ok'
+ *   message … 入力欄の下に出す一言
+ *   input   … calculateTakeHomePay に渡す形（status が 'ok' のときだけ）
+ * }
+ */
+function readTakeHomeInput() {
+  const gross = takeHomeAmountOf(takeHomeForm.monthlyGross);
+  if (gross === null) {
+    return { status: 'empty', message: '', input: null };
+  }
+  // ボーナスと交通費は、空なら0（読めない文字なら NaN のままにして、まちがいを知らせる）
+  let bonus = takeHomeAmountOf(takeHomeForm.bonusYearly);
+  if (bonus === null) {
+    bonus = 0;
+  }
+  let commute = takeHomeAmountOf(takeHomeForm.commute);
+  if (commute === null) {
+    commute = 0;
+  }
+  const problem = takeHomeInputProblem(gross, bonus, commute);
+  if (problem !== '') {
+    return { status: 'error', message: problem, input: null };
+  }
+  if (gross < TAKE_HOME_MIN_GROSS) {
+    return { status: 'small', message: '額面が5万円以上になると計算します。', input: null };
+  }
+  return {
+    status: 'ok',
+    message: '',
+    input: {
+      monthlyGross: gross,
+      bonusYearly: bonus,
+      commute: commute,
+      ageGroup: takeHomeForm.ageGroup,
+      prefecture: takeHomeForm.prefecture,
+      spouse: takeHomeForm.spouse,
+      dependents: takeHomeForm.dependents,
+    },
+  };
+}
+
+/**
+ * 結果（数字・立体の柱・内訳）を、今の入力に合わせて書きかえる。
+ *   animate … true なら数字や柱をなめらかに動かす
+ */
+function updateTakeHomeResult(animate) {
+  takeHomeShownValues = takeHomeFormValues();
+  syncTakeHomeSlider();
+  const reading = readTakeHomeInput();
+  const note = findOne('#takeHomeInputNote');
+  note.textContent = reading.message;
+  note.classList.toggle('is-error', reading.status === 'error');
+
+  const cards = findOne('#takeHomeCards');
+  const empty = findOne('#takeHomeEmpty');
+  if (reading.status !== 'ok') {
+    // 前の結果があれば、消さずにうすくして残す（いきなり消えて画面がガタつかないように）
+    if (reading.status !== 'empty' && takeHomeHasResult) {
+      cards.classList.add('is-stale');
+      return;
+    }
+    takeHomeHasResult = false;
+    cards.hidden = true;
+    empty.hidden = false;
+    return;
+  }
+  takeHomeHasResult = true;
+  cards.hidden = false;
+  cards.classList.remove('is-stale');
+  empty.hidden = true;
+
+  const result = calculateTakeHomePay(reading.input);
+  const monthly = result.monthly;
+  const parts = takeHomeParts(result);
+
+  // 毎月
+  animateTakeHomeNumber(findOne('#takeHomeMonthlyValue'), monthly.takeHome, animate);
+  findOne('#takeHomeMonthlyRate').textContent = '額面の' + takeHomePercent(monthly.takeHome, monthly.gross);
+  // 金額は「+」と数字が別の行に分かれないように、ひとかたまりにする
+  findOne('#takeHomeMarginal').innerHTML = '額面が1万円増えると、手取りは <span class="num">' + formatYen(marginalTakeHome(reading.input), { showPlus: true }) + '</span>';
+  findOne('#takeHomeLegend').innerHTML = takeHomeLegendHtml(parts, monthly.gross);
+  markTakeHomeLegend();
+  takeHomeColumn.update(parts, animate);
+  findOne('#takeHomeMonthlyRows').innerHTML = takeHomeRowsHtml([
+    { label: '健康保険', amount: monthly.health },
+    { label: '介護保険', amount: monthly.care, hideWhenZero: true },
+    { label: '子ども・子育て支援金', amount: monthly.childSupport },
+    { label: '厚生年金', amount: monthly.pension, hideWhenZero: true },
+    { label: '雇用保険', amount: monthly.employment },
+    { label: '所得税', amount: monthly.incomeTax },
+    { label: '住民税', amount: monthly.residentTax },
+    { label: '引かれる合計', amount: monthly.gross - monthly.takeHome, total: true },
+  ]);
+
+  // ボーナス
+  findOne('#takeHomeBonusCard').hidden = !result.bonus;
+  if (result.bonus) {
+    animateTakeHomeNumber(findOne('#takeHomeBonusValue'), result.bonus.takeHome, animate);
+    findOne('#takeHomeBonusRate').textContent = '1年分・額面の' + takeHomePercent(result.bonus.takeHome, result.bonus.gross);
+    findOne('#takeHomeBonusRows').innerHTML = takeHomeRowsHtml([
+      { label: '社会保険料', amount: result.bonus.socialInsurance },
+      { label: '所得税', amount: result.bonus.incomeTax },
+    ]);
+  }
+
+  // 1年
+  const yearly = result.yearly;
+  animateTakeHomeNumber(findOne('#takeHomeYearValue'), yearly.takeHome, animate);
+  findOne('#takeHomeYearRate').textContent = '年収 ' + formatYen(yearly.gross) + ' の' + takeHomePercent(yearly.takeHome, yearly.gross);
+  findOne('#takeHomeYearRows').innerHTML = takeHomeRowsHtml([
+    { label: '社会保険料', amount: yearly.socialInsurance },
+    { label: '所得税', amount: yearly.incomeTax },
+    { label: '住民税', amount: yearly.residentTax },
+  ]);
+
+  // 計算のしかた（入力で変わる数字だけ）
+  findOne('#takeHomeStandardPay').textContent = formatYen(result.standardPay);
+  findOne('#takeHomeHealthRate').textContent = takeHomeForm.prefecture + ' ' + healthRateOf(takeHomeForm.prefecture).toFixed(2) + '%';
+}
+
+/** つまみの位置を、額面の欄の金額に合わせる */
+function syncTakeHomeSlider() {
+  const slider = findOne('#takeHomeSlider');
+  const gross = takeHomeAmountOf(takeHomeForm.monthlyGross);
+  let value = Number(slider.value);
+  if (gross !== null && !Number.isNaN(gross)) {
+    value = Math.min(Math.max(gross, TAKE_HOME_SLIDER.min), TAKE_HOME_SLIDER.max);
+    slider.value = String(value);
+  }
+  // つまみより左の部分を色で塗る（style.css の --fill）
+  const percent = (Number(slider.value) - TAKE_HOME_SLIDER.min) / (TAKE_HOME_SLIDER.max - TAKE_HOME_SLIDER.min) * 100;
+  slider.style.setProperty('--fill', percent.toFixed(1) + '%');
+}
+
+/** 立体の柱と、となりの説明の両方で、同じ段を目立たせる */
+function highlightTakeHomePart(key) {
+  takeHomeHighlighted = key;
+  takeHomeColumn.highlight(key);
+  markTakeHomeLegend();
+}
+
+/** となりの説明で、目立たせている段を濃く、ほかをうすくする */
+function markTakeHomeLegend() {
+  for (const item of findAll('#takeHomeLegend li')) {
+    item.classList.toggle('is-active', item.dataset.key === takeHomeHighlighted);
+    item.classList.toggle('is-dim', takeHomeHighlighted !== null && item.dataset.key !== takeHomeHighlighted);
+  }
+}
+
+/** 立体の柱のとなりの説明（柱と同じく、上の段から並べる） */
+function takeHomeLegendHtml(parts, gross) {
+  let html = '';
+  for (let index = parts.length - 1; index >= 0; index--) {
+    const part = parts[index];
+    html += '<li data-key="' + part.key + '">' +
+      '<span class="key" style="background:' + part.color + '"></span>' +
+      '<span class="money3d-name">' + part.label + '<span class="money3d-share">' + takeHomePercent(part.value, gross) + '</span></span>' +
+      '<span class="money3d-value">' + formatYen(part.value) + '</span>' +
+      '</li>';
+  }
+  return html;
+}
+
+// 動いている大きな数字の様子（数字の場所の id ごと）
+const takeHomeNumberStates = {};
+
+/**
+ * 大きな数字を、今の数から新しい数へ、なめらかに動かして変える（0.4秒くらい）。
+ * 動いている途中で新しい数が来たら、そこから向きを変える（つまみを動かし続けたとき）。
+ */
+function animateTakeHomeNumber(element, target, animate) {
+  let numberState = takeHomeNumberStates[element.id];
+  if (!numberState || numberState.element !== element) {
+    numberState = { element: element, shown: 0, from: 0, target: 0, startTime: 0, running: false };
+    takeHomeNumberStates[element.id] = numberState;
+  }
+  if (!animate || prefersReducedMotion()) {
+    numberState.shown = target;
+    numberState.target = target;
+    element.textContent = formatNumber(target);
+    return;
+  }
+  numberState.from = numberState.shown;
+  numberState.target = target;
+  numberState.startTime = performance.now();
+  if (numberState.running) {
+    return;
+  }
+  numberState.running = true;
+  function step(now) {
+    const progress = Math.min((now - numberState.startTime) / 400, 1);
+    const eased = 1 - Math.pow(1 - progress, 3); // はじめ速く、最後はゆっくり止まる
+    numberState.shown = numberState.from + (numberState.target - numberState.from) * eased;
+    element.textContent = formatNumber(numberState.shown);
+    if (progress < 1 && element.isConnected) {
+      requestAnimationFrame(step);
+      return;
+    }
+    numberState.shown = numberState.target;
+    element.textContent = formatNumber(numberState.target);
+    numberState.running = false;
+  }
+  requestAnimationFrame(step);
 }
 
 /**
@@ -620,81 +966,6 @@ function takeHomeInputProblem(gross, bonus, commute) {
   return '';
 }
 
-/** 結果のカード（毎月・ボーナス・1年） */
-function takeHomeResultHtml() {
-  const gross = takeHomeAmountOf(takeHomeForm.monthlyGross);
-  if (gross === null) {
-    return '<section class="card"><p class="empty-note">額面を入れると、手取りがすぐに出ます。</p></section>';
-  }
-  // ボーナスと交通費は、空なら0（読めない文字なら NaN のままにして、下でまちがいを知らせる）
-  let bonus = takeHomeAmountOf(takeHomeForm.bonusYearly);
-  if (bonus === null) {
-    bonus = 0;
-  }
-  let commute = takeHomeAmountOf(takeHomeForm.commute);
-  if (commute === null) {
-    commute = 0;
-  }
-  const problem = takeHomeInputProblem(gross, bonus, commute);
-  if (problem !== '') {
-    return '<section class="card"><p class="form-error" role="alert">' + problem + '</p></section>';
-  }
-
-  const result = calculateTakeHomePay({
-    monthlyGross: gross,
-    bonusYearly: bonus,
-    commute: commute,
-    ageGroup: takeHomeForm.ageGroup,
-    prefecture: takeHomeForm.prefecture,
-    spouse: takeHomeForm.spouse,
-    dependents: takeHomeForm.dependents,
-  });
-  const monthly = result.monthly;
-
-  // 毎月
-  let html = '<section class="card">' +
-    '<div class="card-head"><h2>毎月の手取り</h2><span class="sub">額面の' + takeHomePercent(monthly.takeHome, monthly.gross) + '</span></div>' +
-    '<div class="hero-number"><span class="yen">¥</span>' + formatNumber(monthly.takeHome) + '</div>' +
-    takeHomeRowsHtml([
-      { label: '健康保険', amount: monthly.health },
-      { label: '介護保険', amount: monthly.care, hideWhenZero: true },
-      { label: '子ども・子育て支援金', amount: monthly.childSupport },
-      { label: '厚生年金', amount: monthly.pension, hideWhenZero: true },
-      { label: '雇用保険', amount: monthly.employment },
-      { label: '所得税', amount: monthly.incomeTax },
-      { label: '住民税', amount: monthly.residentTax },
-      { label: '引かれる合計', amount: monthly.gross - monthly.takeHome, total: true },
-    ]) +
-    '</section>';
-
-  // ボーナス
-  if (result.bonus) {
-    html += '<section class="card">' +
-      '<div class="card-head"><h2>ボーナスの手取り</h2><span class="sub">1年分・額面の' + takeHomePercent(result.bonus.takeHome, result.bonus.gross) + '</span></div>' +
-      '<div class="hero-number"><span class="yen">¥</span>' + formatNumber(result.bonus.takeHome) + '</div>' +
-      takeHomeRowsHtml([
-        { label: '社会保険料', amount: result.bonus.socialInsurance },
-        { label: '所得税', amount: result.bonus.incomeTax },
-      ]) +
-      '</section>';
-  }
-
-  // 1年
-  const yearly = result.yearly;
-  html += '<section class="card">' +
-    '<div class="card-head"><h2>1年の手取り</h2><span class="sub">年収 ' + formatYen(yearly.gross) + ' の' + takeHomePercent(yearly.takeHome, yearly.gross) + '</span></div>' +
-    '<div class="hero-number"><span class="yen">¥</span>' + formatNumber(yearly.takeHome) + '</div>' +
-    takeHomeRowsHtml([
-      { label: '社会保険料', amount: yearly.socialInsurance },
-      { label: '所得税', amount: yearly.incomeTax },
-      { label: '住民税', amount: yearly.residentTax },
-    ]) +
-    '</section>';
-
-  html += takeHomeNotesHtml(result);
-  return html;
-}
-
 /** 「額面の80%」の数字の部分 */
 function takeHomePercent(takeHome, gross) {
   return Math.round(takeHome / gross * 100) + '%';
@@ -713,21 +984,22 @@ function takeHomeRowsHtml(rows) {
   return html;
 }
 
-/** 計算のしかたと、もとにした資料 */
-function takeHomeNotesHtml(result) {
+/** 計算のしかたと、もとにした資料（入力で変わる数字は updateTakeHomeResult が入れる） */
+function takeHomeNotesHtml() {
   let html = '<div class="takehome-notes">';
   if (todayText() >= TAKE_HOME_RULES.reviewAfter) {
     html += '<p class="hint"><strong>' + TAKE_HOME_RULES.yearLabel + 'の料率で計算しています。新しい料率に変わっているかもしれません。</strong></p>';
   }
   html += '<p class="hint">' + TAKE_HOME_RULES.yearLabel + 'の料率と税のきまりで計算した目安です。住民税は前の年の収入にかかるので、働きはじめた年は引かれません。</p>';
   html += '<details class="more"><summary>計算のしかた</summary><ul class="takehome-howto">' +
-    '<li>健康保険・厚生年金などは、額面を表に当てはめた「標準報酬月額」（' + formatYen(result.standardPay) + '）に料率をかけています。' +
-    '健康保険は協会けんぽの料率（' + escapeHtml(takeHomeForm.prefecture) + ' ' + healthRateOf(takeHomeForm.prefecture).toFixed(2) + '%）で、会社の健康保険組合に入っている人は少しちがいます。</li>' +
+    '<li>健康保険・厚生年金などは、額面を表に当てはめた「標準報酬月額」（<span id="takeHomeStandardPay"></span>）に料率をかけています。' +
+    '健康保険は協会けんぽの料率（<span id="takeHomeHealthRate"></span>）で、会社の健康保険組合に入っている人は少しちがいます。</li>' +
     '<li>雇用保険は、ふつうの会社の料率（0.5%）です。</li>' +
     '<li>交通費は、社会保険料にはふくめ、税金はかからない分として計算しています（月15万円まで）。</li>' +
     '<li>所得税は、年末調整のあとの1年分を12で割った額です。毎月の天引きとは少しちがい、差は12月の年末調整で精算されます。</li>' +
     '<li>住民税は、この収入が1年続いたときに、次の年の6月から引かれる額の目安です。</li>' +
     '<li>ボーナスは、2回に分けて払われるとして計算しています。</li>' +
+    '<li>立体の柱の高さは、額面に対する割合です。左右になぞると回せます。</li>' +
     '<li>もとにした資料: 協会けんぽ「令和8年度保険料率」、厚生労働省「令和8年度の雇用保険料率」、国税庁「源泉所得税の改正のあらまし（令和8年4月）」（' + TAKE_HOME_RULES.checkedAt + ' に確認）</li>' +
     '</ul></details>';
   html += '</div>';

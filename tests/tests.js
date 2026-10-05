@@ -634,6 +634,47 @@ same('住民税: 配偶者を扶養していて所得100万円なら非課税', 
 same('住民税: ひとりで所得100万円なら課税', residentTaxForYear(1740000, 0, { spouse: false, dependents: 0 }), 59500);
 same('住民税: 所得割は非課税でも均等割だけかかることがある', residentTaxForYear(1790000, 0, { spouse: true, dependents: 0 }), 5000);
 
+section('手取り計算の画面（立体の柱・入力の見やすさ）');
+// 金額の入力欄に、打ちながらカンマを入れる（カーソルの位置も保つ）
+const typed1 = formatDigitsWithCommas('300000', 6);
+same('カンマ: 300000 → 300,000', typed1.text, '300,000');
+same('カンマ: カーソルは最後のまま', typed1.caret, 7);
+const typed2 = formatDigitsWithCommas('30,0000', 7);
+same('カンマ: 打ち足したら付け直す', typed2.text, '300,000');
+same('カンマ: 打ち足したあともカーソルは最後', typed2.caret, 7);
+same('カンマ: 途中のカーソル位置を保つ', formatDigitsWithCommas('3000', 1).caret, 1);
+same('カンマ: 「30万」はそのまま', formatDigitsWithCommas('30万', 3).text, '30万');
+same('カンマ: 全角の数字も半角にしてカンマ', formatDigitsWithCommas('３０００', 4).text, '3,000');
+same('カンマ: 空はそのまま', formatDigitsWithCommas('', 0).text, '');
+
+// 立体の柱に使う3つ（下から積む順）
+const parts30 = takeHomeParts(pay30);
+same('3つに分ける: 下から 手取り・社会保険料・税金', parts30.map((part) => part.key).join(','), 'takeHome,insurance,tax');
+same('3つに分ける: 手取り', parts30[0].value, 239688);
+same('3つに分ける: 社会保険料', parts30[1].value, 44070);
+same('3つに分ける: 税金（所得税＋住民税）', parts30[2].value, 16242);
+same('3つに分ける: 合計は額面', parts30[0].value + parts30[1].value + parts30[2].value, 300000);
+same('3つに分ける: 税金がないときは0', takeHomeParts(pay9)[2].value, 0);
+// 31万円は標準報酬月額が1段上がるので、保険料も増える（手で計算した値）
+same('額面が1万円増えたときの手取りの増え方', marginalTakeHome({ monthlyGross: 300000, prefecture: '東京都', ageGroup: 'under40' }), 6346);
+
+// 立体の計算（少し上から見た形にする）
+const notTurned = project3d(10, 0, 0, 0, 0);
+same('立体: 回さず真横から見ると、横の位置はそのまま', notTurned.x, 10);
+const turned = project3d(10, 0, 0, Math.PI / 2, 0);
+check('立体: 90度回すと、横の位置が奥行きになる', Math.abs(turned.x) < 1e-9 && Math.abs(turned.depth + 10) < 1e-9);
+const tallPoint = project3d(0, 100, 0, 0.7, 0.4);
+check('立体: 高さはどの向きでも同じ割合で縮む（割合がゆがまない）', Math.abs(tallPoint.y - 100 * Math.cos(0.4)) < 1e-9);
+const boxFaces = boxFaces3d({ halfWidth: 10, bottom: 0, top: 50 }, 0.01, 0.4);
+const topFace = boxFaces.find((face) => face.side === 'top');
+check('立体: 上の面は見える', Boolean(topFace));
+check('立体: 手前の面は見える', boxFaces.some((face) => face.side === 'front'));
+check('立体: 奥の面は見えない', !boxFaces.some((face) => face.side === 'back'));
+check('立体: 見える面は2つか3つ', boxFaces.length >= 2 && boxFaces.length <= 3);
+check('立体: 面の明るさは0〜1', boxFaces.every((face) => face.light >= 0 && face.light <= 1));
+check('立体: 上の面がいちばん明るい', boxFaces.every((face) => face.light <= topFace.light));
+check('立体: 面の角は4つ', boxFaces.every((face) => face.points.length === 4));
+
 /* ===========================================================
    結果
    =========================================================== */
