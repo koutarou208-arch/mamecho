@@ -7,7 +7,7 @@
    ※ ファイルを大きく変えたら、下の CACHE_NAME の数字を上げてください
    =========================================================== */
 
-const CACHE_NAME = 'mamecho-v14';
+const CACHE_NAME = 'mamecho-v15';
 
 // 最初に覚えておくファイル（アプリ本体）
 const APP_FILES = [
@@ -38,6 +38,8 @@ self.addEventListener('activate', (event) => {
 });
 
 // ファイルを取りにいくとき: まずネット、だめなら覚えておいたもの
+// cache: 'no-cache' … ブラウザが覚えている古いファイル（GitHub Pages は10分ほど覚えさせる）を使わず、
+//                     毎回サーバーに「新しくなった？」と確かめてから使う。更新がすぐ届くようにするため
 self.addEventListener('fetch', (event) => {
   const request = event.request;
   if (request.method !== 'GET') {
@@ -49,7 +51,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   event.respondWith(
-    fetch(request)
+    fetch(request, { cache: 'no-cache' })
       .then((response) => {
         if (response && response.ok) {
           const copy = response.clone();
