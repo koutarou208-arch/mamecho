@@ -641,7 +641,10 @@ function recordBillPayment(account, bill) {
    同じ月にもう一度入れると、金額が上書きされます（0円か空欄で削除）。
 
    【仮の支出】
-   入れた金額は、そのカードの「支出」としても数えます（入力した日の支出）。
+   入れた金額は、そのカードの「支出」としても数えます。
+   日付は、その請求の「締め日」（利用した期間の終わり）にします。
+   例: 15日締めで2027年1月払いなら、2026年12月15日の支出。
+   （入力した日にすると、先の月の分まで全部が今月に乗ってしまうため）
    明細のCSVが届くまで1か月ほどかかるので、その間も支出・予算に出すためです。
    CSVを取り込んだら、カード画面で明細の合計と比べて、仮の支出を消します（相殺）。
    消さないと、仮と明細の両方が入って二重になります。
@@ -656,6 +659,11 @@ const MANUAL_BILL_SUB = 'カード引き落とし（仮）';
  */
 function manualBillAmountOf(transaction) {
   return transaction.type === 'adjust' ? -transaction.amount : transaction.amount;
+}
+
+/** 仮の支出の日付: その請求の締め日（利用した期間の終わり） */
+function manualBillDate(account, month) {
+  return closingDateOf(month, cardSettings(account));
 }
 
 /**
@@ -673,21 +681,56 @@ function upgradeManualBill(transaction) {
   return true;
 }
 
-/** 読み込んだ全データの古い手入力を直す。直した月のリストを返す（保存し直すため） */
+/**
+ * 仮の支出の日付を、その請求の締め日に置き直す。置き直したら true を返す。
+ * 「日付は決定済み」の印（dateFixed）がある記録には触らない（2回目以降と、自分で日付を直した記録）。
+ */
+function redateManualBill(transaction, account) {
+  if (!transaction.manualBill || transaction.dateFixed || !account) {
+    return false;
+  }
+  transaction.date = manualBillDate(account, transaction.billMonth);
+  transaction.dateFixed = true;
+  return true;
+}
+
+/**
+ * 読み込んだ全データの手入力（仮の支出）を直す。
+ *   ・古い形（残高修正）を支出の形にする
+ *   ・日付を締め日に置き直す（日付が変わったら、月の箱も移す）
+ * 直した月のリストを返す（保存し直すため）。何も直さなければ空。
+ */
 function upgradeAllManualBills() {
-  const changedMonths = [];
+  const changedMonths = new Set();
+  const accounts = appState.profile && appState.profile.accounts ? appState.profile.accounts : [];
+  const moves = []; // 月の箱を移す記録 { transaction, fromMonth }
   for (const month of Object.keys(appState.monthly)) {
-    let isChanged = false;
     for (const transaction of appState.monthly[month]) {
-      if (upgradeManualBill(transaction)) {
-        isChanged = true;
+      if (!transaction.manualBill) {
+        continue;
+      }
+      const isUpgraded = upgradeManualBill(transaction);
+      const account = accounts.find((item) => item.id === transaction.account);
+      const isRedated = redateManualBill(transaction, account);
+      if (isUpgraded || isRedated) {
+        changedMonths.add(month);
+      }
+      if (monthOfDate(transaction.date) !== month) {
+        moves.push({ transaction: transaction, fromMonth: month });
       }
     }
-    if (isChanged) {
-      changedMonths.push(month);
-    }
   }
-  return changedMonths;
+  for (const move of moves) {
+    const toMonth = monthOfDate(move.transaction.date);
+    appState.monthly[move.fromMonth] = appState.monthly[move.fromMonth].filter((item) => item.id !== move.transaction.id);
+    if (!appState.monthly[toMonth]) {
+      appState.monthly[toMonth] = [];
+    }
+    appState.monthly[toMonth].push(move.transaction);
+    changedMonths.add(move.fromMonth);
+    changedMonths.add(toMonth);
+  }
+  return [...changedMonths];
 }
 
 /** そのカードの、手入力した支払い予定の一覧（月の順） */
@@ -698,14 +741,14 @@ function manualBillsOf(account) {
 }
 
 /**
- * 手入力1件分の記録（仮の支出）を作る。
- *   existing … 同じ月にすでに入れていた記録（あれば、id と日付を引き継いで上書きする）
- *   dateText … 新しく作るときの日付（ふつうは今日＝入力した日）
+ * 手入力1件分の記録（仮の支出）を作る。日付はその請求の締め日。
+ *   existing … 同じ月にすでに入れていた記録（あれば、id を引き継いで上書きする）
  */
-function manualBillRecord(account, month, amount, existing, dateText) {
+function manualBillRecord(account, month, amount, existing) {
   return {
     id: existing ? existing.id : makeId(),
-    date: existing ? existing.date : dateText,
+    date: manualBillDate(account, month),
+    dateFixed: true,
     type: 'expense',
     amount: amount,
     account: account.id,
@@ -779,7 +822,7 @@ function saveManualBill(account, month, amount) {
     }
     return '金額を入れてください。';
   }
-  const transaction = manualBillRecord(account, month, amount, existing, todayText());
+  const transaction = manualBillRecord(account, month, amount, existing);
   putTransaction(transaction, existing ? existing.date : null);
   return '';
 }

@@ -281,7 +281,7 @@ function manualBillFormHtml(account, settings) {
   html += '<p class="form-error" data-manual-error="' + escapeHtml(account.id) + '" role="alert"></p>';
 
   if (entries.length > 0) {
-    html += '<p class="hint">ここで入れた金額は「仮の支出」として、入力した日の支出にも数えています。明細のCSVを取り込んだら、明細と比べて仮を消してください（消さないと二重になります）。</p>';
+    html += '<p class="hint">ここで入れた金額は「仮の支出」として、その請求の締め日（利用した期間の終わり）の支出にも数えています。明細のCSVを取り込んだら、明細と比べて仮を消してください（消さないと二重になります）。</p>';
     html += '<ul class="plain-list">';
     for (const entry of entries) {
       html += '<li class="manual-entry"><button type="button" class="grow row-edit" data-action="edit-transaction" data-id="' + escapeHtml(entry.id) + '" aria-label="' + formatMonthText(entry.billMonth) + 'の金額を直す"><span>' + formatMonthText(entry.billMonth) + '払い（仮）</span>' +

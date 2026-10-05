@@ -253,16 +253,18 @@ same('手入力: 内訳の種類は manual', bill && bill.parts.manual, 150000);
 // 月ごとの手入力は「仮の支出」として数える（CSVの明細が届いたら、あとで相殺する）
 section('カードの仮の支出（月の支払い金額の手入力）');
 account = makeCard('jcb');
-const provisional = manualBillRecord(account, '2026-10', 150000, null, '2026-09-20');
+const provisional = manualBillRecord(account, '2026-10', 150000, null);
 same('仮の支出: 種類は支出', provisional.type, 'expense');
 same('仮の支出: 金額はプラスの整数', provisional.amount, 150000);
-same('仮の支出: 日付は入力した日', provisional.date, '2026-09-20');
+same('仮の支出: 日付はその請求の締め日（10月払い → 9/15）', provisional.date, '2026-09-15');
+same('仮の支出: 先の月の分は先の月に置く（1月払い → 12/15）', manualBillRecord(account, '2027-01', 80000, null).date, '2026-12-15');
 same('仮の支出: そのカードの支出になる', provisional.account, 'test-card');
 same('仮の支出: カテゴリ', provisional.category + '/' + provisional.sub, 'other/カード引き落とし（仮）');
 check('仮の支出: 「仮」の印と請求月が付く', provisional.manualBill === true && provisional.billMonth === '2026-10');
-const provisionalAgain = manualBillRecord(account, '2026-10', 160000, provisional, '2026-09-25');
+const provisionalAgain = manualBillRecord(account, '2026-10', 160000, provisional);
 same('仮の支出: 入れ直すと同じ記録を上書き（id そのまま）', provisionalAgain.id, provisional.id);
-same('仮の支出: 入れ直しても日付は最初のまま', provisionalAgain.date, '2026-09-20');
+same('仮の支出: 入れ直しても日付は同じ（締め日）', provisionalAgain.date, '2026-09-15');
+check('仮の支出: 日付は決定済みの印が付く', provisional.dateFixed === true);
 
 // 請求への出方は、新しい形でも古い形でも同じ
 bill = billOf(account, [provisional], '2026-10');
@@ -275,17 +277,47 @@ check('古い手入力: 直す対象と判定される', upgradeManualBill(legac
 same('古い手入力: 支出になる', legacyManual.type, 'expense');
 same('古い手入力: 金額はプラスになる', legacyManual.amount, 150000);
 same('古い手入力: カテゴリが付く', legacyManual.category + '/' + legacyManual.sub, 'other/カード引き落とし（仮）');
-same('古い手入力: 日付・請求月は変わらない', legacyManual.date + '/' + legacyManual.billMonth, '2026-09-18/2026-10');
+same('古い手入力: 形を直しただけでは日付・請求月は変わらない', legacyManual.date + '/' + legacyManual.billMonth, '2026-09-18/2026-10');
 check('古い手入力: 2回目は何もしない', upgradeManualBill(legacyManual) === false && legacyManual.amount === 150000);
 const ordinaryAdjust = { id: 'adj1', date: '2026-09-18', type: 'adjust', amount: -500, account: 'test-card', description: '残高修正', memo: '', include: true, createdAt: 1 };
 check('古い手入力: ふつうの残高修正には手を付けない', upgradeManualBill(ordinaryAdjust) === false && ordinaryAdjust.type === 'adjust' && ordinaryAdjust.amount === -500);
 same('古い手入力: 直したあとも請求の金額は同じ', billOf(account, [legacyManual], '2026-10').parts.manual, 150000);
 same('古い手入力: カードの残高への効き方も同じ（借金が増える）', transactionEffect(legacyManual, 'test-card'), -150000);
 
+// 日付を締め日に置き直す（1.9.0 で「入力した日」に置かれたものを、先の月へ散らす）
+const lateEntry = { id: 'old2', date: '2026-10-05', type: 'adjust', amount: -80000, account: 'test-card', description: '支払い予定（手入力）', memo: '', include: true, createdAt: 1, manualBill: true, billMonth: '2027-01' };
+upgradeManualBill(lateEntry);
+check('日付の置き直し: 入力した日のままの記録は直す', redateManualBill(lateEntry, account) === true);
+same('日付の置き直し: 2027年1月払いは12/15になる', lateEntry.date, '2026-12-15');
+check('日付の置き直し: 2回目は何もしない', redateManualBill(lateEntry, account) === false && lateEntry.date === '2026-12-15');
+const editedDate = { ...legacyManual, id: 'old3', date: '2026-09-30', dateFixed: true };
+check('日付の置き直し: 自分で日付を決めた（印のある）記録には触らない', redateManualBill(editedDate, account) === false && editedDate.date === '2026-09-30');
+
+// 読み込み時に、全部をまとめて直す（月の箱も移る）
+const loadedA = { id: 'L1', date: '2026-10-05', type: 'adjust', amount: -150000, account: 'test-card', description: '支払い予定（手入力）', memo: '', include: true, createdAt: 1, manualBill: true, billMonth: '2026-11' };
+const loadedB = { id: 'L2', date: '2026-10-05', type: 'adjust', amount: -90000, account: 'test-card', description: '支払い予定（手入力）', memo: '', include: true, createdAt: 2, manualBill: true, billMonth: '2026-12' };
+const loadedC = { id: 'L3', date: '2026-10-05', type: 'adjust', amount: -70000, account: 'test-card', description: '支払い予定（手入力）', memo: '', include: true, createdAt: 3, manualBill: true, billMonth: '2027-01' };
+const ordinary = { id: 'L4', date: '2026-10-06', type: 'expense', amount: 1200, account: 'test-card', category: 'food', sub: '', description: 'ふつうの買い物', memo: '', include: true, createdAt: 4 };
+appState.monthly = { '2026-10': [loadedA, loadedB, loadedC, ordinary] };
+appState.profile = { accounts: [account] };
+const movedMonths = upgradeAllManualBills().sort();
+same('読み込み時の直し: 変わった月', movedMonths.join(','), '2026-10,2026-11,2026-12');
+same('読み込み時の直し: 10月に残るのは、今月締めの1件とふつうの買い物', appState.monthly['2026-10'].map((item) => item.id).sort().join(','), 'L1,L4');
+same('読み込み時の直し: 12月払いの分は11月へ', appState.monthly['2026-11'].map((item) => item.id).join(','), 'L2');
+same('読み込み時の直し: 1月払いの分は12月へ', appState.monthly['2026-12'].map((item) => item.id).join(','), 'L3');
+same('読み込み時の直し: 2回目は何も変えない', upgradeAllManualBills().length, 0);
+allTransactions = [loadedA, loadedB, loadedC, ordinary];
+same('今月（10月）の支出: 今月締めの1件 + 買い物だけ（全部が乗らない）', summarizeRange({ start: '2026-10-01', end: '2026-11-01' }).spending, 151200);
+same('11月の支出', summarizeRange({ start: '2026-11-01', end: '2026-12-01' }).spending, 90000);
+same('12月の支出', summarizeRange({ start: '2026-12-01', end: '2027-01-01' }).spending, 70000);
+allTransactions = [];
+appState.monthly = {};
+appState.profile = null;
+
 // 支出として集計される
 allTransactions = [provisional];
 let provisionalSummary = summarizeRange({ start: '2026-09-01', end: '2026-10-01' });
-same('仮の支出: 入力した月の支出に入る', provisionalSummary.spending, 150000);
+same('仮の支出: 締め日の月（9月）の支出に入る', provisionalSummary.spending, 150000);
 same('仮の支出: 「その他」に入る', provisionalSummary.categories.other.total, 150000);
 same('仮の支出: 引き落とし月（10月）にはまだ数えない', summarizeRange({ start: '2026-10-01', end: '2026-11-01' }).spending, 0);
 allTransactions = [];

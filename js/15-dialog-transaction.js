@@ -402,6 +402,7 @@ function readTransactionForm() {
   }
   if (editing && editing.manualBill) {
     transaction.manualBill = true; // 「月の支払い金額だけ入力」の印も残す（消えると請求として数えられなくなる）
+    transaction.dateFixed = true;  // 日付は決定済み（自分で直した日付を、あとで締め日に置き直さない）
   }
 
   if (type === 'transfer') {
