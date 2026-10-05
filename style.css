@@ -1173,6 +1173,20 @@ html { -webkit-tap-highlight-color: transparent; }
   #newTransactionButton { padding-inline: 10px; }
 }
 
+/* 押した手ごたえ: 押している間だけ、ボタンや行が少し沈む（指を離すと戻る） */
+.btn, .icon-btn, .tx, .seg label, .seg button, .tab-item, .nav-item, .link-btn {
+  transition: transform 0.1s ease, background-color 0.15s ease, color 0.2s ease;
+}
+.btn:active:not(:disabled), .icon-btn:active, .seg label:active, .seg button:active { transform: scale(0.96); }
+.tab-item:active, .nav-item:active { transform: scale(0.94); }
+.tx:active { background: var(--surface-2); }
+.link-btn:active { opacity: 0.6; }
+/* 動きを減らす設定の人には、大きさは変えず、色だけ少し変える */
+@media (prefers-reduced-motion: reduce) {
+  .btn:active:not(:disabled), .icon-btn:active, .seg label:active, .seg button:active,
+  .tab-item:active, .nav-item:active { transform: none; opacity: 0.7; }
+}
+
 /* 動きを減らす設定の人には、アニメーションをしない */
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }

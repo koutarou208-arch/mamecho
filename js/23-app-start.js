@@ -229,6 +229,15 @@ function movePeriod(step) {
 }
 
 /**
+ * iPhone で、ボタンを押している間の見た目（style.css の :active）が出るようにする。
+ * iPhone の Safari は、どこかで「指が触れた」を受け取る準備がないと :active を使わないため、
+ * 何もしない受け取り口を1つだけ置く。
+ */
+function enablePressedLook() {
+  document.addEventListener('touchstart', () => {}, { passive: true });
+}
+
+/**
  * 画面を左右になぞって、前の月・次の月へ動かせるようにする（スマホ向け）。
  * 入力欄・グラフ・横にスクロールする表の上では動かさない。
  */
@@ -579,6 +588,7 @@ function start() {
   setupAccountDialog();
   setupLockDialog();
   setupSwipe();
+  enablePressedLook();
   fillIcons(document);
 
   // URL の最後が #cards などなら、その画面から始める（あとで変わったときも追いかける）
