@@ -329,6 +329,11 @@ const ACTIONS = {
     appState.filters.date = '';
     renderApp();
   },
+  'toggle-filters': (button) => {
+    isFilterPanelOpen = !isFilterPanelOpen;
+    findOne('#filterPanel').hidden = !isFilterPanelOpen;
+    button.setAttribute('aria-expanded', isFilterPanelOpen ? 'true' : 'false');
+  },
   'filter-type': (button) => {
     appState.filters.type = button.dataset.value;
     for (const other of findAll('[data-action="filter-type"]')) {

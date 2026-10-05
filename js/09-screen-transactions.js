@@ -9,16 +9,33 @@
    「入出金1行のHTMLを作る関数」transactionRowHtml も入っています。
    =========================================================== */
 
+// 「絞り込み」の中身を開いているか（口座・カテゴリ・種類のどれかで絞り込み中なら、はじめから開く）
+let isFilterPanelOpen = false;
+
+/** 口座・カテゴリ・種類のうち、いくつで絞り込んでいるか（検索と日付はのぞく） */
+function activeFilterCount() {
+  const filters = appState.filters;
+  return (filters.account ? 1 : 0) + (filters.category ? 1 : 0) + (filters.type ? 1 : 0);
+}
+
 const TransactionsScreen = {
   title: '入出金',
   usesPeriod: true,
 
   html() {
     const filters = appState.filters;
+    if (activeFilterCount() > 0) {
+      isFilterPanelOpen = true;
+    }
     let html = '<section class="card">';
 
-    // --- 絞り込みの部品 ---
-    html += '<div class="filters">';
+    // --- 検索と「絞り込み」ボタン（口座・カテゴリ・種類は、ボタンを押すと出る） ---
+    const activeCount = activeFilterCount();
+    html += '<div class="filter-bar">' +
+      '<input type="search" id="filterSearch" placeholder="内容・メモで検索" value="' + escapeHtml(filters.search) + '" aria-label="内容・メモで検索">' +
+      '<button type="button" class="btn small' + (activeCount > 0 ? ' primary' : '') + '" data-action="toggle-filters" aria-expanded="' + (isFilterPanelOpen ? 'true' : 'false') + '">' +
+      '絞り込み' + (activeCount > 0 ? '（' + activeCount + '）' : '') + '</button></div>';
+    html += '<div class="filters" id="filterPanel"' + (isFilterPanelOpen ? '' : ' hidden') + '>';
     html += '<select id="filterAccount" aria-label="口座で絞り込む"><option value="">すべての口座</option>';
     for (const account of appState.profile.accounts) {
       const selected = filters.account === account.id ? ' selected' : '';
@@ -47,7 +64,6 @@ const TransactionsScreen = {
     }
     html += '</div>';
 
-    html += '<input type="search" id="filterSearch" placeholder="内容・メモで検索" value="' + escapeHtml(filters.search) + '" aria-label="内容・メモで検索">';
     html += '</div>';
 
     // 日付で絞り込み中なら、それを外すボタン
@@ -56,7 +72,6 @@ const TransactionsScreen = {
         '<button type="button" class="filter-chip" data-action="clear-date-filter">' + formatMonthDay(filters.date) + ' の記録だけ表示中 ' + iconSvg('close') + '</button></div>';
     }
 
-    html += '<div class="row-gap" style="margin-bottom:10px"><button type="button" class="btn small" data-action="new-from-email" data-icon="plus">カード利用のメールから記録</button></div>';
     html += '<div class="summary-line" id="transactionSummary"></div>';
     html += '<div class="tx-list" id="transactionListArea"></div>';
     html += '</section>';
@@ -85,6 +100,13 @@ const TransactionsScreen = {
 
 /** 絞り込み条件に合う入出金を、日付ごとにまとめて表示する */
 function renderTransactionList() {
+  // 「絞り込み（N）」の数を、今の絞り込みに合わせる
+  const filterButton = findOne('[data-action="toggle-filters"]');
+  if (filterButton) {
+    const activeCount = activeFilterCount();
+    filterButton.textContent = '絞り込み' + (activeCount > 0 ? '（' + activeCount + '）' : '');
+    filterButton.classList.toggle('primary', activeCount > 0);
+  }
   const listArea = findOne('#transactionListArea');
   const summaryArea = findOne('#transactionSummary');
   if (!listArea) {
