@@ -545,6 +545,19 @@ check('自動 Face ID: 確認している途中は、重ねて出さない', !sh
 check('自動 Face ID: ロックしていないときは出さない', !shouldAutoStartBiometric({ ...autoBase, locked: false }));
 check('自動 Face ID: ロック画面が閉じていれば出さない', !shouldAutoStartBiometric({ ...autoBase, dialogOpen: false }));
 
+section('Face ID が出ないときの説明と、登録のおすすめ');
+same('Face ID の状態: Claude の中で開いている', biometricStatusOf(true, false, false), 'claude');
+same('Face ID の状態: 使えない端末・ブラウザ', biometricStatusOf(false, false, false), 'unsupported');
+same('Face ID の状態: 使えるが、まだ登録していない', biometricStatusOf(false, true, false), 'not-registered');
+same('Face ID の状態: 使える', biometricStatusOf(false, true, true), 'ready');
+check('Face ID の状態: 出ないときは、かならず理由の説明がある', ['claude', 'unsupported', 'not-registered'].every((status) => Boolean(BIOMETRIC_STATUS_HINTS[status])));
+const offerBase = { available: true, registered: false, dismissed: false, openedWithBiometric: false };
+check('Face ID のおすすめ: パスフレーズで開いて、まだ登録していなければ聞く', shouldOfferBiometric(offerBase));
+check('Face ID のおすすめ: 登録ずみなら聞かない', !shouldOfferBiometric({ ...offerBase, registered: true }));
+check('Face ID のおすすめ: 「今はしない」を押したら、もう聞かない', !shouldOfferBiometric({ ...offerBase, dismissed: true }));
+check('Face ID のおすすめ: 使えない場所では聞かない', !shouldOfferBiometric({ ...offerBase, available: false }));
+check('Face ID のおすすめ: Face ID で開いたときは聞かない', !shouldOfferBiometric({ ...offerBase, openedWithBiometric: true }));
+
 section('まちがえて消さないための確認（「削除」と入力）');
 check('削除の確認: 「削除」と入れたら押せる', isDeleteWordTyped('削除'));
 check('削除の確認: ひらがなの「さくじょ」でも押せる', isDeleteWordTyped('さくじょ'));

@@ -176,7 +176,8 @@ function renderBanner() {
     banner.innerHTML = '';
     return;
   }
-  const alertsHtml = rulesAlertsHtml(); // 20-rules-alerts.js（制度変更のお知らせ）
+  // 20-rules-alerts.js（制度変更のお知らせ）と、21-encryption-lock.js（パスフレーズで開いたあとの「Face ID を使いますか？」）
+  const alertsHtml = biometricOfferHtml() + rulesAlertsHtml();
   if (appState.isSample) {
     banner.innerHTML = '<div class="banner"><p><strong>サンプルの家計簿を表示しています。</strong>架空の1年分のデータです。さわってみても保存はされません。</p>' +
       '<button type="button" class="btn primary small" data-action="start-own">自分の家計簿をはじめる</button></div>' + alertsHtml;
@@ -185,6 +186,7 @@ function renderBanner() {
   } else {
     banner.innerHTML = alertsHtml;
   }
+  fillIcons(banner); // お知らせのボタンにもアイコンを入れる
 }
 
 /** 別の画面へ移る */
@@ -446,6 +448,11 @@ const ACTIONS = {
   'unlock-biometric': () => unlockWithBiometric(),
   'biometric-check': () => biometricCheckPassphrase(),
   'biometric-register': () => biometricRegister(),
+  'biometric-offer-dismiss': () => {
+    dismissBiometricOffer();
+    renderApp();
+    showToast('あとで「設定」→「セキュリティ」からも登録できます');
+  },
   'biometric-confirm': () => biometricConfirm(),
   'biometric-cancel': () => {
     forgetBiometricPending();

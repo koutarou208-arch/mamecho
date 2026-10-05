@@ -192,6 +192,10 @@ function openLockDialog() {
   const canUseBiometric = biometricUsableNow();
   findOne('#lockFaceIdArea').hidden = !canUseBiometric;
   findOne('#lockPassphraseLead').hidden = canUseBiometric;
+  // Face ID が出ないときは、その理由を出す（Claude の中・未登録・使えない端末）
+  const hint = findOne('#lockFaceIdHint');
+  hint.textContent = BIOMETRIC_STATUS_HINTS[biometricStatusHere()] || '';
+  hint.hidden = canUseBiometric || hint.textContent === '';
   // Face ID があるときは Face ID が主役。パスフレーズの「開く」は控えめにする
   findOne('#lockSubmit').classList.toggle('primary', !canUseBiometric);
   if (!dialog.open) {
@@ -235,8 +239,11 @@ async function unlockFromDialog() {
   await unlockWithPassphrase(passphrase);
 }
 
-/** パスフレーズでロックを解除する（パスフレーズの入力からも、Face ID からも使う）。開けたら true */
-async function unlockWithPassphrase(passphrase) {
+/**
+ * パスフレーズでロックを解除する（パスフレーズの入力からも、Face ID からも使う）。開けたら true。
+ *   openedWithBiometric … Face ID から呼ばれたときは true（そのときは Face ID をおすすめしない）
+ */
+async function unlockWithPassphrase(passphrase, openedWithBiometric) {
   const errorArea = findOne('#lockError');
   const button = findOne('#lockSubmit');
   button.disabled = true;
@@ -244,6 +251,7 @@ async function unlockWithPassphrase(passphrase) {
 
   // 打ったままのものと、全角・半角をそろえたものを順に試す
   let foundKey = null;
+  let foundPassphrase = '';
   for (const candidate of passphraseCandidates(passphrase)) {
     try {
       const key = await deriveKey(candidate, lockState.salt, lockState.iter);
@@ -251,6 +259,7 @@ async function unlockWithPassphrase(passphrase) {
       const proof = await decryptJson(lockState.check, key);
       if (proof && proof.ok === 'mamecho') {
         foundKey = key;
+        foundPassphrase = candidate;
         break;
       }
     } catch (error) {
@@ -289,6 +298,20 @@ async function unlockWithPassphrase(passphrase) {
   button.disabled = false;
   findOne('#lockDialog').close();
   startIdleTimer();
+  // パスフレーズで開いたとき: この端末で Face ID が使えて、まだ登録していなければ、登録をすすめる
+  const offer = shouldOfferBiometric({
+    available: biometricAvailableHere(),
+    registered: biometricRecordUsable(loadBiometricRecord(), lockState.salt),
+    dismissed: biometricOfferDismissed(),
+    openedWithBiometric: Boolean(openedWithBiometric),
+  });
+  if (offer) {
+    biometricState.pendingPassphrase = foundPassphrase; // 登録が終わるか、やめるか、ロックしたらすぐ忘れる
+    biometricState.step = 'ready';
+    biometricState.message = '';
+    biometricState.offerAfterUnlock = true;
+    renderApp();
+  }
   showToast('ロックを解除しました');
   return true;
 }
@@ -472,6 +495,12 @@ async function enableLockFromForm() {
   }
   button.disabled = false;
   startIdleTimer();
+  if (biometricAvailableHere()) {
+    // 打ったばかりのパスフレーズで、そのまま Face ID を登録できるようにする（もう一度打たなくてよい）
+    biometricState.pendingPassphrase = first.normalize('NFKC');
+    biometricState.step = 'ready';
+    biometricState.message = '続けて「Face ID を登録する」を押すと、次から Face ID で開けます。';
+  }
   renderApp();
   showToast('暗号化ロックをオンにしました。パスフレーズは忘れないでください');
 }
@@ -541,6 +570,12 @@ function lockCardHtml() {
     '（サービスの運営側やページの作者にも読めません）。開くたびにパスフレーズが必要になり、' + AUTO_LOCK_MINUTES + '分操作しないと自動でロックします。</p>';
 
   if (!lockState.enabled) {
+    const status = biometricStatusHere();
+    if (status === 'not-registered') {
+      html += '<p class="hint" style="margin-top:6px">オンにすると、続けて Face ID も登録できます（この端末で、開くときに Face ID が出ます）。</p>';
+    } else if (status === 'claude') {
+      html += '<p class="hint" style="margin-top:6px">' + BIOMETRIC_STATUS_HINTS.claude + '</p>';
+    }
     html += '<div class="lock-form">' +
       '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上。' + RECOMMENDED_PASSPHRASE_LENGTH + '文字以上・単語を4つつなげるのがおすすめ）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
       '<label class="field"><span>もう一度</span><input type="password" id="lockNewPassphrase2" autocomplete="new-password"></label>' +
@@ -624,6 +659,7 @@ const biometricState = {
   pendingCredentialId: '',  // 作ったパスキーのID
   pendingPrfSalt: '',       // 秘密の数を取り出すときの「まぜもの」
   message: '',
+  offerAfterUnlock: false,  // パスフレーズで開いたあとに「Face ID を使いますか？」を出しているか
 };
 
 /** Face ID が使える場所か（WebAuthn がある・Claude の中ではない・https） */
@@ -637,6 +673,88 @@ function biometricAvailableHere() {
     Boolean(window.claude),
     Boolean(window.isSecureContext)
   );
+}
+
+/**
+ * Face ID の状態を1つのことばで返す（ロック画面で、出ない理由を説明するため）。
+ *   'ready'          … この端末で Face ID で開ける
+ *   'claude'         … Claude の中で開いている（Face ID はホーム画面のまめ帳で使う）
+ *   'not-registered' … 使える端末だが、この端末ではまだ登録していない
+ *   'unsupported'    … この端末・ブラウザでは使えない
+ */
+function biometricStatusOf(inClaude, available, registered) {
+  if (inClaude) {
+    return 'claude';
+  }
+  if (!available) {
+    return 'unsupported';
+  }
+  if (!registered) {
+    return 'not-registered';
+  }
+  return 'ready';
+}
+
+// ロック画面で Face ID が出ないときに、理由として出すことば
+const BIOMETRIC_STATUS_HINTS = {
+  claude: 'Face ID は、ホーム画面のまめ帳（猫のアイコン）で開いたときに使えます。Claude の中では使えません。',
+  'not-registered': 'この端末では、まだ Face ID を登録していません。パスフレーズで開くと、すぐ登録できます。',
+  unsupported: 'この端末・ブラウザでは Face ID を使えません（iPhone は iOS 18 以降）。',
+};
+
+/** 今の端末の Face ID の状態（biometricStatusOf を参照） */
+function biometricStatusHere() {
+  return biometricStatusOf(Boolean(window.claude), biometricAvailableHere(), biometricRecordUsable(loadBiometricRecord(), lockState.salt));
+}
+
+/**
+ * パスフレーズで開いたあとに「次から Face ID で開けるようにしますか？」と聞くか。
+ *   conditions = { available: Face ID が使える場所か, registered: 登録ずみか,
+ *                  dismissed: 「今はしない」を押したか, openedWithBiometric: Face ID で開いたか }
+ */
+function shouldOfferBiometric(conditions) {
+  return Boolean(conditions.available && !conditions.registered && !conditions.dismissed && !conditions.openedWithBiometric);
+}
+
+// 「今はしない」を押したことを、この端末に覚えておく（家計簿のデータとは別）
+const BIOMETRIC_OFFER_DISMISSED_KEY = 'mamecho-faceid-offer-dismissed';
+
+function biometricOfferDismissed() {
+  try {
+    return localStorage.getItem(BIOMETRIC_OFFER_DISMISSED_KEY) === '1';
+  } catch (error) {
+    return false;
+  }
+}
+
+function dismissBiometricOffer() {
+  try {
+    localStorage.setItem(BIOMETRIC_OFFER_DISMISSED_KEY, '1');
+  } catch (error) {
+    // 覚えられない環境では、次に開いたときにまた聞くだけ
+  }
+  forgetBiometricPending();
+}
+
+/** パスフレーズで開いたあとに、画面の上に出す「Face ID を使いますか？」（出さないときは空） */
+function biometricOfferHtml() {
+  if (!biometricState.offerAfterUnlock || appState.locked) {
+    return '';
+  }
+  let buttons = '';
+  if (biometricState.step === 'ready') {
+    buttons = '<button type="button" class="btn primary small" data-action="biometric-register" data-icon="face">Face ID を使う</button>';
+  } else if (biometricState.step === 'confirm') {
+    buttons = '<button type="button" class="btn primary small" data-action="biometric-confirm" data-icon="face">Face ID で確認する</button>';
+  } else {
+    return '';
+  }
+  let html = '<div class="banner"><p><strong>次から Face ID で開けるようにしますか？</strong>この端末だけで使います。</p>';
+  if (biometricState.message) {
+    html += '<p class="small">' + escapeHtml(biometricState.message) + '</p>';
+  }
+  html += '<div class="row-gap">' + buttons + '<button type="button" class="btn ghost small" data-action="biometric-offer-dismiss">今はしない</button></div></div>';
+  return html;
 }
 
 /** この端末で、今のロックを Face ID で開けるか（使える場所で、登録の記録が今のロックのもの） */
@@ -710,6 +828,7 @@ function forgetBiometricPending() {
   biometricState.pendingCredentialId = '';
   biometricState.pendingPrfSalt = '';
   biometricState.message = '';
+  biometricState.offerAfterUnlock = false;
 }
 
 /** 秘密の数（PRF）から、パスフレーズを守る鍵を作る */
@@ -808,6 +927,11 @@ async function biometricRegister() {
     biometricState.message = '最後に、もう一度 Face ID で確認してください。';
   } catch (error) {
     biometricState.message = biometricErrorMessage(error);
+    if (error && error.message === 'prf_unsupported') {
+      // この端末では使えないので、開くたびに聞かないようにする
+      dismissBiometricOffer();
+      showToast(biometricErrorMessage(error));
+    }
   }
   renderApp();
 }
@@ -842,6 +966,7 @@ async function biometricFinish(prf) {
   biometricState.step = '';
   biometricState.pendingPassphrase = '';
   biometricState.message = '';
+  biometricState.offerAfterUnlock = false;
   renderApp();
   showToast('次から Face ID で開けます');
 }
@@ -875,7 +1000,7 @@ async function unlockWithBiometric(automatic) {
   }
   biometricInProgress = false;
   status.textContent = '';
-  const opened = await unlockWithPassphrase(passphrase);
+  const opened = await unlockWithPassphrase(passphrase, true);
   if (!opened) {
     findOne('#lockError').textContent = 'Face ID の記録が古くなっています。パスフレーズで開いて、設定で登録し直してください。';
   }

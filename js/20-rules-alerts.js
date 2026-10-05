@@ -18,7 +18,7 @@
 
 const SEEN_RULES_KEY = 'mamecho-seen-rules';
 const ALERT_WINDOW_DAYS = 60;   // 変更の開始日がこの日数より前なら、もう知らせない
-const APP_VERSION = '1.5.0';    // アプリの版（機能を足したら上げる）
+const APP_VERSION = '1.5.1';    // アプリの版（機能を足したら上げる）
 
 
 /* ===========================================================
@@ -168,6 +168,10 @@ function buildDiagnosticsText() {
   lines.push('今の画面: ' + appState.screen);
   lines.push('保存先: ' + appState.storageMode + (lockState.enabled ? '（暗号化あり）' : ''));
   lines.push('サンプル表示: ' + (appState.isSample ? 'はい' : 'いいえ'));
+  // 開き方と Face ID の状態（Face ID が出ないときの原因さがし用。個人の情報は入らない）
+  const standalone = Boolean((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone);
+  lines.push('開き方: ' + (window.claude ? 'Claude の中' : (standalone ? 'ホーム画面のアプリ' : 'ブラウザ')));
+  lines.push('暗号化ロック: ' + (lockState.enabled ? 'オン' : 'オフ') + ' / Face ID: ' + biometricStatusHere());
   if (appState.profile) {
     lines.push('口座の数: ' + appState.profile.accounts.length + ' / 入出金の数: ' + allTransactions.length);
     const companies = [...myCardCompanyIds()].join(', ');

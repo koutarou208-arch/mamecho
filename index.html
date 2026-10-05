@@ -436,6 +436,8 @@
         <button type="submit" class="btn primary" id="lockSubmit">開く</button>
       </div>
       <p class="form-error" id="lockError" role="alert"></p>
+      <!-- Face ID が出ないときの理由（Claude の中・まだ登録していない・使えない端末） -->
+      <p class="hint" id="lockFaceIdHint" hidden></p>
 
       <!-- 忘れたとき（データの削除）は、開くボタンから離して、いちばん下に置く。
            消すボタンは「削除」と入力するまで押せない（指が当たっただけで消えないように） -->
