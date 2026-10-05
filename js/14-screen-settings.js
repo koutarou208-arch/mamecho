@@ -288,7 +288,56 @@ function settingsDataCardHtml() {
     '<div class="setting"><span><strong>別のスマホ・アプリへ移す</strong></span>' +
     '<span class="row-gap"><button type="button" class="btn small" data-action="show-backup-text">文字でコピー</button>' +
     '<button type="button" class="btn small" data-action="open-paste-restore">貼り付けて戻す</button></span></div>' +
-    '</div></section>';
+    importUndoHtml() +
+    '</div>' +
+    flippedCopiesHtml() +
+    '</section>';
+}
+
+// 「前回の取り込みを取り消す」の確認を出しているか / 「向きが逆の明細」の一覧を開いているか
+let isImportUndoConfirmOpen = false;
+let isFlippedListOpen = false;
+
+/** 前回の取り込みを取り消す行（取り込んだ明細が残っているときだけ） */
+function importUndoHtml() {
+  const imported = lastImportedTransactions(); // 17-csv-and-backup.js
+  if (imported.length === 0) {
+    return '';
+  }
+  const lastImport = appState.profile.settings.lastImport;
+  let html = '<div class="setting"><span><strong>前回の取り込み</strong><br><span class="hint">' +
+    escapeHtml(lastImport.fileName || 'CSV') + ' · ' + escapeHtml(lastImport.at || '') + ' · 残り' + imported.length + '件</span></span>' +
+    '<button type="button" class="btn small" data-action="undo-import">取り消す</button></div>';
+  if (isImportUndoConfirmOpen) {
+    html += '<div class="confirm-box"><p>前回の取り込みで入った ' + imported.length + '件を削除します。ほかの明細は消えません。</p>' +
+      '<div class="row-gap"><button type="button" class="btn danger" data-action="undo-import-yes">' + imported.length + '件を削除</button>' +
+      '<button type="button" class="btn ghost" data-action="undo-import-no">やめる</button></div></div>';
+  }
+  return html;
+}
+
+/** 向きが逆に入った明細（前の版の取り込みで、収入が支出になったものなど）のお知らせと一覧 */
+function flippedCopiesHtml() {
+  const pairs = findFlippedCopies(allTransactions); // 17-csv-and-backup.js
+  if (pairs.length === 0) {
+    return '';
+  }
+  let html = '<div class="confirm-box" style="margin-top:14px"><p><strong>向きが逆に入った明細が ' + pairs.length + '件あります。</strong>' +
+    '同じ日・同じ金額・同じ内容で、収入と支出が1件ずつあります。あとから入った方（取り込みで向きが逆になったもの）を消せます。</p>';
+  if (!isFlippedListOpen) {
+    html += '<div class="row-gap"><button type="button" class="btn small" data-action="show-flipped">一覧を見る</button></div></div>';
+    return html;
+  }
+  html += '<ul class="plain-list">';
+  for (const pair of pairs.slice(0, 100)) {
+    const copy = pair.copy;
+    html += '<li><span class="grow"><span>' + escapeHtml(copy.description || '（内容なし）') + '</span>' +
+      '<span class="small muted">' + copy.date + ' · ' + escapeHtml(accountName(copy.account)) + ' · 正しい方: ' + (pair.original.type === 'income' ? '収入' : '支出') + '</span></span>' +
+      '<span class="num">消す方: ' + (copy.type === 'income' ? '収入 ' : '支出 ') + formatYen(copy.amount) + '</span></li>';
+  }
+  html += '</ul><div class="row-gap"><button type="button" class="btn danger" data-action="delete-flipped-yes">あとから入った ' + pairs.length + '件を削除</button>' +
+    '<button type="button" class="btn ghost" data-action="hide-flipped">やめる</button></div></div>';
+  return html;
 }
 
 

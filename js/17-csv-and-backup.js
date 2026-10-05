@@ -123,10 +123,17 @@ function csvTextCell(value) {
 }
 
 /** すべての入出金をCSVにする（マネーフォワード ME に近い列の並び） */
+/** 入出金をCSVの書き出しに出す（マネーフォワード ME と同じ形。支出はマイナス、収入はプラス） */
 function exportCsv() {
+  // 先頭の ﻿ は、Excel で開いたときに文字化けしないための印
+  offerDownload('mamecho-' + todayText() + '.csv', '﻿' + transactionsToCsvText(allTransactions));
+}
+
+/** 入出金の一覧を、CSVの文字にする（画面にさわらないので、テストできる） */
+function transactionsToCsvText(transactions) {
   const lines = [];
   lines.push(['計算対象', '日付', '内容', '金額（円）', '保有金融機関', '大項目', '中項目', 'メモ', '振替', '支払い方法', 'ID'].join(','));
-  for (const transaction of allTransactions) {
+  for (const transaction of transactions) {
     if (transaction.type === 'adjust') {
       continue; // 残高修正は書き出さない（バックアップには入る）
     }
@@ -160,8 +167,7 @@ function exportCsv() {
     ];
     lines.push(row.join(','));
   }
-  // 先頭の ﻿ は、Excel で開いたときに文字化けしないための印
-  offerDownload('mamecho-' + todayText() + '.csv', '﻿' + lines.join('\r\n'));
+  return lines.join('\r\n');
 }
 
 
@@ -933,13 +939,86 @@ function convertCsvRows(rows, settings, existingTransactions, accounts) {
   return result;
 }
 
+/**
+ * 向きが逆になって入ってしまった明細を探す（前の版で、収入を支出として取り込んだものなど）。
+ * 同じ口座・日付・金額・摘要で、収入と支出が1件ずつあれば、あとから入った方を「消す候補」にする。
+ * 返す値: [{ original: 先にあった明細, copy: あとから入った逆向きの明細 }]
+ */
+function findFlippedCopies(transactions) {
+  const groups = new Map();
+  for (const transaction of transactions) {
+    if (transaction.type !== 'income' && transaction.type !== 'expense') {
+      continue;
+    }
+    const key = [transaction.date, transaction.amount, transaction.account, normalizeText(transaction.description)].join('|');
+    if (!groups.has(key)) {
+      groups.set(key, []);
+    }
+    groups.get(key).push(transaction);
+  }
+  const pairs = [];
+  for (const group of groups.values()) {
+    if (group.length < 2) {
+      continue;
+    }
+    const sorted = [...group].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const waiting = []; // まだ相手が見つかっていない、先に入った明細
+    for (const transaction of sorted) {
+      const partnerIndex = waiting.findIndex((older) => older.type !== transaction.type);
+      if (partnerIndex >= 0) {
+        pairs.push({ original: waiting[partnerIndex], copy: transaction });
+        waiting.splice(partnerIndex, 1);
+      } else {
+        waiting.push(transaction);
+      }
+    }
+  }
+  return pairs;
+}
+
+/** 前回の取り込みで入った明細（まだ残っているもの） */
+function lastImportedTransactions() {
+  const lastImport = appState.profile ? appState.profile.settings.lastImport : null;
+  if (!lastImport) {
+    return [];
+  }
+  return allTransactions.filter((transaction) => transaction.importId === lastImport.id);
+}
+
+/** 「前回の取り込みを取り消す」: 前回の取り込みで入った明細を消す */
+function undoLastImport() {
+  const lastImport = appState.profile.settings.lastImport;
+  if (!lastImport) {
+    return;
+  }
+  const changedMonths = deleteTransactionsWhere((transaction) => transaction.importId === lastImport.id);
+  delete appState.profile.settings.lastImport;
+  afterDataChange(changedMonths, true); // 消した月と、設定（前回の取り込み）を保存する
+  showToast('前回の取り込みを取り消しました');
+}
+
+/** 「向きが逆の重複」を消す（あとから入った方だけ） */
+function deleteFlippedCopies() {
+  const copyIds = new Set(findFlippedCopies(allTransactions).map((pair) => pair.copy.id));
+  const changedMonths = deleteTransactionsWhere((transaction) => copyIds.has(transaction.id));
+  afterDataChange(changedMonths, false); // 消した月を保存する
+  showToast(copyIds.size + '件を削除しました');
+}
+
 /** 「○件を取り込む」を押したとき */
 function runImport() {
   const result = convertImportRows();
   if (result.ready.length === 0) {
     return;
   }
+  // 取り込みの印（どの取り込みで入ったか）をつけて、あとで「取り消す」ができるようにする
+  const importId = 'imp-' + makeId();
+  for (const transaction of result.ready) {
+    transaction.importId = importId;
+  }
+  appState.profile.settings.lastImport = { id: importId, count: result.ready.length, fileName: importState.fileName, at: todayText() };
   putManyTransactions(result.ready);
+  saveProfile();
   findOne('#importDialog').close();
   showToast(result.ready.length + '件を取り込みました' + (appState.isSample ? '（サンプル表示中のため保存はされません）' : ''));
 }

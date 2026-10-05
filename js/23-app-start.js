@@ -390,6 +390,30 @@ const ACTIONS = {
   'restore-backup': () => findOne('#restoreFile').click(),
   'restore-yes': () => restoreBackupConfirmed(),
   'copy-text': () => copyTextDialogContent(),
+  'undo-import': () => {
+    isImportUndoConfirmOpen = true;
+    renderApp();
+  },
+  'undo-import-no': () => {
+    isImportUndoConfirmOpen = false;
+    renderApp();
+  },
+  'undo-import-yes': () => {
+    isImportUndoConfirmOpen = false;
+    undoLastImport();
+  },
+  'show-flipped': () => {
+    isFlippedListOpen = true;
+    renderApp();
+  },
+  'hide-flipped': () => {
+    isFlippedListOpen = false;
+    renderApp();
+  },
+  'delete-flipped-yes': () => {
+    isFlippedListOpen = false;
+    deleteFlippedCopies();
+  },
 
   // --- 設定 ---
   'add-rule': () => addRuleFromForm(),

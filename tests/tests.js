@@ -369,6 +369,30 @@ const wrongTotal = convertCsvRows(parseCsv('利用日,利用店名,利用金額\
 same('合計行: 一致しなければ差額を出す', statementTotalCheck(wrongTotal).difference, 50);
 same('合計行: 合計の行がなければ none', statementTotalCheck(convertCsvRows(parseCsv('利用日,利用店名,利用金額\n2026/9/1,A,100\n'), importCardSettings, [])).status, 'none');
 
+// このアプリで書き出したCSVを取り込み直す（往復しても、向き・費目・件数が変わらない）
+accountById['rt-bank'] = { id: 'rt-bank', name: 'テスト銀行', kind: 'bank' };
+const roundTripOriginals = [
+  { id: 'rt1', date: '2026-09-05', type: 'expense', amount: 1200, account: 'rt-bank', category: 'food', sub: '外食', description: 'テストショウテン', memo: '', include: true, createdAt: 1 },
+  { id: 'rt2', date: '2026-09-25', type: 'income', amount: 300000, account: 'rt-bank', category: 'salary', sub: '賞与', description: 'ショウヨ', memo: '', include: true, createdAt: 2 },
+];
+const roundTripRows = parseCsv(transactionsToCsvText(roundTripOriginals));
+const roundTripSettings = { hasHeader: true, columns: { date: 1, description: 2, amount: 3, out: -1, in: -1, account: 4, category: 5, sub: 6, memo: 7, transfer: 8, include: 0 }, amountMode: 'signed', invert: looksLikeCardStatement(roundTripRows[0], [-1200, 300000]), accountId: 'rt-bank' };
+same('往復: 書き出したCSVは、プラスを支出として読まない', roundTripSettings.invert, false);
+const roundTripFresh = convertCsvRows(roundTripRows, roundTripSettings, [], [accountById['rt-bank']]);
+same('往復: 賞与は収入のまま', roundTripFresh.ready[1].type, 'income');
+same('往復: 賞与の費目もそのまま', roundTripFresh.ready[1].category + '/' + roundTripFresh.ready[1].sub, 'salary/賞与');
+same('往復: 支出は支出のまま', roundTripFresh.ready[0].type, 'expense');
+same('往復: 同じデータに取り込み直すと、全部が重複', convertCsvRows(roundTripRows, roundTripSettings, roundTripOriginals, [accountById['rt-bank']]).ready.length, 0);
+
+// 向きが逆になって入ってしまった明細（前の版で、プラスを支出として読んだもの）を見つける
+const flippedCopy = { ...roundTripOriginals[1], id: 'bad1', type: 'expense', category: 'other', sub: '未分類', createdAt: 99 };
+const flippedPairs = findFlippedCopies([...roundTripOriginals, flippedCopy]);
+same('逆向きの重複: 1組見つかる', flippedPairs.length, 1);
+same('逆向きの重複: 消す候補は、あとから入った方', flippedPairs[0].copy.id, 'bad1');
+same('逆向きの重複: 元の明細も示す', flippedPairs[0].original.id, 'rt2');
+same('逆向きの重複: 金額がちがえば別の明細', findFlippedCopies([...roundTripOriginals, { ...flippedCopy, amount: 299999 }]).length, 0);
+same('逆向きの重複: 向きが同じなら対象外（ふつうの重複）', findFlippedCopies([...roundTripOriginals, { ...roundTripOriginals[1], id: 'same1', createdAt: 99 }]).length, 0);
+
 same('日付: 月の足し算（年またぎ）', addMonths('2026-11', 3), '2027-02');
 same('日付: 月末の補正', dayInMonthText('2027-02', 31), '2027-02-28');
 same('日付: 和暦', toWarekiText('2026-09-14'), 'R8.09.14');
