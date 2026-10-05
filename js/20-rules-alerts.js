@@ -18,7 +18,7 @@
 
 const SEEN_RULES_KEY = 'mamecho-seen-rules';
 const ALERT_WINDOW_DAYS = 60;   // 変更の開始日がこの日数より前なら、もう知らせない
-const APP_VERSION = '1.6.0';    // アプリの版（機能を足したら上げる）
+const APP_VERSION = '1.6.1';    // アプリの版（機能を足したら上げる）
 
 
 /* ===========================================================

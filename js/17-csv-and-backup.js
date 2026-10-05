@@ -581,10 +581,16 @@ function findHeaderRow(rows) {
 
 /**
  * カードの明細か（金額のプラスが「支払い」の意味）を見分ける。
+ * マネーフォワード ME の形（大項目・保有金融機関の列がある）は、支出がマイナスなのでカードではない。
  * 見出しにカードらしい名前（利用金額・利用店・支払区分など）があればカード。
  * なければ、金額のほとんど（9割より多く）がプラスならカード（返品の分だけマイナスになる）。
  */
 function looksLikeCardStatement(headerRow, amounts) {
+  // マネーフォワード ME（とこのアプリの書き出し）の形は、支出が最初からマイナスなので、ひっくり返さない
+  const names = headerRow.map((cell) => String(cell).trim());
+  if (names.includes('大項目') && (names.includes('保有金融機関') || names.includes('計算対象'))) {
+    return false;
+  }
   const cardWords = /利用金額|ご利用金額|利用店|ご利用先|加盟店|支払区分|お支払い区分|ご利用者/;
   if (headerRow.some((cell) => cardWords.test(String(cell)))) {
     return true;
