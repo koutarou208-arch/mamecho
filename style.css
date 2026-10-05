@@ -47,6 +47,12 @@
   /* 文字として読める濃さの青（収入の金額表示） */
   --income-text: #1c5cab;
   --income-soft: #e4eefb;
+  /* カテゴリのマークの色（地の色 / 文字の色）。文字は地に対して 5.5:1 以上の見やすさ */
+  --tone-meal-bg: #fce8e1;  --tone-meal-text: #994422;
+  --tone-fun-bg: #fcebf1;   --tone-fun-text: #8b4a62;
+  --tone-move-bg: #ddf3eb;  --tone-move-text: #106b4a;
+  --tone-self-bg: #fcf1d9;  --tone-self-text: #825900;
+  --tone-fixed-bg: #e4e1f2; --tone-fixed-text: #4a3aa7;
 
   /* 状態の色（予算の「順調・注意・超過」）。必ずアイコンと文字もいっしょに出す */
   --good: #0ca30c;
@@ -98,6 +104,11 @@
     --grid: #252e2a;
     --income-text: #80b4f2;
     --income-soft: #1a2a3f;
+    --tone-meal-bg: #452b1c;  --tone-meal-text: #e99f81;
+    --tone-fun-bg: #442932;   --tone-fun-text: #e79ab6;
+    --tone-move-bg: #173b2e;  --tone-move-text: #75c5a9;
+    --tone-self-bg: #413513;  --tone-self-text: #dcb15c;
+    --tone-fixed-bg: #33354b; --tone-fixed-text: #b8b1f1;
     --good-text: #45c445;
     --warn-text: #f2bb4f;
     --over-text: #ff8a85;
@@ -128,6 +139,11 @@
   --grid: #252e2a;
   --income-text: #80b4f2;
   --income-soft: #1a2a3f;
+  --tone-meal-bg: #452b1c;  --tone-meal-text: #e99f81;
+  --tone-fun-bg: #442932;   --tone-fun-text: #e79ab6;
+  --tone-move-bg: #173b2e;  --tone-move-text: #75c5a9;
+  --tone-self-bg: #413513;  --tone-self-text: #dcb15c;
+  --tone-fixed-bg: #33354b; --tone-fixed-text: #b8b1f1;
   --good-text: #45c445;
   --warn-text: #f2bb4f;
   --over-text: #ff8a85;
@@ -497,6 +513,12 @@ main:focus { outline: none; }
 }
 .mark.income { background: var(--income-soft); color: var(--income-text); box-shadow: none; }
 .mark.transfer, .mark.adjust { background: transparent; box-shadow: inset 0 0 0 1px var(--rule-strong); color: var(--muted); }
+/* カテゴリごとの色（似た種類は同じ色。漢字でも見分けられる） */
+.mark.tone-meal  { background: var(--tone-meal-bg);  color: var(--tone-meal-text);  box-shadow: none; }
+.mark.tone-fun   { background: var(--tone-fun-bg);   color: var(--tone-fun-text);   box-shadow: none; }
+.mark.tone-move  { background: var(--tone-move-bg);  color: var(--tone-move-text);  box-shadow: none; }
+.mark.tone-self  { background: var(--tone-self-bg);  color: var(--tone-self-text);  box-shadow: none; }
+.mark.tone-fixed { background: var(--tone-fixed-bg); color: var(--tone-fixed-text); box-shadow: none; }
 
 /* 入出金画面の絞り込み */
 .filters {

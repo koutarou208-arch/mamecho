@@ -104,9 +104,10 @@ mamecho/
 `js/01-categories.js` の `EXPENSE_CATEGORIES`（支出）か `INCOME_CATEGORIES`（収入）に1行足します。
 
 ```js
-{ id: 'pet', name: 'ペット', mark: 'ペ', subs: ['フード', '病院', 'トリミング'] },
+{ id: 'pet', name: 'ペット', mark: 'ペ', tone: 'meal', subs: ['フード', '病院', 'トリミング'] },
 ```
 
+- `tone` はマークの色（`meal`・`fun`・`move`・`self`・`fixed`。書かなければ灰色）。
 - `id` は英数字で、ほかと重ならない名前に。**一度使い始めたら変えない**でください（保存データがこの名前を使っています）。
 - `name`（表示名）はあとから変えてもOKです。
 

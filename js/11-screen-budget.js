@@ -87,7 +87,7 @@ function budgetViewHtml(period) {
     const categoryStatus = budgetStatus(spent, limit, elapsed);
     const remain = limit - spent;
     html += '<div class="budget-row">';
-    html += '<span class="cat-name"><span class="mark" aria-hidden="true">' + category.mark + '</span><span>' + category.name + '</span></span>';
+    html += '<span class="cat-name"><span class="mark' + categoryToneClass(category) + '" aria-hidden="true">' + category.mark + '</span><span>' + category.name + '</span></span>';
     html += '<div class="meter-wrap">' + budgetMeterHtml(spent, limit, elapsed, categoryStatus) +
       '<div class="budget-figures"><span class="num">' + formatYen(spent) + ' / ' + formatYen(limit) + '</span>' +
       '<span class="num">' + (remain >= 0 ? '残り ' + formatYen(remain) : formatYen(-remain) + ' 超過') + '</span></div></div>';
@@ -150,7 +150,7 @@ function budgetEditHtml() {
 
   for (const category of LIVING_EXPENSE_CATEGORIES) {
     html += '<div class="budget-edit-row">' +
-      '<label for="budget-' + category.id + '" class="cat-name"><span class="mark" aria-hidden="true">' + category.mark + '</span><span>' + category.name + '</span></label>' +
+      '<label for="budget-' + category.id + '" class="cat-name"><span class="mark' + categoryToneClass(category) + '" aria-hidden="true">' + category.mark + '</span><span>' + category.name + '</span></label>' +
       '<input id="budget-' + category.id + '" class="budget-input" inputmode="numeric" data-budget-input="' + category.id + '" value="' + escapeHtml(draft[category.id] || '') + '" placeholder="なし">' +
       '</div>';
   }

@@ -815,6 +815,14 @@ check('立体: 面の明るさは0〜1', boxFaces.every((face) => face.light >= 
 check('立体: 上の面がいちばん明るい', boxFaces.every((face) => face.light <= topFace.light));
 check('立体: 面の角は4つ', boxFaces.every((face) => face.points.length === 4));
 
+section('カテゴリのマークの色');
+same('食費は「食べる・暮らす」の色', categoryToneClass(CATEGORY_BY_ID.food), ' tone-meal');
+same('家賃は「固定費」の色', categoryToneClass(CATEGORY_BY_ID.housing), ' tone-fixed');
+same('その他は色なし（灰色）', categoryToneClass(CATEGORY_BY_ID.other), '');
+same('カテゴリが無くても止まらない', categoryToneClass(undefined), '');
+check('固定費のカテゴリはすべて「固定費」の色', EXPENSE_CATEGORIES.filter((category) => category.fixed).every((category) => category.tone === 'fixed'));
+check('使っている色の系統は、すべて説明がある', EXPENSE_CATEGORIES.every((category) => !category.tone || Boolean(CATEGORY_TONES[category.tone])));
+
 /* ===========================================================
    結果
    =========================================================== */

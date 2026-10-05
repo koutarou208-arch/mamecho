@@ -180,6 +180,9 @@ function transactionRowHtml(transaction, options) {
   } else {
     const category = CATEGORY_BY_ID[transaction.category] || CATEGORY_BY_ID.other;
     markText = category.mark;
+    if (transaction.type === 'expense') {
+      markClass += categoryToneClass(category);
+    }
     meta = (transaction.sub || category.name) + ' · ' + accountName(transaction.account);
     fallbackName = category.name;
   }

@@ -22,23 +22,24 @@
      mark  … 一覧の左に出る1文字のマーク
      subs  … 中項目（細かい分類）のリスト
      fixed … true なら「固定費」（毎月ほぼ同じ額が出ていくもの）
+     tone  … マークの色の系統（似たものは同じ色。下の CATEGORY_TONES を参照）
    ----------------------------------------------------------- */
 const EXPENSE_CATEGORIES = [
-  { id: 'food',      name: '食費',         mark: '食', subs: ['食料品', '外食', 'カフェ', 'その他食費'] },
-  { id: 'daily',     name: '日用品',       mark: '日', subs: ['日用品', 'ドラッグストア', 'ペット用品', '子育て用品'] },
-  { id: 'hobby',     name: '趣味・娯楽',   mark: '遊', subs: ['書籍・漫画', '映画・音楽・ゲーム', 'サブスク', '旅行', 'その他趣味'] },
-  { id: 'social',    name: '交際費',       mark: '交', subs: ['飲み会', 'プレゼント', '冠婚葬祭', 'その他交際費'] },
-  { id: 'transport', name: '交通費',       mark: '駅', subs: ['電車', 'バス', 'タクシー', '飛行機', 'その他交通費'] },
-  { id: 'clothes',   name: '衣服・美容',   mark: '衣', subs: ['衣服', '靴・バッグ', '美容院・理髪', '化粧品', 'クリーニング'] },
-  { id: 'health',    name: '健康・医療',   mark: '医', subs: ['病院・薬', 'フィットネス', 'ボディケア'] },
-  { id: 'car',       name: '自動車',       mark: '車', subs: ['ガソリン', '駐車場', '自動車保険', '車検・整備', '自動車ローン'] },
-  { id: 'education', name: '教養・教育',   mark: '学', subs: ['書籍', '習い事', '新聞・雑誌', '学費', '塾'] },
+  { id: 'food',      name: '食費',         mark: '食', tone: 'meal', subs: ['食料品', '外食', 'カフェ', 'その他食費'] },
+  { id: 'daily',     name: '日用品',       mark: '日', tone: 'meal', subs: ['日用品', 'ドラッグストア', 'ペット用品', '子育て用品'] },
+  { id: 'hobby',     name: '趣味・娯楽',   mark: '遊', tone: 'fun', subs: ['書籍・漫画', '映画・音楽・ゲーム', 'サブスク', '旅行', 'その他趣味'] },
+  { id: 'social',    name: '交際費',       mark: '交', tone: 'fun', subs: ['飲み会', 'プレゼント', '冠婚葬祭', 'その他交際費'] },
+  { id: 'transport', name: '交通費',       mark: '駅', tone: 'move', subs: ['電車', 'バス', 'タクシー', '飛行機', 'その他交通費'] },
+  { id: 'clothes',   name: '衣服・美容',   mark: '衣', tone: 'self', subs: ['衣服', '靴・バッグ', '美容院・理髪', '化粧品', 'クリーニング'] },
+  { id: 'health',    name: '健康・医療',   mark: '医', tone: 'self', subs: ['病院・薬', 'フィットネス', 'ボディケア'] },
+  { id: 'car',       name: '自動車',       mark: '車', tone: 'move', subs: ['ガソリン', '駐車場', '自動車保険', '車検・整備', '自動車ローン'] },
+  { id: 'education', name: '教養・教育',   mark: '学', tone: 'self', subs: ['書籍', '習い事', '新聞・雑誌', '学費', '塾'] },
   { id: 'special',   name: '特別な支出',   mark: '特', subs: ['家具・家電', '住宅・リフォーム', '引っ越し', 'その他特別な支出'] },
-  { id: 'utility',   name: '水道・光熱費', mark: '光', subs: ['電気代', 'ガス・灯油代', '水道代'], fixed: true },
-  { id: 'phone',     name: '通信費',       mark: '信', subs: ['携帯電話', 'インターネット', '放送視聴料', '郵便・宅配'], fixed: true },
-  { id: 'housing',   name: '住宅',         mark: '住', subs: ['家賃・地代', '住宅ローン', '管理費・積立金'], fixed: true },
-  { id: 'insurance', name: '保険',         mark: '保', subs: ['生命保険', '医療保険', 'その他保険'], fixed: true },
-  { id: 'tax',       name: '税・社会保障', mark: '税', subs: ['所得税・住民税', '年金保険料', '健康保険', 'その他税'], fixed: true },
+  { id: 'utility',   name: '水道・光熱費', mark: '光', tone: 'fixed', subs: ['電気代', 'ガス・灯油代', '水道代'], fixed: true },
+  { id: 'phone',     name: '通信費',       mark: '信', tone: 'fixed', subs: ['携帯電話', 'インターネット', '放送視聴料', '郵便・宅配'], fixed: true },
+  { id: 'housing',   name: '住宅',         mark: '住', tone: 'fixed', subs: ['家賃・地代', '住宅ローン', '管理費・積立金'], fixed: true },
+  { id: 'insurance', name: '保険',         mark: '保', tone: 'fixed', subs: ['生命保険', '医療保険', 'その他保険'], fixed: true },
+  { id: 'tax',       name: '税・社会保障', mark: '税', tone: 'fixed', subs: ['所得税・住民税', '年金保険料', '健康保険', 'その他税'], fixed: true },
   { id: 'other',     name: 'その他',       mark: '他', subs: ['未分類', '雑費', 'カード手数料', '仕送り', '使途不明金'] },
   // 株式などの売買で出た損。収支には入るが、生活費ではないので予算の対象にはしない（investment: true）
   { id: 'tradeLoss', name: '投資の損失',   mark: '損', subs: ['株式の売却損', '投資信託の売却損', '先物・FX', 'その他の損失'], investment: true },
@@ -61,6 +62,28 @@ const INCOME_CATEGORIES = [
   // 株式などの売買で出た益。収支に入る（trade は「売買益」の id）
   { id: 'trade',    name: '投資の利益',   mark: '益', subs: ['株式の売却益', '投資信託の売却益', '先物・FX', 'その他の利益'], investment: true },
 ];
+
+
+/* -----------------------------------------------------------
+   マークの色の系統（色は style.css の .mark.tone-○○ で決めている）
+   色だけに頼らず、マークの漢字でも見分けられるようにしてある。
+   tone のないカテゴリ（特別な支出・その他・投資の損失）は灰色。
+   ----------------------------------------------------------- */
+const CATEGORY_TONES = {
+  meal:  '食べる・暮らす（だいだい色）',
+  fun:   '楽しむ・付き合う（もも色）',
+  move:  '移動する（みどり色）',
+  self:  '自分に使う（からし色）',
+  fixed: '毎月の固定費（むらさき色）',
+};
+
+/** カテゴリのマークに付ける色のクラス名を返す（例: ' tone-meal'）。色がなければ空の文字 */
+function categoryToneClass(category) {
+  if (category && category.tone) {
+    return ' tone-' + category.tone;
+  }
+  return '';
+}
 
 
 /* -----------------------------------------------------------

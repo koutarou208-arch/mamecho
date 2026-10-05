@@ -128,7 +128,7 @@ function reportCategoryCardHtml(period) {
   for (const row of rows) {
     const share = total > 0 ? (row.amount / total) * 100 : 0;
     html += '<details><summary class="cat-row">';
-    html += '<span class="cat-name"><span class="mark ' + (type === 'income' ? 'income' : '') + '" aria-hidden="true">' + row.category.mark + '</span><span>' + row.category.name + '</span></span>';
+    html += '<span class="cat-name"><span class="mark ' + (type === 'income' ? 'income' : categoryToneClass(row.category)) + '" aria-hidden="true">' + row.category.mark + '</span><span>' + row.category.name + '</span></span>';
     html += '<span class="num">' + formatYen(row.amount) + '</span>';
     html += '<span class="share"><span class="share-track"><span class="share-bar ' + (type === 'income' ? 'income' : '') + '" style="display:block; width:' + share.toFixed(1) + '%"></span></span><span class="num small">' + share.toFixed(0) + '%</span></span>';
     html += '<span class="num">' + differenceHtml(row.amount - row.previousAmount, type) + '</span>';
