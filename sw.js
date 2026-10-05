@@ -7,7 +7,7 @@
    ※ ファイルを大きく変えたら、下の CACHE_NAME の数字を上げてください
    =========================================================== */
 
-const CACHE_NAME = 'mamecho-v9';
+const CACHE_NAME = 'mamecho-v10';
 
 // 最初に覚えておくファイル（アプリ本体）
 const APP_FILES = [

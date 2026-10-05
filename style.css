@@ -252,7 +252,7 @@ main:focus { outline: none; }
 .period-label strong { font-size: 15px; font-weight: 600; }
 .period-label span { font-size: 11px; color: var(--muted); }
 .top-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
-.only-mobile, .icon-btn.only-mobile { display: none; } /* .icon-btn の display より強くして、パソコンでは隠す */
+.only-mobile, .icon-btn.only-mobile, .fab.only-mobile { display: none; } /* .icon-btn の display より強くして、パソコンでは隠す */
 
 /* お知らせ帯 */
 #banner { max-width: 1160px; margin-inline: auto; }
@@ -856,11 +856,29 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .app { grid-template-columns: minmax(0, 1fr); }
   .side { display: none; }
   .brand-mobile { display: flex; }
-  .only-mobile, .icon-btn.only-mobile { display: inline-grid; }
+  .only-mobile, .icon-btn.only-mobile, .fab.only-mobile { display: inline-grid; }
+  .only-desktop, .btn.only-desktop { display: none; }
+  /* 浮かぶ「記録する」ボタン（下のタブのすぐ上の右）。トーストはその上に出す */
+  .fab {
+    position: fixed; z-index: 21;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    bottom: calc(84px + 14px + env(safe-area-inset-bottom, 0px));
+    place-items: center;
+    width: 58px; height: 58px;
+    border: 0; border-radius: 50%;
+    background: var(--accent); color: var(--accent-ink);
+    box-shadow: 0 4px 14px rgba(16, 36, 26, 0.28);
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: transform 0.12s ease;
+  }
+  .fab .icon { width: 26px; height: 26px; stroke-width: 2.4; }
+  .fab:active { transform: scale(0.92); }
   .topbar { gap: 8px 12px; padding-block: 12px 10px; }
   .topbar h1 { font-size: 20px; }
   .period-bar { order: 3; width: 100%; justify-content: center; }
-  .main-wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  /* 下のタブと、浮かぶ「記録する」ボタンの分だけ、下をあける（最後の行がボタンに隠れないように） */
+  .main-wrap { padding-bottom: calc(84px + 84px + env(safe-area-inset-bottom, 0px)); }
   .tabbar {
     display: grid; grid-template-columns: repeat(6, 1fr);
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
@@ -888,7 +906,7 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
     transition: transform 0.28s cubic-bezier(0.3, 0.9, 0.3, 1);
   }
   .tab-item { transition: color 0.2s ease; -webkit-tap-highlight-color: transparent; }
-  .toast { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .toast { bottom: calc(84px + 84px + env(safe-area-inset-bottom, 0px)); }
 }
 
 /* 小さいスマホ: さらに詰める */

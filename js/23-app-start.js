@@ -104,6 +104,8 @@ function fillIcons(container) {
 
 function renderApp() {
   renderNavigation();
+  // スマホの浮かぶ「記録する」ボタンは、家計簿を開いているときだけ出す（ロック中・読み込み中は出さない）
+  findOne('#fabRecordButton').hidden = appState.locked || !appState.profile;
   renderBanner();
   setSaveStatus(appState.saveStatus);
 

@@ -101,7 +101,7 @@
       <div class="top-actions">
         <button class="icon-btn only-mobile" data-action="go" data-screen="takehome" aria-label="手取り計算" id="mobileTakeHomeButton" data-icon="calc"></button>
         <button class="icon-btn only-mobile" data-action="go" data-screen="settings" aria-label="設定" id="mobileSettingsButton" data-icon="settings"></button>
-        <button class="btn primary" data-action="new-transaction" id="newTransactionButton" data-icon="plus">記録する</button>
+        <button class="btn primary only-desktop" data-action="new-transaction" id="newTransactionButton" data-icon="plus">記録する</button>
       </div>
     </header>
 
@@ -111,6 +111,9 @@
     <!-- ===== ここに各画面の中身が入る ===== -->
     <main id="screen" tabindex="-1"></main>
   </div>
+
+  <!-- ===== スマホ用の「記録する」ボタン（下のタブのすぐ上・親指が届く所に浮かべる） ===== -->
+  <button type="button" class="fab only-mobile" data-action="new-transaction" id="fabRecordButton" aria-label="記録する" data-icon="plus" hidden></button>
 
   <!-- ===== スマホ用の下のタブ ===== -->
   <nav class="tabbar" id="tabBar" aria-label="メニュー"></nav>
