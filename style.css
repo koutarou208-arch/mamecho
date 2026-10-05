@@ -835,11 +835,14 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 /* タブレットくらいの幅: カードを1列に */
 @media (max-width: 1020px) {
   .span-7, .span-5, .span-6, .span-4, .span-8 { grid-column: span 12; }
-  /* ホームは「総資産」のすぐ下に「株の利益の安心ライン」を出す（ほかのカードはその後ろ） */
-  .home-grid > .card { order: 5; }
+  /* ホーム（1列のとき）は、毎日見るものを上に: 今月の収支 → 総資産 → 株の安心ライン → カード → 最近 → 内訳 */
+  .home-grid > .card { order: 9; }
   .home-grid > .home-welcome { order: 0; }
-  .home-grid > .home-asset { order: 1; }
-  .home-grid > .safety-card { order: 2; }
+  .home-grid > .home-month { order: 1; }
+  .home-grid > .home-asset { order: 2; }
+  .home-grid > .safety-card { order: 3; }
+  .home-grid > .home-cardpay { order: 4; }
+  .home-grid > .home-recent { order: 5; }
 }
 
 .recurring-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; align-items: end; }

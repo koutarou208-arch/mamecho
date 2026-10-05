@@ -1,7 +1,9 @@
 /* ===========================================================
    08-screen-home.js  ―  ホーム画面
    -----------------------------------------------------------
-   開いたときに最初に出る画面です。上から:
+   開いたときに最初に出る画面です。スマホでは、毎日見るものを上にする
+   （今月の収支 → 総資産 → 株の安心ライン → カードの引き落とし → 最近の入出金 → 内訳。並べかえは style.css）。
+   パソコンでは上から:
      ・はじめての人への案内（記録がまだないときだけ）
      ・総資産と、その推移のグラフ
      ・資産の内訳
@@ -42,6 +44,8 @@ const HomeScreen = {
     if (safetyArea) {
       const dayRows = homeSafetyDayRows(period);
       registerChart(() => drawDailySafetyChart(safetyArea, dayRows));
+      // たたんであったグラフは、開いたときに幅に合わせて描き直す
+      findOne('#safetyMore').addEventListener('toggle', redrawCharts);
     }
     const chartArea = findOne('#assetTrendChart');
     if (chartArea) {
@@ -64,7 +68,7 @@ function homeWelcomeHtml() {
     '<div class="card-head"><h2>はじめに</h2></div>' +
     '<ol class="welcome-steps">' +
     '<li><strong>口座を登録する</strong><span>財布・銀行・カードなどと、今の残高を入れます。</span><button class="btn small" data-action="go" data-screen="accounts">口座へ</button></li>' +
-    '<li><strong>入出金を記録する</strong><span>右上の「記録する」から。CSVでまとめて取り込むこともできます。</span><button class="btn small" data-action="open-import">CSVを取り込む</button></li>' +
+    '<li><strong>入出金を記録する</strong><span>「記録する」（スマホは右下の＋）から。CSVでまとめて取り込むこともできます。</span><button class="btn small" data-action="open-import">CSVを取り込む</button></li>' +
     '<li><strong>予算を決める</strong><span>カテゴリごとに月の上限を決めると、使いすぎが分かります。</span><button class="btn small" data-action="go" data-screen="budget">予算へ</button></li>' +
     '</ol></section>';
 }
@@ -132,7 +136,7 @@ function homeMonthCardHtml(period) {
   const balance = summary.income - summary.expense;
   const isCurrent = isCurrentPeriod(period);
 
-  let html = '<section class="card span-7">';
+  let html = '<section class="card span-7 home-month">';
   html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の収支</h2><span class="sub">' + periodRangeText(period) + '</span>' +
     '<button class="link-btn" data-action="go" data-screen="report">家計簿を見る</button></div>';
 
@@ -274,6 +278,8 @@ function homeTradeSafetyCardHtml(period) {
     '<button type="button" class="btn small" data-action="new-trade" data-kind="loss" data-icon="plus">株の損失を記録</button></div>';
   html += '<p class="safety-headline">' + headline + '</p>';
   html += '<p class="small muted">安心ライン: ' + lineName + '</p>';
+  // ここから下（説明・メーター・数字・グラフ）は「くわしく」にたたむ。アウトのときは最初から開く
+  html += '<details class="more safety-more" id="safetyMore"' + (salaryRule.out ? ' open' : '') + '><summary>くわしく</summary>';
 
   // 給与のルールの説明（1行）
   if (salaryRule.basis === 'none') {
@@ -316,6 +322,7 @@ function homeTradeSafetyCardHtml(period) {
     }
     html += '</tbody></table></div></details>';
   }
+  html += '</details>';
   html += '</section>';
   return html;
 }
@@ -329,7 +336,7 @@ function homeCardPaymentsHtml() {
   if (cards.length === 0) {
     return '';
   }
-  let html = '<section class="card span-5">';
+  let html = '<section class="card span-5 home-cardpay">';
   html += '<div class="card-head"><h2>カードの引き落とし予定</h2><button class="link-btn" data-action="go" data-screen="cards">カードを見る</button></div>';
   html += '<ul class="plain-list">';
   for (const card of cards) {
@@ -392,7 +399,7 @@ function homeRecentCardHtml() {
   const today = todayText();
   const recent = allTransactions.filter((item) => item.date <= today).slice(0, 8);
   const span = cardAccounts().length > 0 ? 'span-5' : 'span-12';
-  let html = '<section class="card ' + span + '">';
+  let html = '<section class="card home-recent ' + span + '">';
   html += '<div class="card-head"><h2>最近の入出金</h2><button class="link-btn" data-action="go" data-screen="transactions">すべて見る</button></div>';
   if (recent.length === 0) {
     html += '<p class="empty-note">まだ記録がありません。</p>';
