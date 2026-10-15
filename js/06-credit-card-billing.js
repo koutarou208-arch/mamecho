@@ -158,6 +158,19 @@ function paymentDateOf(billMonth, settings) {
   return dayInMonthText(billMonth, settings.paymentDay);
 }
 
+/**
+ * まだ支払日が来ていない、いちばん早い請求の月（今月から順に見て、支払日が今日以降の月）。
+ * 例: 15日締め・翌月10日払いで今日が10/16なら "2026-11"（11/10払い。9/16〜10/15の利用分）。
+ * 「今日の買い物を払う月」（12月）ではないことに注意。
+ */
+function firstUnpaidBillMonth(today, settings) {
+  let month = today.slice(0, 7);
+  for (let guard = 0; guard < 24 && paymentDateOf(month, settings) < today; guard++) {
+    month = addMonths(month, 1);
+  }
+  return month;
+}
+
 /** 何月の請求が確定する締め日 */
 function closingDateOf(billMonth, settings) {
   return dayInMonthText(addMonths(billMonth, -settings.monthsLater), settings.closingDay);

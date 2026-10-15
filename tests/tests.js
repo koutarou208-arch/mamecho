@@ -271,6 +271,14 @@ bill = billOf(account, [provisional], '2026-10');
 same('仮の支出: 請求の「手入力」の欄に出る', bill && bill.parts.manual, 150000);
 same('仮の支出: 1回払いの欄には重ねて出ない', bill && bill.parts.once, 0);
 
+// 手入力で選べる月: まだ支払日が来ていない、いちばん早い月から（15日締め・翌月10日払い）
+const jcbSettings = cardSettings(account);
+same('選べる最初の月: 締め日のあと（10/16）でも、11/10払いがまだなら11月から', firstUnpaidBillMonth('2026-10-16', jcbSettings), '2026-11');
+same('選べる最初の月: 支払日の当日（10/10）は10月から', firstUnpaidBillMonth('2026-10-10', jcbSettings), '2026-10');
+same('選べる最初の月: 支払日の次の日（10/11）は11月から', firstUnpaidBillMonth('2026-10-11', jcbSettings), '2026-11');
+same('選べる最初の月: 月末締め・翌月27日払いなら、10/15は10月から', firstUnpaidBillMonth('2026-10-15', { closingDay: 31, paymentDay: 27, monthsLater: 1 }), '2026-10');
+same('選べる最初の月: 年をまたぐ（12/20 → 1月）', firstUnpaidBillMonth('2026-12-20', jcbSettings), '2027-01');
+
 // 古い形（残高修正として保存されたもの）を、支出の形に直す
 const legacyManual = { id: 'old1', date: '2026-09-18', type: 'adjust', amount: -150000, account: 'test-card', description: '支払い予定（手入力）2026年10月', memo: '', include: true, createdAt: 1, manualBill: true, billMonth: '2026-10' };
 check('古い手入力: 直す対象と判定される', upgradeManualBill(legacyManual) === true);

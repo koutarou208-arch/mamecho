@@ -258,11 +258,8 @@ function recordBillFromButton(accountId, month) {
  */
 function manualBillFormHtml(account, settings) {
   const today = todayText();
-  // 選べる月: 支払日がまだ来ていない月から36か月分
-  let month = billingMonthOf(today, settings);
-  if (paymentDateOf(month, settings) < today) {
-    month = addMonths(month, 1);
-  }
+  // 選べる月: 支払日がまだ来ていない、いちばん早い月から36か月分（締め日を過ぎていても、前の締めの分はまだ払っていない）
+  let month = firstUnpaidBillMonth(today, settings);
   let options = '';
   for (let count = 0; count < 36; count++) {
     options += '<option value="' + month + '">' + formatMonthText(month) + '（' + formatShortDate(paymentDateOf(month, settings)) + '払い）</option>';
