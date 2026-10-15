@@ -336,7 +336,7 @@ main:focus { outline: none; }
   border-radius: 10px;
   background: var(--surface-2);
 }
-.seg input { position: absolute; opacity: 0; pointer-events: none; }
+.seg input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; } /* 見えない選択肢。幅いっぱいだと画面の右にはみ出す */
 .seg label, .seg button {
   padding: 6px 16px;
   border: 0; border-radius: 7px;
@@ -784,6 +784,23 @@ input, select, textarea {
 textarea { font-family: ui-monospace, Menlo, monospace; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
+input[type="radio"] { width: auto; }
+
+/* iPhone（Safari）の入力欄の癖をおさえる。パソコンの Chrome では起きないので、見落としやすい。
+   ・日付・月の欄: iPhone は中身の幅を優先して、横幅100%を無視し右にはみ出す。文字も真ん中に寄る。
+     → 見た目を自前（appearance: none）にして、幅に従わせ、左寄せにする
+   ・空の日付欄は低くなり、選択欄は少し低い → 高さを 46px にそろえる
+   ・検索欄: iPhone が付ける丸い角と内側のすき間を消す */
+input[type="date"], input[type="month"], input[type="time"] {
+  -webkit-appearance: none; appearance: none;
+  display: block;
+  height: 46px;
+  text-align: left;
+}
+input::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="search"] { -webkit-appearance: none; appearance: none; }
+input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 46px; }
 .field { display: grid; gap: 6px; min-width: 0; }
 .field > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
 .field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }

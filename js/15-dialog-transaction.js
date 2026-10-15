@@ -318,7 +318,9 @@ function refreshPaymentMethodOptions(selectedMethod) {
 /** カードの支出のときだけ、支払い方法の欄を見せる */
 function updatePaymentFieldsVisibility() {
   const account = accountById[findOne('#transactionAccount').value];
-  const isCardExpense = currentDialogType() === 'expense' && account && account.kind === 'card';
+  // 月の支払い金額の手入力（仮の支出）は請求月が決まっているので、支払い方法は使わない（出さない）
+  const isManualBill = Boolean(transactionDialog.editing && transactionDialog.editing.manualBill);
+  const isCardExpense = currentDialogType() === 'expense' && account && account.kind === 'card' && !isManualBill;
   findOne('#paymentMethodFields').hidden = !isCardExpense;
   if (!isCardExpense) {
     return;
