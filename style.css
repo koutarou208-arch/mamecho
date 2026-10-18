@@ -254,6 +254,11 @@ main:focus { outline: none; }
   gap: 12px 20px;
   padding-block: 18px 14px;
   background: var(--bg);
+  /* 背景の色を、左右のすき間（--gutter）と上（時計などがある所）まで広げる。
+     スクロールで下に入ったカードの枠や赤い輪が、帯の両脇・上から見えないようにするため。
+     （影を大きく広げて、clip-path で「下には広げない・横はすき間の分だけ」に切る。ページは広がらない） */
+  box-shadow: 0 0 0 100vmax var(--bg);
+  clip-path: inset(-100vmax calc(var(--gutter) * -1) 0 calc(var(--gutter) * -1));
 }
 .topbar h1 {
   font-family: var(--font-display);
