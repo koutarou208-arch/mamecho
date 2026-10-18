@@ -412,6 +412,17 @@ main:focus { outline: none; }
 .stat .label { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-width: 0; overflow-wrap: anywhere; }
 .stat .value { font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; overflow-wrap: anywhere; }
 .stat .value.total { text-decoration: underline double; text-decoration-color: var(--rule-strong); text-underline-offset: 6px; }
+/* 押せる数字（ホームの収入・支出 → 家計簿のカテゴリ別へ） */
+.stat-link {
+  width: 100%; margin: 0; padding: 0;
+  border: 0;
+  background: none; color: inherit; font: inherit; text-align: left;
+  cursor: pointer;
+}
+.stat-link .value { display: inline-flex; align-items: center; gap: 2px; }
+.stat-link .value svg { width: 18px; height: 18px; flex: none; color: var(--muted); }
+.stat-link:hover .label { color: var(--accent); }
+.stat-link:active { background: var(--surface-2); }
 .key { display: inline-block; width: 10px; height: 10px; border-radius: 2px; flex: none; }
 .key.line { height: 2px; width: 14px; border-radius: 1px; }
 .key.dot { border-radius: 50%; }

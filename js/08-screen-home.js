@@ -141,8 +141,9 @@ function homeMonthCardHtml(period) {
     '<button class="link-btn" data-action="go" data-screen="report">家計簿を見る</button></div>';
 
   html += '<div class="stats">' +
-    '<div class="stat"><span class="label"><span class="key" style="background:var(--income)"></span>収入</span><span class="value num income-text">' + formatYen(summary.income) + '</span></div>' +
-    '<div class="stat"><span class="label"><span class="key" style="background:var(--expense)"></span>支出</span><span class="value num">' + formatYen(summary.expense) + '</span></div>' +
+    // 収入・支出は押すと、家計簿の「カテゴリ別」（内訳）がその種類で開く
+    '<button type="button" class="stat stat-link" data-action="show-breakdown" data-value="income" aria-label="収入の内訳を見る"><span class="label"><span class="key" style="background:var(--income)"></span>収入</span><span class="value num income-text">' + formatYen(summary.income) + iconSvg('chevron-right') + '</span></button>' +
+    '<button type="button" class="stat stat-link" data-action="show-breakdown" data-value="expense" aria-label="支出の内訳を見る"><span class="label"><span class="key" style="background:var(--expense)"></span>支出</span><span class="value num">' + formatYen(summary.expense) + iconSvg('chevron-right') + '</span></button>' +
     '<div class="stat"><span class="label">収支</span><span class="value num total">' + formatYen(balance, { showPlus: true }) + '</span></div>' +
     '</div>';
 

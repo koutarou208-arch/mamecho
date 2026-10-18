@@ -350,6 +350,7 @@ const ACTIONS = {
     }
     renderTransactionList();
   },
+  'show-breakdown': (button) => showCategoryBreakdown(button.dataset.value),
   'report-type': (button) => {
     appState.reportType = button.dataset.value;
     renderApp();

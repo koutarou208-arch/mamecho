@@ -91,7 +91,7 @@ function reportCategoryCardHtml(period) {
   const pastThree = [1, 2, 3].map((back) => summarizePeriod(shiftPeriod(period, -back)));
   const total = type === 'income' ? summary.income : summary.expense;
 
-  let html = '<section class="card span-7">';
+  let html = '<section class="card span-7" id="categoryCard">';
   html += '<div class="card-head"><h2>カテゴリ別</h2>' +
     '<div class="seg" role="group" aria-label="支出と収入の切りかえ" style="margin-left:auto">' +
     '<button type="button" data-action="report-type" data-value="expense" aria-pressed="' + (type === 'expense') + '">支出</button>' +
@@ -150,6 +150,26 @@ function reportCategoryCardHtml(period) {
     differenceHtml(total - (type === 'income' ? previous.income : previous.expense), type) + '</span><span></span></div>';
   html += '</div></section>';
   return html;
+}
+
+/**
+ * ホームの「収入」「支出」を押したとき: 家計簿の「カテゴリ別」を、その種類（収入か支出）で開く。
+ * 画面を描いたあと、カテゴリ別のカードが見える位置までスクロールする。
+ */
+function showCategoryBreakdown(type) {
+  appState.reportType = type === 'income' ? 'income' : 'expense';
+  goToScreen('report');
+  requestAnimationFrame(() => {
+    const card = findOne('#categoryCard');
+    if (!card) {
+      return;
+    }
+    // 上の見出しの帯（画面名と月）はスクロールしても上に残るので、その高さの分だけ下で止める
+    const topbar = findOne('.topbar');
+    const topbarHeight = topbar ? topbar.getBoundingClientRect().height : 0;
+    const top = card.getBoundingClientRect().top + window.scrollY - topbarHeight - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  });
 }
 
 /**
