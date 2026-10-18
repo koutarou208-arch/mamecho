@@ -11,7 +11,8 @@
      rankingBarsHtml         … カテゴリ別の支出（横棒ランキング）
      createMoneyColumn3d     … 手取り計算の「立体の積み上げ柱」（指で回せる）
 
-   グラフにマウスをのせる（スマホならタップする）と、吹き出しで数字が出ます。
+   グラフにマウスをのせる（スマホならタップする・横になぞる）と、吹き出しで数字が出ます。
+   グラフの外を押すか、スクロールすると消えます（attachChartPointer）。
    =========================================================== */
 
 
@@ -30,7 +31,66 @@ function registerChart(drawFunction) {
 /** 画面を切りかえるときに、前の画面のグラフを忘れる */
 function clearCharts() {
   chartDrawers = [];
+  hideActiveChart();
+}
+
+
+/* -----------------------------------------------------------
+   グラフにさわると数字が出るしくみ（マウスでも指でも同じ）
+     ・マウス … のせると出る。外れると消える
+     ・指     … タップすると出る（指を離しても消えない）。横になぞると月（日）を切りかえる。
+                 グラフの外を押すか、画面をスクロールすると消える
+   ----------------------------------------------------------- */
+let activeChartHide = null; // 今出ている吹き出しと印を消す関数（出ていなければ null）
+
+/** 今出ているグラフの吹き出しと印を消す */
+function hideActiveChart() {
+  const hide = activeChartHide;
+  activeChartHide = null;
+  if (hide) {
+    hide();
+  }
   hideTooltip();
+}
+
+/**
+ * グラフの「さわる場所」（hitArea）に、マウスと指の操作をつける。
+ *   indexAt(x) … SVG の中の横の位置 x から、何番目の月（日）かを返す
+ *   show(index, clientX, clientY) … その月の吹き出しと印を出す
+ *   hide() … 印を消す
+ */
+function attachChartPointer(svgElement, hitArea, indexAt, show, hide) {
+  function showAt(event) {
+    const box = svgElement.getBoundingClientRect();
+    const viewWidth = svgElement.viewBox.baseVal.width || box.width;
+    const index = indexAt((event.clientX - box.left) * (viewWidth / box.width));
+    if (activeChartHide && activeChartHide !== hide) {
+      activeChartHide(); // ほかのグラフの印は消す
+    }
+    activeChartHide = hide;
+    show(index, event.clientX, event.clientY);
+  }
+  hitArea.addEventListener('pointerdown', showAt);
+  hitArea.addEventListener('pointermove', showAt);
+  hitArea.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'mouse') {
+      hideActiveChart(); // 指のときは、離しても出したままにする
+    }
+  });
+}
+
+/** グラフの外を押したとき・スクロールしたときに、吹き出しを消す（アプリの起動時に1回だけ呼ぶ） */
+function setupChartDismiss() {
+  document.addEventListener('pointerdown', (event) => {
+    if (!event.target.closest('[data-role="hit"], [data-tip-title], #tooltip')) {
+      hideActiveChart();
+    }
+  });
+  window.addEventListener('scroll', () => {
+    if (activeChartHide || !findOne('#tooltip').hidden) {
+      hideActiveChart();
+    }
+  }, { passive: true });
 }
 
 /** 登録されているグラフをすべて描き直す */
@@ -106,12 +166,19 @@ function hideTooltip() {
  */
 function attachSimpleTooltips(container) {
   for (const element of findAll('[data-tip-title]', container)) {
-    element.addEventListener('pointermove', (event) => {
+    function showTip(event) {
+      hideActiveChart();
       showTooltip(event.clientX, event.clientY, element.dataset.tipTitle, [
         { value: element.dataset.tipValue, label: element.dataset.tipLabel || '', color: element.dataset.tipColor, key: 'rect' },
       ]);
+    }
+    element.addEventListener('pointerdown', showTip); // 指でタップしたとき
+    element.addEventListener('pointermove', showTip); // マウスをのせたとき
+    element.addEventListener('pointerleave', (event) => {
+      if (event.pointerType === 'mouse') {
+        hideTooltip();
+      }
     });
-    element.addEventListener('pointerleave', hideTooltip);
   }
 }
 
@@ -252,14 +319,10 @@ function drawAssetTrendChart(container, points) {
     hideTooltip();
   }
 
-  hitArea.addEventListener('pointermove', (event) => {
-    const box = svgElement.getBoundingClientRect();
-    const pointerX = (event.clientX - box.left) * (width / box.width);
-    let index = lastIndex === 0 ? 0 : Math.round(((pointerX - padLeft) / plotWidth) * lastIndex);
-    index = Math.max(0, Math.min(lastIndex, index));
-    showPoint(index, event.clientX, event.clientY);
-  });
-  hitArea.addEventListener('pointerleave', hidePoint);
+  attachChartPointer(svgElement, hitArea, (pointerX) => {
+    const index = lastIndex === 0 ? 0 : Math.round(((pointerX - padLeft) / plotWidth) * lastIndex);
+    return Math.max(0, Math.min(lastIndex, index));
+  }, showPoint, hidePoint);
   svgElement.addEventListener('blur', hidePoint);
   svgElement.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -382,14 +445,10 @@ function drawIncomeExpenseChart(container, rows) {
     hideTooltip();
   }
 
-  hitArea.addEventListener('pointermove', (event) => {
-    const box = svgElement.getBoundingClientRect();
-    const pointerX = (event.clientX - box.left) * (width / box.width);
-    let index = Math.floor((pointerX - padLeft) / bandWidth);
-    index = Math.max(0, Math.min(rows.length - 1, index));
-    showMonth(index, event.clientX, event.clientY);
-  });
-  hitArea.addEventListener('pointerleave', hideMonth);
+  attachChartPointer(svgElement, hitArea, (pointerX) => {
+    const index = Math.floor((pointerX - padLeft) / bandWidth);
+    return Math.max(0, Math.min(rows.length - 1, index));
+  }, showMonth, hideMonth);
   svgElement.addEventListener('blur', hideMonth);
   svgElement.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -565,14 +624,10 @@ function drawCardDebtChart(container, rows) {
     highlight.setAttribute('visibility', 'hidden');
     hideTooltip();
   }
-  hitArea.addEventListener('pointermove', (event) => {
-    const box = svgElement.getBoundingClientRect();
-    const pointerX = (event.clientX - box.left) * (width / box.width);
-    let index = Math.floor((pointerX - padLeft) / bandWidth);
-    index = Math.max(0, Math.min(rows.length - 1, index));
-    showMonth(index, event.clientX, event.clientY);
-  });
-  hitArea.addEventListener('pointerleave', hideMonth);
+  attachChartPointer(svgElement, hitArea, (pointerX) => {
+    const index = Math.floor((pointerX - padLeft) / bandWidth);
+    return Math.max(0, Math.min(rows.length - 1, index));
+  }, showMonth, hideMonth);
   svgElement.addEventListener('blur', hideMonth);
   svgElement.addEventListener('keydown', (event) => {
     if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
@@ -650,8 +705,32 @@ function drawDailySafetyChart(container, rows) {
     const anchor = index === 0 ? 'start' : (index === last ? 'end' : 'middle');
     svg += '<text class="axis-text" x="' + xOf(index).toFixed(1) + '" y="' + (height - 6) + '" text-anchor="' + anchor + '">' + formatShortDate(rows[index].date) + '</text>';
   }
+  // さわった日の縦線と、さわる場所
+  svg += '<line data-role="cross" x1="0" x2="0" y1="' + padTop + '" y2="' + (height - padBottom) + '" stroke="var(--ink-2)" stroke-dasharray="3 3" visibility="hidden"/>';
+  svg += '<rect data-role="hit" x="' + padLeft + '" y="0" width="' + plotWidth + '" height="' + height + '" fill="transparent"/>';
   svg += '</svg>';
   container.innerHTML = svg;
+
+  const svgElement = findOne('svg', container);
+  const cross = findOne('[data-role="cross"]', container);
+  function showDay(index, clientX, clientY) {
+    const x = xOf(index).toFixed(1);
+    cross.setAttribute('x1', x);
+    cross.setAttribute('x2', x);
+    cross.setAttribute('visibility', 'visible');
+    const row = rows[index];
+    showTooltip(clientX, clientY, formatShortDate(row.date) + 'まで', [
+      { value: formatYen(row.needed), label: '必要な株の利益', color: 'var(--expense)', key: 'line' },
+      { value: formatYen(row.tradeNet, { showPlus: true }), label: '株の損益（累計）', color: 'var(--chart-3)', key: 'line' },
+    ]);
+  }
+  function hideDay() {
+    cross.setAttribute('visibility', 'hidden');
+  }
+  attachChartPointer(svgElement, findOne('[data-role="hit"]', container), (pointerX) => {
+    const index = last === 0 ? 0 : Math.round(((pointerX - padLeft) / plotWidth) * last);
+    return Math.max(0, Math.min(last, index));
+  }, showDay, hideDay);
 }
 
 

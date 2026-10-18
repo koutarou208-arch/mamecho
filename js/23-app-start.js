@@ -593,6 +593,7 @@ function start() {
   setupLockDialog();
   setupSwipe();
   enablePressedLook();
+  setupChartDismiss(); // 07-charts.js
   fillIcons(document);
 
   // URL の最後が #cards などなら、その画面から始める（あとで変わったときも追いかける）

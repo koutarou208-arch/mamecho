@@ -565,6 +565,8 @@ main:focus { outline: none; }
    ----------------------------------------------------------- */
 .chart { position: relative; width: 100%; min-height: 60px; }
 .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+/* 指で横になぞると月を切りかえられるように、横の動きはグラフが受け取る（縦のスクロールはそのまま） */
+.chart svg { touch-action: pan-y; }
 .chart svg:focus { outline: none; }
 .chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; border-radius: 4px; }
 .axis-text { fill: var(--muted); font-size: 11px; font-family: var(--font-body); font-variant-numeric: tabular-nums; }
