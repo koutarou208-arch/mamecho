@@ -869,9 +869,9 @@ dialog.sheet.wide { width: min(820px, calc(100vw - 32px)); }
 dialog.sheet[open] { display: flex; flex-direction: column; }
 dialog.sheet > form { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
 dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
-/* ダイアログが開いている間は、後ろのページをスクロールさせない。
-   iPhone は、キーボードが出たときに後ろのページが動くと、入力欄のカーソルをずれた場所に描いてしまうため */
-html:has(dialog[open]) { overflow: hidden; overscroll-behavior: none; }
+/* 注意: ダイアログの間に html を overflow: hidden にして後ろを止めると、iPhone ではキーボードが出たときに
+   「見えている範囲」の方がずれ、閉じたあとも下のタブや見出しが画面の途中に残ってしまう（版1.12.1で起きた）。
+   後ろのページを止める指定は入れないこと。 */
 .sheet-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 16px 20px 8px;
