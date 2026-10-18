@@ -805,7 +805,10 @@ input, select, textarea {
   /* 16px より小さいと、iPhone は入力欄を押したときに画面を勝手に拡大してしまう。
      （そのあと自分で縮小しないといけなくなる）ので、入力欄の文字はすべて 16px にする */
   font-size: 16px;
+  /* 行の高さは標準にする。ページと同じ 1.6 倍だと、iPhone で数字とカーソルの位置がずれることがある */
+  line-height: normal;
 }
+textarea { line-height: 1.5; }
 textarea { font-family: ui-monospace, Menlo, monospace; resize: vertical; }
 input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
 input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); }
@@ -866,6 +869,9 @@ dialog.sheet.wide { width: min(820px, calc(100vw - 32px)); }
 dialog.sheet[open] { display: flex; flex-direction: column; }
 dialog.sheet > form { display: flex; flex-direction: column; min-height: 0; max-height: inherit; }
 dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
+/* ダイアログが開いている間は、後ろのページをスクロールさせない。
+   iPhone は、キーボードが出たときに後ろのページが動くと、入力欄のカーソルをずれた場所に描いてしまうため */
+html:has(dialog[open]) { overflow: hidden; overscroll-behavior: none; }
 .sheet-head {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 16px 20px 8px;
