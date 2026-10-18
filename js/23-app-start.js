@@ -351,6 +351,7 @@ const ACTIONS = {
     renderTransactionList();
   },
   'show-breakdown': (button) => showCategoryBreakdown(button.dataset.value),
+  'open-sub': (button) => openSubTransactions(button.dataset.category, button.dataset.sub),
   'report-type': (button) => {
     appState.reportType = button.dataset.value;
     renderApp();

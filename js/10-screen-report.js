@@ -10,6 +10,11 @@
      ・AIの振り返り … Claude に今月の家計の感想をもらう（使える環境のみ）
    =========================================================== */
 
+// 「カテゴリ別」で開いているカテゴリ（描き直しても開いたままにする）
+const openReportCategories = new Set();
+// 中項目の明細の一覧を開いている中項目（'カテゴリid|中項目名'。開いていなければ ''）
+let openReportSubKey = '';
+
 const ReportScreen = {
   title: '家計簿',
   usesPeriod: true,
@@ -31,6 +36,16 @@ const ReportScreen = {
     const chartArea = findOne('#flowChart');
     const rows = reportFlowRows(appState.period);
     registerChart(() => drawIncomeExpenseChart(chartArea, rows));
+    // カテゴリを開いた・閉じたを覚えておく（明細を直して描き直したあとも、同じところを開いておくため）
+    for (const details of findAll('#categoryCard details[data-category-id]')) {
+      details.addEventListener('toggle', () => {
+        if (details.open) {
+          openReportCategories.add(details.dataset.categoryId);
+        } else {
+          openReportCategories.delete(details.dataset.categoryId);
+        }
+      });
+    }
   },
 };
 
@@ -123,11 +138,13 @@ function reportCategoryCardHtml(period) {
     return html;
   }
 
+  const range = periodRange(period);
   html += '<div class="cat-table">';
   html += '<div class="cat-head"><span>大項目</span><span>' + periodShortTitle(period) + '</span><span>割合</span><span>先月との差</span><span>3か月平均</span></div>';
   for (const row of rows) {
     const share = total > 0 ? (row.amount / total) * 100 : 0;
-    html += '<details><summary class="cat-row">';
+    const isOpen = openReportCategories.has(row.category.id);
+    html += '<details data-category-id="' + row.category.id + '"' + (isOpen ? ' open' : '') + '><summary class="cat-row">';
     html += '<span class="cat-name"><span class="mark ' + (type === 'income' ? 'income' : categoryToneClass(row.category)) + '" aria-hidden="true">' + row.category.mark + '</span><span>' + row.category.name + '</span></span>';
     html += '<span class="num">' + formatYen(row.amount) + '</span>';
     html += '<span class="share"><span class="share-track"><span class="share-bar ' + (type === 'income' ? 'income' : '') + '" style="display:block; width:' + share.toFixed(1) + '%"></span></span><span class="num small">' + share.toFixed(0) + '%</span></span>';
@@ -135,12 +152,12 @@ function reportCategoryCardHtml(period) {
     html += '<span class="num muted">' + formatYen(row.average) + '</span>';
     html += '</summary>';
 
-    // 中項目の内訳
+    // 中項目の内訳（押すと明細を開ける。1件ならすぐ編集、2件以上ならその場に一覧を出す）
     html += '<div class="sub-rows">';
     if (row.bucket) {
       const subs = Object.entries(row.bucket.subs).sort((a, b) => b[1] - a[1]);
       for (const sub of subs) {
-        html += '<div class="sub-row"><span>' + escapeHtml(sub[0]) + '</span><span class="num">' + formatYen(sub[1]) + '</span></div>';
+        html += subRowHtml(row.category, sub[0], sub[1], range);
       }
     }
     html += '<div><button type="button" class="link-btn" style="padding-left:0" data-action="filter-category" data-category="' + row.category.id + '">' + row.category.name + 'の入出金を見る</button></div>';
@@ -150,6 +167,45 @@ function reportCategoryCardHtml(period) {
     differenceHtml(total - (type === 'income' ? previous.income : previous.expense), type) + '</span><span></span></div>';
   html += '</div></section>';
   return html;
+}
+
+/**
+ * 中項目1行分。押せる行にして、明細の件数と金額を出す。
+ * 一覧を開いている中項目なら、その下に明細（押すと編集）を並べる。
+ */
+function subRowHtml(category, subName, amount, range) {
+  const transactions = transactionsInSub(range, category.id, subName); // 05-calculations.js
+  const key = category.id + '|' + subName;
+  const isListOpen = openReportSubKey === key && transactions.length > 1;
+  const countText = transactions.length > 1 ? '<span class="muted small">' + transactions.length + '件</span>' : '';
+  const label = transactions.length === 1 ? 'を直す' : 'の明細を見る';
+  let html = '<button type="button" class="sub-row sub-link" data-action="open-sub" data-category="' + category.id + '" data-sub="' + escapeHtml(subName) + '"' +
+    ' aria-expanded="' + isListOpen + '" aria-label="' + escapeHtml(subName) + label + '">' +
+    '<span>' + escapeHtml(subName) + ' ' + countText + '</span>' +
+    '<span class="num">' + formatYen(amount) + iconSvg(isListOpen ? 'chevron-down' : 'chevron-right') + '</span></button>';
+  if (isListOpen) {
+    html += '<div class="sub-tx-list">';
+    for (const transaction of transactions) {
+      html += transactionRowHtml(transaction, { showDate: true }); // 09-screen-transactions.js（押すと編集）
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+/**
+ * 中項目を押したとき: 明細が1件ならすぐ編集画面を開く。2件以上なら一覧を開く（もう一度押すと閉じる）。
+ */
+function openSubTransactions(categoryId, subName) {
+  const transactions = transactionsInSub(periodRange(appState.period), categoryId, subName);
+  if (transactions.length === 1) {
+    openTransactionDialog(transactions[0]); // 15-dialog-transaction.js
+    return;
+  }
+  const key = categoryId + '|' + subName;
+  openReportSubKey = openReportSubKey === key ? '' : key;
+  openReportCategories.add(categoryId);
+  renderApp();
 }
 
 /**

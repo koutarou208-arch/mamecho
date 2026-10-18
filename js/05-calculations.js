@@ -401,6 +401,24 @@ function summarizeRange(range) {
   return summary;
 }
 
+/**
+ * 期間の中で、あるカテゴリ・中項目に入っている入出金（新しい順）。
+ * 家計簿の「カテゴリ別」の中項目から、明細を開いて直すために使う。
+ * 数え方は summarizeRange と同じ（カテゴリが空なら「その他」、中項目が空なら「未分類」、計算対象外は入れない）。
+ */
+function transactionsInSub(range, categoryId, subName) {
+  const found = [];
+  for (const transaction of allTransactions) {
+    if (transaction.date < range.start || transaction.date >= range.end || !isCounted(transaction)) {
+      continue;
+    }
+    if ((transaction.category || 'other') === categoryId && (transaction.sub || '未分類') === subName) {
+      found.push(transaction);
+    }
+  }
+  return found;
+}
+
 /** 期間の収支をまとめて計算（よく使うので近道を用意） */
 function summarizePeriod(period) {
   return summarizeRange(periodRange(period));

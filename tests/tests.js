@@ -926,6 +926,28 @@ check('立体: 面の明るさは0〜1', boxFaces.every((face) => face.light >= 
 check('立体: 上の面がいちばん明るい', boxFaces.every((face) => face.light <= topFace.light));
 check('立体: 面の角は4つ', boxFaces.every((face) => face.points.length === 4));
 
+section('家計簿の内訳から明細を開く（期間・カテゴリ・中項目で取り出す）');
+allTransactions = [
+  { id: 's1', date: '2026-10-03', type: 'expense', amount: 1000, account: 'a', category: 'food', sub: '外食', description: 'テストショウテン', include: true },
+  { id: 's2', date: '2026-10-20', type: 'expense', amount: 2000, account: 'a', category: 'food', sub: '外食', description: 'テストショウテン2', include: true },
+  { id: 's3', date: '2026-10-05', type: 'expense', amount: 500, account: 'a', category: 'food', sub: '食料品', description: 'テストショウテン3', include: true },
+  { id: 's4', date: '2026-09-30', type: 'expense', amount: 700, account: 'a', category: 'food', sub: '外食', description: '先月の分', include: true },
+  { id: 's5', date: '2026-10-07', type: 'expense', amount: 900, account: 'a', category: 'food', sub: '外食', description: '計算対象外', include: false },
+  { id: 's6', date: '2026-10-08', type: 'expense', amount: 300, account: 'a', category: 'food', sub: '', description: '中項目なし', include: true },
+  { id: 's7', date: '2026-10-09', type: 'expense', amount: 400, account: 'a', description: 'カテゴリなし', include: true },
+];
+const octoberRange = { start: '2026-10-01', end: '2026-11-01' };
+same('内訳の明細: 期間内・同じ中項目だけ', transactionsInSub(octoberRange, 'food', '外食').map((item) => item.id).join(','), 's1,s2');
+same('内訳の明細: 別の中項目は入らない', transactionsInSub(octoberRange, 'food', '食料品').map((item) => item.id).join(','), 's3');
+same('内訳の明細: 中項目が空なら「未分類」として出る', transactionsInSub(octoberRange, 'food', '未分類').map((item) => item.id).join(','), 's6');
+same('内訳の明細: カテゴリが空なら「その他・未分類」として出る', transactionsInSub(octoberRange, 'other', '未分類').map((item) => item.id).join(','), 's7');
+let subTotal = 0;
+for (const item of transactionsInSub(octoberRange, 'food', '外食')) {
+  subTotal = subTotal + item.amount;
+}
+same('内訳の明細: 合計が家計簿の中項目の金額と同じ', subTotal, summarizeRange(octoberRange).categories.food.subs['外食']);
+allTransactions = [];
+
 section('カテゴリのマークの色');
 same('食費は「食べる・暮らす」の色', categoryToneClass(CATEGORY_BY_ID.food), ' tone-meal');
 same('家賃は「固定費」の色', categoryToneClass(CATEGORY_BY_ID.housing), ' tone-fixed');

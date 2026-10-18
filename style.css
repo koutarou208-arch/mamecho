@@ -646,6 +646,13 @@ main:focus { outline: none; }
 .share-bar.income { background: var(--income); }
 .sub-rows { padding: 0 4px 10px 40px; display: grid; gap: 2px; }
 .sub-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font-size: 13px; color: var(--ink-2); padding: 3px 0; }
+/* 押せる中項目（押すと明細を直せる） */
+.sub-link { width: 100%; margin: 0; border: 0; background: none; font: inherit; font-size: 13px; color: var(--ink-2); text-align: left; cursor: pointer; align-items: center; padding: 6px 0; }
+.sub-link .num { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; }
+.sub-link svg { width: 16px; height: 16px; flex: none; color: var(--muted); }
+.sub-link:hover { color: var(--accent); }
+.sub-link:active { background: var(--surface-2); }
+.sub-tx-list { margin: 0 0 6px; padding-left: 10px; border-left: 2px solid var(--rule); }
 .cat-total { font-weight: 600; border-top: 2px solid var(--rule-strong); }
 
 /* カレンダー */
