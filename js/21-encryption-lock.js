@@ -109,10 +109,17 @@ async function decryptJson(box, key) {
    2. 保存・読み込みの出入り口（04 から呼ばれる）
    =========================================================== */
 
-/** 保存する直前に呼ぶ。暗号化がオンなら暗号文にして返す。'lock' の箱はそのまま */
+/**
+ * 保存する直前に呼ぶ。暗号化がオンなら暗号文にして返す。'lock' の箱はそのまま。
+ * 暗号化がオンなのに鍵がない（ロック中）ときは、エラーにする。
+ * （暗号化しないまま保存すると、ロックしているのに中身が読めてしまうため）
+ */
 async function encryptForStorage(name, content) {
-  if (name === 'lock' || !lockState.enabled || !lockState.key) {
+  if (name === 'lock' || !lockState.enabled) {
     return content;
+  }
+  if (!lockState.key) {
+    throw new Error('locked_no_key');
   }
   return encryptJson(content);
 }
@@ -275,10 +282,14 @@ async function unlockWithPassphrase(passphrase, openedWithBiometric) {
 
   try {
     if (appState.storageMode === 'cloud') {
-      if (!cloud.heldDocs) {
-        await loadHeldDocsFromCloud();
+      // 暗号文を読み直せなかったら、開かない（空の家計簿を見せると、次の保存で本物を上書きしてしまう）
+      if (!cloud.heldDocs && !(await loadHeldDocsFromCloud())) {
+        lockState.key = null;
+        errorArea.textContent = 'データを読み込めませんでした。通信を確かめて、もう一度押してください。';
+        button.disabled = false;
+        return false;
       }
-      await applyCloudDocuments(cloud.heldDocs || []);
+      await applyCloudDocuments(cloud.heldDocs);
     } else if (browserStore.heldEnc) {
       const body = await decryptJson(browserStore.heldEnc);
       appState.profile = normalizeProfile(body.profile);
@@ -286,6 +297,12 @@ async function unlockWithPassphrase(passphrase, openedWithBiometric) {
       browserStore.heldEnc = null;
       appState.locked = false;
       finishLoading();
+    } else {
+      // 開くための暗号文が見つからない（保存できない環境など）
+      lockState.key = null;
+      errorArea.textContent = '保存されたデータが見つかりませんでした。';
+      button.disabled = false;
+      return false;
     }
   } catch (error) {
     console.warn('unlock error', error);
@@ -298,6 +315,10 @@ async function unlockWithPassphrase(passphrase, openedWithBiometric) {
   button.disabled = false;
   findOne('#lockDialog').close();
   startIdleTimer();
+  // ロック中に保存できなかった分があれば、暗号化して保存し直す
+  if (appState.storageMode === 'cloud' && cloud.failedWrites.size > 0) {
+    retryFailedWritesNow();
+  }
   // パスフレーズで開いたとき: この端末で Face ID が使えて、まだ登録していなければ、登録をすすめる
   const offer = shouldOfferBiometric({
     available: biometricAvailableHere(),
@@ -322,10 +343,15 @@ async function lockNow() {
     return;
   }
   stopIdleTimer();
-  // 書き込み中のデータがあれば、終わるのを少し待つ（最大3秒）
-  for (let waited = 0; waited < 30 && cloud.writingNow.size > 0; waited++) {
+  // 書き込み中・書き込み待ちのデータがあれば、全部終わるまで待つ（鍵を捨てる前に、暗号化して保存しきるため）
+  // 通信がとても遅いときのために、最大60秒まで
+  if (cloud.writingNow.size > 0 || cloud.waitingWrites.size > 0) {
+    showToast('保存が終わってからロックします…');
+  }
+  for (let waited = 0; waited < 600 && (cloud.writingNow.size > 0 || cloud.waitingWrites.size > 0); waited++) {
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+  await browserStore.saveChain; // ブラウザ保存も、終わるまで待つ
   // ロック前の暗号文を持ち直す（もう一度解除できるように）
   if (appState.storageMode === 'cloud') {
     await loadHeldDocsFromCloud();
@@ -341,7 +367,7 @@ async function lockNow() {
   enterLockedState();
 }
 
-/** クラウドの暗号文をもう一度読み直して、ロック中に保持する */
+/** クラウドの暗号文をもう一度読み直して、ロック中に保持する。読めたら true、だめなら false */
 async function loadHeldDocsFromCloud() {
   try {
     const snapshot = await cloud.db.collection(cloud.basePath).get();
@@ -349,9 +375,11 @@ async function loadHeldDocsFromCloud() {
       name: documentSnapshot.id,
       data: JSON.parse(JSON.stringify(documentSnapshot.data() || {})),
     }));
+    return true;
   } catch (error) {
     cloud.heldDocs = null;
     console.warn('reload error', error);
+    return false;
   }
 }
 
@@ -360,8 +388,11 @@ async function loadHeldDocsFromCloud() {
    5. 自動ロック（操作がないまましばらくたったら）
    =========================================================== */
 
+let lastActivityAt = Date.now(); // 最後に操作した時刻（アプリを閉じている間はタイマーが止まることがあるので、時刻でも確かめる）
+
 function startIdleTimer() {
   stopIdleTimer();
+  lastActivityAt = Date.now();
   if (!lockState.enabled || !lockState.key) {
     return;
   }
@@ -380,6 +411,14 @@ function stopIdleTimer() {
 function noteActivity() {
   if (idleTimer !== null) {
     startIdleTimer();
+  }
+}
+
+/** アプリに戻ってきたとき: 最後の操作から決まった時間がたっていたら、すぐロックする */
+function lockIfIdleTooLong() {
+  if (lockState.enabled && lockState.key && !appState.locked && Date.now() - lastActivityAt > AUTO_LOCK_MINUTES * 60 * 1000) {
+    showToast('しばらく使っていなかったため、ロックしました');
+    lockNow();
   }
 }
 
@@ -439,6 +478,10 @@ async function enableLockFromForm() {
 
   if (appState.isSample) {
     errorArea.textContent = 'サンプル表示中は設定できません。先に「自分の家計簿をはじめる」を押してください。';
+    return;
+  }
+  if (appState.storageMode === 'memory') {
+    errorArea.textContent = 'この環境では保存ができないため、ロックは使えません（ロックすると、開けなくなります）。';
     return;
   }
   const problem = passphraseProblem(first);
@@ -547,6 +590,7 @@ function wipeEncryptedData() {
   }
   forgetLock();
   forgetBiometric();
+  lockState.justDisabledAt = Date.now(); // 直後に古い「ロックあり」の情報が届いても、ロックし直さない
   appState.locked = false;
   appState.profile = createEmptyProfile();
   appState.monthly = {};
@@ -627,11 +671,12 @@ function setupLockDialog() {
     if (document.visibilityState === 'hidden') {
       biometricAutoTried = false;
     } else {
+      lockIfIdleTooLong();
       startBiometricAutomatically();
     }
   });
 
-  for (const eventName of ['pointerdown', 'keydown', 'touchstart']) {
+  for (const eventName of ['pointerdown', 'keydown', 'touchstart', 'input', 'wheel', 'scroll']) {
     window.addEventListener(eventName, noteActivity, { passive: true });
   }
 }
@@ -944,6 +989,11 @@ async function biometricConfirm() {
     return;
   } catch (error) {
     biometricState.message = biometricErrorMessage(error);
+    if (error && error.message === 'prf_unsupported') {
+      // この端末では使えないので、開くたびに聞かないようにする（登録 2 と同じ）
+      dismissBiometricOffer();
+      showToast(biometricErrorMessage(error));
+    }
   }
   renderApp();
 }

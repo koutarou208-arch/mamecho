@@ -39,6 +39,15 @@ if command -v node >/dev/null 2>&1; then
   rm -f /tmp/mamecho-syntax.txt "$ALL_JS"
 fi
 
+# 電波がなくても開けるように、sw.js の覚えておくファイルに、すべての js が入っているか
+for FILE in js/*.js js/vendor/*.js; do
+  if ! grep -q "'./$FILE'" sw.js; then
+    echo "sw.js の APP_FILES に $FILE がありません（電波がないと開けなくなります）"
+    rm -f "$BUNDLE"
+    exit 1
+  fi
+done
+
 # 1行目: node で動かすときの print の代役（jsc には最初から print がある）
 {
   echo "if (typeof print === 'undefined') { var print = function (text) { console.log(text); }; }"

@@ -221,10 +221,25 @@ function parseBackupText(text) {
   if (!backup || !backup.profile || !Array.isArray(backup.profile.accounts) || !backup.monthly || typeof backup.monthly !== 'object') {
     return null;
   }
+  // 月ごとの中身は、入出金のリストでないといけない（こわれたバックアップで、アプリが止まらないように）
+  for (const month of Object.keys(backup.monthly)) {
+    if (!Array.isArray(backup.monthly[month])) {
+      return null;
+    }
+  }
   return backup;
 }
 
 let pendingRestore = null; // 読み込んだバックアップ（確認待ち）
+
+/** バックアップを保存した日を、この端末の日付（日本なら日本時間）で返す。読めなければそのままの先頭10文字 */
+function backupDateText(exportedAt) {
+  const date = new Date(exportedAt);
+  if (Number.isNaN(date.getTime())) {
+    return String(exportedAt).slice(0, 10);
+  }
+  return dateToText(date);
+}
 
 /** バックアップの文字を読んで、「置きかえますか？」の確認を出す（ファイルでも貼り付けでも共通） */
 function askRestoreFromText(text) {
@@ -241,7 +256,7 @@ function askRestoreFromText(text) {
   findOne('#importTitle').textContent = 'バックアップから戻す';
   findOne('#importBody').innerHTML =
     '<p>このバックアップ（口座 ' + backup.profile.accounts.length + '件・入出金 ' + count + '件' +
-    (backup.exportedAt ? '・' + escapeHtml(String(backup.exportedAt).slice(0, 10)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
+    (backup.exportedAt ? '・' + escapeHtml(backupDateText(backup.exportedAt)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
     '<div class="confirm-box"><p>今のデータは消えます。元に戻せません。</p><div class="row-gap">' +
     '<button type="button" class="btn danger" data-action="restore-yes">置きかえる</button>' +
     '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div></div>';
@@ -377,6 +392,30 @@ function amountCellProblem(value) {
 }
 
 /**
+ * CSVの「口座名」の列の文字から、口座を探す。見つからなければ ''。
+ * 名前がぴったり同じ口座を先に選ぶ。なければ、名前の一部が合う口座のうち、いちばん長い名前のもの
+ * （例: 「楽天カード」の行は、「楽天」より「楽天カード」に入れる）。
+ */
+function accountIdFromName(accountText, accountList) {
+  let bestId = '';
+  let bestLength = 0;
+  for (const account of accountList) {
+    const name = normalizeText(account.name);
+    if (name === '') {
+      continue;
+    }
+    if (name === accountText) {
+      return account.id;
+    }
+    if ((accountText.includes(name) || name.includes(accountText)) && name.length > bestLength) {
+      bestId = account.id;
+      bestLength = name.length;
+    }
+  }
+  return bestId;
+}
+
+/**
  * いろいろな書き方の金額を、整数（円）にする。読めなければ null。
  * 「△1,200」「▲1,200」「(1,200)」「-1,200」「1,200-」はマイナスとして読む（会計の書き方）。
  * 小数の金額（1234.5 など）は、勝手に丸めずに null にする（理由は amountCellProblem）。
@@ -385,7 +424,8 @@ function parseAmountCell(value) {
   if (amountCellProblem(value) !== '') {
     return null;
   }
-  const text = String(value).normalize('NFKC').trim();
+  // 円の印（¥ ￥ \ 円）と空白は先にのぞく（「¥-1,200」のマイナスを見落とさないため）
+  const text = String(value).normalize('NFKC').replace(/[¥\\円\s]/g, '');
   const isNegative = /^[△▲\-−]/.test(text) || /^\(.*\)$/.test(text) || /[\-−]$/.test(text);
   const digits = text.replace(/[^\d.]/g, '').split('.')[0]; // 「.00」のうしろは捨てる
   const number = Number(digits); // 数字だけの文字なので、ぴったり整数になる
@@ -886,12 +926,7 @@ function convertCsvRows(rows, settings, existingTransactions, accounts) {
     let accountId = settings.accountId;
     const accountText = normalizeText(cellOf(row, 'account'));
     if (accountText) {
-      for (const account of accountList) {
-        const name = normalizeText(account.name);
-        if (name === accountText || accountText.includes(name) || name.includes(accountText)) {
-          accountId = account.id;
-        }
-      }
+      accountId = accountIdFromName(accountText, accountList) || accountId;
     }
 
     // カテゴリ: CSVの大項目 → 自動分類ルール → 未分類
@@ -964,7 +999,11 @@ function findFlippedCopies(transactions) {
     const sorted = [...group].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
     const waiting = []; // まだ相手が見つかっていない、先に入った明細
     for (const transaction of sorted) {
-      const partnerIndex = waiting.findIndex((older) => older.type !== transaction.type);
+      // 逆向きの写しは「取り込みで入ったもの」で、元とは別の取り込み。
+      // （自分で入れた同じ日の買い物と返金や、同じCSVの中の買い物と返金は、本物なので対象にしない）
+      const partnerIndex = transaction.importId
+        ? waiting.findIndex((older) => older.type !== transaction.type && older.importId !== transaction.importId)
+        : -1;
       if (partnerIndex >= 0) {
         pairs.push({ original: waiting[partnerIndex], copy: transaction });
         waiting.splice(partnerIndex, 1);

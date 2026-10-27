@@ -424,13 +424,22 @@ function buildCardBills(account, records) {
   }
 
   // --- (4) 引き落としを記録済みかどうか ---
-  for (const transaction of cardRecords) {
-    if (transaction.type === 'transfer' && transaction.toAccount === account.id && transaction.billMonth) {
-      const bill = billsByMonth[transaction.billMonth];
-      if (bill) {
-        bill.paid = true;
-        bill.paidAmount = bill.paidAmount + transaction.amount;
-      }
+  //   ・元金の引き落とし（このカードへの振替）があれば記録済み
+  //   ・元金がなく手数料だけの月は、手数料の記録（paidCard の印）があれば記録済み
+  //     （手数料の記録は引き落とし口座の支出なので、カードの記録の中にはない。全部の記録から探す）
+  for (const transaction of records || allTransactions) {
+    if (!transaction.billMonth) {
+      continue;
+    }
+    const bill = billsByMonth[transaction.billMonth];
+    if (!bill) {
+      continue;
+    }
+    if (transaction.type === 'transfer' && transaction.toAccount === account.id) {
+      bill.paid = true;
+      bill.paidAmount = bill.paidAmount + transaction.amount;
+    } else if (transaction.paidCard === account.id) {
+      bill.paid = true;
     }
   }
 
@@ -443,6 +452,15 @@ function buildCardBills(account, records) {
 /* ===========================================================
    5. カード1枚のまとめ（画面に出す数字）
    =========================================================== */
+
+/**
+ * 使った金額と還元率（%）から、たまるポイントを出す（端数は切り捨て）。
+ * 0.7% のような小数をそのまま掛けると、計算の誤差で1ポイント少なくなることがあるので、
+ * 率を「1万分のいくつ」の整数にしてから計算する（11,000円 × 0.7% = 77）。
+ */
+function pointsFromUsage(used, ratePercent) {
+  return Math.floor(used * Math.round(ratePercent * 100) / 10000);
+}
 
 /**
  * 返す形:
@@ -499,7 +517,7 @@ function cardSummary(account) {
         used = used + transaction.amount;
       }
     }
-    pointsThisPeriod = Math.floor(used * settings.pointRate / 100);
+    pointsThisPeriod = pointsFromUsage(used, settings.pointRate);
   }
 
   return {
@@ -634,6 +652,7 @@ function recordBillPayment(account, bill) {
       include: true,
       createdAt: Date.now() + 1,
       billMonth: bill.month,
+      paidCard: account.id, // どのカードの請求の手数料か（元金のない月でも「記録済み」と分かるように）
     });
   }
   if (newRecords.length === 0) {

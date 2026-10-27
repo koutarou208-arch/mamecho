@@ -80,7 +80,9 @@ function formatYenShort(amount) {
     return sign + Number((absolute / 100000000).toFixed(2)) + '億';
   }
   if (absolute >= 10000) {
-    return sign + formatNumber(Number((absolute / 10000).toFixed(1))) + '万';
+    // 小数点以下1けたまで（1.5万）。1000万以上は小数をやめて、3けたごとにカンマ（1,235万）
+    const man = Number((absolute / 10000).toFixed(1));
+    return sign + (man >= 1000 ? formatNumber(man) : String(man)) + '万';
   }
   return sign + formatNumber(absolute);
 }
@@ -94,7 +96,8 @@ function calendarAmountShort(amount) {
   if (!amount) {
     return '';
   }
-  if (amount >= 10000) {
+  // 9,950円は「千」で四捨五入すると「10千」になってしまうので、そこからは「万」にする
+  if (amount >= 9950) {
     return (Math.round(amount / 1000) / 10) + '万';
   }
   if (amount >= 1000) {

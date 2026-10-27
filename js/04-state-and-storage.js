@@ -114,6 +114,9 @@ const cloud = {
   db: null,               // 保存の窓口
   basePath: '',           // 自分専用の保存場所 'data/users/<あなたのID>'
   firstAnswerArrived: false,
+  serverAnswered: false,    // サーバーが本当に答えたか（端末に残っていた古い情報ではない答え）
+  sampleByTimeout: false,   // サーバーの答えが遅くて、とりあえずサンプルを見せているなら true
+  failedWrites: new Map(),  // 保存に失敗して、あとでやり直す内容（箱の名前 → 中身）
   waitingWrites: new Map(), // これから書き込む内容（箱の名前 → 中身）
   writingNow: new Set(),    // 今まさに書き込み中の箱の名前
   queue: Promise.resolve(), // 届いたデータを「1つずつ順番に」処理するための列
@@ -166,12 +169,14 @@ function connectCloud(db, userId) {
   cloud.basePath = 'data/users/' + userId;
 
   const collection = db.collection(cloud.basePath);
+  window.addEventListener('online', retryFailedWritesNow); // 通信が戻ったら、失敗した保存をすぐやり直す
 
   // サーバーの返事が6秒たっても来ない場合は「まだデータがない」とみなす
   setTimeout(() => {
     if (!cloud.firstAnswerArrived) {
       cloud.firstAnswerArrived = true;
       if (appState.profile === null) {
+        cloud.sampleByTimeout = true; // 本当に空かどうかは、まだ分からない
         showSampleData();
         finishLoading();
       }
@@ -203,6 +208,9 @@ async function processCloudSnapshot(snapshot) {
       return;
     }
     cloud.firstAnswerArrived = true;
+  }
+  if (!snapshot.metadata || !snapshot.metadata.fromCache) {
+    cloud.serverAnswered = true; // ここから先は、自動の書き込み（固定費の記録など）をしてよい
   }
 
   const documents = snapshot.docs;
@@ -240,7 +248,9 @@ async function applyCloudDocuments(raw) {
   }
   if (lockState.enabled && !lockState.key) {
     cloud.heldDocs = raw;   // 鍵がないので、パスフレーズが入るまで読まずに置いておく
-    enterLockedState();
+    if (!appState.locked) {
+      enterLockedState();   // すでにロック画面なら、出し直さない（打ちかけのパスフレーズを消さないため）
+    }
     return;
   }
   cloud.heldDocs = null;
@@ -292,12 +302,34 @@ async function applyCloudDocuments(raw) {
     appState.profile = createEmptyProfile();
   }
   appState.locked = false;
+  // 別の端末でロックがオフにされたときなど: ロック画面が開いたままなら閉じる
+  const lockDialog = findOne('#lockDialog');
+  if (lockDialog && lockDialog.open) {
+    lockDialog.close();
+  }
   finishLoading();
 }
 
 /** その箱を今書き込み中（または書き込み待ち）なら true */
 function isCloudWriteBusy(name) {
-  return cloud.waitingWrites.has(name) || cloud.writingNow.has(name);
+  return cloud.waitingWrites.has(name) || cloud.writingNow.has(name) || cloud.failedWrites.has(name);
+}
+
+/** 保存に失敗した内容を、少したってからもう一度保存する（通信が戻ったときも） */
+let failedWritesTimer = null;
+function retryFailedWritesLater() {
+  clearTimeout(failedWritesTimer);
+  failedWritesTimer = setTimeout(retryFailedWritesNow, 20000);
+}
+function retryFailedWritesNow() {
+  clearTimeout(failedWritesTimer);
+  const failed = [...cloud.failedWrites.entries()];
+  cloud.failedWrites.clear();
+  for (const [name, content] of failed) {
+    if (!cloud.waitingWrites.has(name)) {
+      queueCloudWrite(name, content);
+    }
+  }
 }
 
 /**
@@ -309,6 +341,7 @@ function queueCloudWrite(name, content) {
   // 書き込む内容をこの瞬間の形でコピーしておく（あとで変わっても影響しないように）
   const snapshotOfContent = content === null ? null : JSON.parse(JSON.stringify(content));
   cloud.waitingWrites.set(name, snapshotOfContent);
+  cloud.failedWrites.delete(name); // 新しい内容で書き直すので、前に失敗した分は要らない
   if (!cloud.writingNow.has(name)) {
     runCloudWrites(name);
   }
@@ -316,7 +349,9 @@ function queueCloudWrite(name, content) {
 
 async function runCloudWrites(name) {
   cloud.writingNow.add(name);
-  setSaveStatus('saving');
+  if (cloud.failedWrites.size === 0) {
+    setSaveStatus('saving'); // 失敗が残っているときは「保存できていない」表示のままにする
+  }
 
   while (cloud.waitingWrites.has(name)) {
     const content = cloud.waitingWrites.get(name);
@@ -325,20 +360,27 @@ async function runCloudWrites(name) {
     try {
       stored = content === null ? null : await encryptForStorage(name, content);
     } catch (error) {
+      // ロック中で鍵がないときなど。暗号化しないまま保存することは絶対にしない
       setSaveStatus('error');
-      showToast('暗号化に失敗したため保存しませんでした。');
+      showToast('ロック中のため保存できませんでした。ロックを解除すると保存し直します。');
       console.warn('encrypt error', error);
+      cloud.failedWrites.set(name, content);
       continue;
     }
-    await writeOneCloudDocument(name, stored, false);
+    const isSaved = await writeOneCloudDocument(name, stored, false);
+    if (!isSaved && !cloud.waitingWrites.has(name)) {
+      cloud.failedWrites.set(name, content); // あとでやり直す（捨てない）
+      retryFailedWritesLater();
+    }
   }
 
   cloud.writingNow.delete(name);
-  if (cloud.writingNow.size === 0 && appState.saveStatus !== 'error') {
+  if (cloud.writingNow.size === 0 && cloud.failedWrites.size === 0) {
     setSaveStatus('saved');
   }
 }
 
+/** 箱を1つ書き込む。うまくいったら true、だめなら false（エラーの知らせは出す） */
 async function writeOneCloudDocument(name, content, isRetry) {
   const reference = cloud.db.doc(cloud.basePath + '/' + name);
   try {
@@ -347,14 +389,14 @@ async function writeOneCloudDocument(name, content, isRetry) {
     } else {
       await reference.set(content);
     }
+    return true;
   } catch (error) {
     const code = error && error.code;
     // 一時的なエラーなら、少し待って1回だけやり直す
     if (code === 'unavailable' && !isRetry) {
       const waitMs = 500 + Math.random() * 1000;
       await new Promise((resolve) => setTimeout(resolve, waitMs));
-      await writeOneCloudDocument(name, content, true);
-      return;
+      return writeOneCloudDocument(name, content, true);
     }
     setSaveStatus('error');
     if (code === 'quota_exceeded') {
@@ -362,9 +404,10 @@ async function writeOneCloudDocument(name, content, isRetry) {
     } else if (code === 'invalid_argument') {
       showToast('保存できませんでした（この画面では書き込みが許可されていません）。');
     } else {
-      showToast('保存できませんでした。通信状態を確かめてください。');
+      showToast('保存できませんでした。通信が戻ったら自動で保存し直します。');
     }
     console.warn('save error', name, error);
+    return false;
   }
 }
 
@@ -376,6 +419,7 @@ async function writeOneCloudDocument(name, content, isRetry) {
 const browserStore = {
   heldEnc: null,                 // ロック中に読み込んだ暗号文
   saveChain: Promise.resolve(),  // 保存を「1つずつ順番に」行うための列
+  changedElsewhere: false,       // 別のタブ・ウィンドウで家計簿が書きかえられたら true（上書きしないため）
 };
 
 function loadFromBrowser() {
@@ -393,6 +437,14 @@ function loadFromBrowser() {
   } catch (error) {
     saved = null;
   }
+
+  // 別のタブ（ウィンドウ）で家計簿が保存されたら、こちらからは上書きしないようにして、読み込み直しをすすめる
+  window.addEventListener('storage', (event) => {
+    if (event.key === BROWSER_STORAGE_KEY && !browserStore.changedElsewhere) {
+      browserStore.changedElsewhere = true;
+      renderApp();
+    }
+  });
 
   // 暗号化されて保存されている → パスフレーズが入るまで読まない
   if (saved && saved.lock && saved.enc) {
@@ -413,6 +465,11 @@ function loadFromBrowser() {
 
 /** ブラウザへの保存を予約する（暗号化がオンなら暗号化してから） */
 function saveToBrowser() {
+  if (browserStore.changedElsewhere) {
+    setSaveStatus('error');
+    showToast('別のタブで家計簿が変わったため、保存していません。上の「読み込み直す」を押してください。');
+    return;
+  }
   browserStore.saveChain = browserStore.saveChain
     .then(writeBrowserNow)
     .catch((error) => {
@@ -427,6 +484,8 @@ async function writeBrowserNow() {
   let text;
   if (lockState.enabled && lockState.key) {
     text = JSON.stringify({ lock: currentLockDocument(), enc: await encryptJson(body) });
+  } else if (lockState.enabled) {
+    throw new Error('locked_no_key'); // ロック中に鍵がない: 暗号化しないまま保存することは絶対にしない
   } else {
     text = JSON.stringify(body);
   }
@@ -521,7 +580,26 @@ function showSampleData() {
 }
 
 /** サンプルを捨てて、空の家計簿から始める */
-function startOwnLedger() {
+async function startOwnLedger() {
+  // クラウドで、サーバーの答えが遅くてサンプルを見せていたとき: 本当に空かを確かめる
+  // （確かめずに作ると、保存されている本当の家計簿を、空の家計簿で上書きしてしまう）
+  if (appState.storageMode === 'cloud' && !cloud.serverAnswered) {
+    let documents = null;
+    try {
+      const snapshot = await cloud.db.collection(cloud.basePath).get();
+      documents = snapshot.docs;
+    } catch (error) {
+      showToast('まだ保存先につながっていません。少し待ってから、もう一度押してください。');
+      return;
+    }
+    cloud.serverAnswered = true;
+    if (documents.length > 0) {
+      const raw = documents.map((documentSnapshot) => ({ name: documentSnapshot.id, data: JSON.parse(JSON.stringify(documentSnapshot.data() || {})) }));
+      await applyCloudDocuments(raw);
+      showToast('保存されている家計簿が見つかったので、それを開きました');
+      return;
+    }
+  }
   appState.isSample = false;
   appState.profile = createEmptyProfile();
   appState.monthly = {};
@@ -532,19 +610,38 @@ function startOwnLedger() {
   showToast('自分の家計簿を作りました。まずは口座を登録しましょう。');
 }
 
+/**
+ * 月ごとの入出金の中から、こわれたもの（null や文字など）をのぞいた形を返す。
+ * リストでない月は空のリストにする。こわれたデータがあっても、アプリが止まらないようにするため。
+ */
+function cleanMonthlyData(monthly) {
+  const cleaned = {};
+  for (const month of Object.keys(monthly || {})) {
+    const items = Array.isArray(monthly[month]) ? monthly[month] : [];
+    cleaned[month] = items.filter((item) => item && typeof item === 'object' && typeof item.date === 'string');
+  }
+  return cleaned;
+}
+
 /** 読み込みが終わったら呼ぶ（期間を決めて画面を描く） */
 function finishLoading() {
+  appState.monthly = cleanMonthlyData(appState.monthly);
   if (appState.period === null && appState.profile) {
     appState.period = periodOf(todayText());
   }
   const upgradedMonths = upgradeAllManualBills(); // 古い形の「月の支払い金額の手入力」を、支出の形に直す
   rebuildIndexes();
-  if (upgradedMonths.length > 0) {
+  // 自動の書き込み（直した形の保存・固定費の記録）は、本当のデータが届いてから。
+  // 端末に残っていた古い情報のまま書き込むと、別の端末で入れた新しいデータを上書きしてしまうため
+  const canWriteAutomatically = !(appState.storageMode === 'cloud' && !cloud.serverAnswered);
+  if (upgradedMonths.length > 0 && canWriteAutomatically) {
     saveChanges(upgradedMonths, false);
   }
   setSaveStatus(appState.saveStatus);
   renderApp();
-  applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
+  if (canWriteAutomatically) {
+    applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
+  }
 }
 
 
@@ -691,7 +788,7 @@ function replaceAllData(newProfile, newMonthly) {
   const oldMonths = Object.keys(appState.monthly);
   appState.isSample = false;
   appState.profile = normalizeProfile(newProfile);
-  appState.monthly = newMonthly || {};
+  appState.monthly = cleanMonthlyData(newMonthly);
 
   // 以前あった月も「変わった月」に入れて、空なら箱を消してもらう
   const allMonths = new Set([...oldMonths, ...Object.keys(appState.monthly)]);

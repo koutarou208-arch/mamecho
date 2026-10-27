@@ -7,9 +7,10 @@
    ※ ファイルを大きく変えたら、下の CACHE_NAME の数字を上げてください
    =========================================================== */
 
-const CACHE_NAME = 'mamecho-v23';
+const CACHE_NAME = 'mamecho-v24';
 
-// 最初に覚えておくファイル（アプリ本体）
+// 最初に覚えておくファイル（アプリ本体）。電波がなくても開けるように、プログラム（js）も全部入れる。
+// ※ js のファイルを増やしたり名前を変えたりしたら、ここにも書き足すこと
 const APP_FILES = [
   './',
   './index.html',
@@ -19,6 +20,30 @@ const APP_FILES = [
   './icons/icon-192.png',
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
+  './js/vendor/papaparse.min.js',
+  './js/01-categories.js',
+  './js/02-card-companies.js',
+  './js/03-helpers.js',
+  './js/04-state-and-storage.js',
+  './js/05-calculations.js',
+  './js/06-credit-card-billing.js',
+  './js/07-charts.js',
+  './js/08-screen-home.js',
+  './js/09-screen-transactions.js',
+  './js/10-screen-report.js',
+  './js/11-screen-budget.js',
+  './js/12-screen-cards.js',
+  './js/13-screen-accounts.js',
+  './js/14-screen-settings.js',
+  './js/15-dialog-transaction.js',
+  './js/16-dialog-account.js',
+  './js/17-csv-and-backup.js',
+  './js/18-ai-features.js',
+  './js/19-sample-data.js',
+  './js/20-rules-alerts.js',
+  './js/21-encryption-lock.js',
+  './js/22-take-home-pay.js',
+  './js/23-app-start.js',
 ];
 
 // インストール: アプリ本体を覚える
@@ -59,6 +84,7 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => caches.match(request).then((saved) => saved || caches.match('./index.html')))
+      // 電波がないとき: 覚えておいたファイルを使う。ページそのもの（index.html）の代わりは、ページを開くときだけ
+      .catch(() => caches.match(request).then((saved) => saved || (request.mode === 'navigate' ? caches.match('./index.html') : Response.error())))
   );
 });

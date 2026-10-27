@@ -470,6 +470,10 @@ function parseCardNoticeEmail(text, today) {
         date = full[1] + '-' + pad2(full[2]) + '-' + pad2(full[3]);
       } else if (short) {
         date = today.slice(0, 4) + '-' + pad2(short[1]) + '-' + pad2(short[2]);
+        // 年がないとき: 今日より先の日付になったら、去年の買い物（年末の分を年明けに読んだ）
+        if (date > today) {
+          date = (Number(today.slice(0, 4)) - 1) + date.slice(4);
+        }
       }
       const timeMatch = line.match(/(\d{1,2}):(\d{2})/);
       if (timeMatch) {
@@ -600,14 +604,25 @@ function averageSalaryOf(summaries) {
   return Math.round(total / count);
 }
 
-/** 直近 months か月（今の期間をのぞく）の「投資をのぞいた収支」の平均 */
+/**
+ * 直近 months か月（今の期間をのぞく）の「投資をのぞいた収支」の平均。
+ * 記録が1件もない月は数えない（使いはじめたばかりで、まだ記録のない月まで0円として割らないため）。
+ */
 function averageBaseBalance(period, months) {
   let total = 0;
+  let count = 0;
   for (let back = 1; back <= months; back++) {
     const summary = summarizePeriod(shiftPeriod(period, -back));
+    if (summary.income === 0 && summary.expense === 0) {
+      continue;
+    }
     total = total + (summary.income - summary.tradeGain - summary.spending);
+    count = count + 1;
   }
-  return Math.round(total / months);
+  if (count === 0) {
+    return 0;
+  }
+  return Math.round(total / count);
 }
 
 

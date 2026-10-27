@@ -185,7 +185,12 @@ function renderBanner() {
     return;
   }
   // 20-rules-alerts.js（制度変更のお知らせ）と、21-encryption-lock.js（パスフレーズで開いたあとの「Face ID を使いますか？」）
-  const alertsHtml = biometricOfferHtml() + rulesAlertsHtml();
+  let alertsHtml = biometricOfferHtml() + rulesAlertsHtml();
+  // 別のタブ・ウィンドウで家計簿が変わったとき（04-state-and-storage.js）: 上書きしないよう、読み込み直しをすすめる
+  if (browserStore.changedElsewhere) {
+    alertsHtml = '<div class="banner"><p><strong>別のタブ（ウィンドウ）で家計簿が変わりました。</strong>こちらで入れた内容で上書きしないよう、保存を止めています。読み込み直すと最新になります。</p>' +
+      '<button type="button" class="btn primary small" data-action="reload-app">読み込み直す</button></div>' + alertsHtml;
+  }
   if (appState.isSample) {
     banner.innerHTML = '<div class="banner"><p><strong>サンプルの家計簿を表示しています。</strong>架空の1年分のデータです。さわってみても保存はされません。</p>' +
       '<button type="button" class="btn primary small" data-action="start-own">自分の家計簿をはじめる</button></div>' + alertsHtml;
@@ -248,6 +253,28 @@ function movePeriod(step) {
   appState.filters.date = '';
   renderApp();
   playScreenEnter(step > 0 ? 'next' : 'previous');
+}
+
+/**
+ * アプリを開いたまま日付が変わったとき（ホーム画面のアプリは、閉じずに何日も残ることがある）:
+ * 今月を見ていたなら新しい月に切りかえ、指定日が来た固定費も記録する。
+ * アプリに戻ってきたとき（画面が見えるようになったとき）に確かめる。
+ */
+let lastSeenToday = todayText();
+function catchUpWithToday() {
+  const today = todayText();
+  if (today === lastSeenToday || !appState.profile || appState.locked) {
+    return;
+  }
+  const previousPeriod = periodOf(lastSeenToday);
+  const wasShowingCurrentMonth = appState.period &&
+    appState.period.year === previousPeriod.year && appState.period.month === previousPeriod.month;
+  lastSeenToday = today;
+  if (wasShowingCurrentMonth) {
+    appState.period = periodOf(today);
+  }
+  applyRecurringRules(); // 04-state-and-storage.js
+  renderApp();
 }
 
 /**
@@ -315,6 +342,7 @@ const ACTIONS = {
     renderApp();
   },
   'start-own': () => startOwnLedger(),
+  'reload-app': () => location.reload(),
 
   // --- 入出金 ---
   'new-trade': (button) => {
@@ -633,6 +661,11 @@ function start() {
   setupAccountDialog();
   setupLockDialog();
   setupSwipe();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      catchUpWithToday();
+    }
+  });
   enablePressedLook();
   setupChartDismiss(); // 07-charts.js
   fillIcons(document);

@@ -390,6 +390,10 @@ same('CSV日付: 存在しない日付は null', parseDateCell('2026/2/30'), nul
 same('CSV金額: △1,200 はマイナス', parseAmountCell('△1,200'), -1200);
 same('CSV金額: (1,200) はマイナス', parseAmountCell('(1,200)'), -1200);
 same('CSV金額: 1,200円', parseAmountCell('1,200円'), 1200);
+same('CSV金額: ¥-1,200 はマイナス（Excelの書き方）', parseAmountCell('¥-1,200'), -1200);
+same('CSV金額: \\-1,200 はマイナス（円記号がバックスラッシュ）', parseAmountCell('\\-1,200'), -1200);
+same('CSV金額: -1,200円 はマイナス', parseAmountCell('-1,200円'), -1200);
+same('CSV金額: ￥1,200 はプラス', parseAmountCell('￥1,200'), 1200);
 const csv = parseCsv('日付,内容,金額\n2026/9/1,"店,名",-100\n2026/9/2,"A""B",200\n');
 same('CSV: 行の数', csv.length, 3);
 same('CSV: カンマをふくむ文字', csv[1][1], '店,名');
@@ -496,13 +500,18 @@ same('往復: 支出は支出のまま', roundTripFresh.ready[0].type, 'expense'
 same('往復: 同じデータに取り込み直すと、全部が重複', convertCsvRows(roundTripRows, roundTripSettings, roundTripOriginals, [accountById['rt-bank']]).ready.length, 0);
 
 // 向きが逆になって入ってしまった明細（前の版で、プラスを支出として読んだもの）を見つける
-const flippedCopy = { ...roundTripOriginals[1], id: 'bad1', type: 'expense', category: 'other', sub: '未分類', createdAt: 99 };
+const flippedCopy = { ...roundTripOriginals[1], id: 'bad1', type: 'expense', category: 'other', sub: '未分類', createdAt: 99, importId: 'imp-old' };
 const flippedPairs = findFlippedCopies([...roundTripOriginals, flippedCopy]);
 same('逆向きの重複: 1組見つかる', flippedPairs.length, 1);
 same('逆向きの重複: 消す候補は、あとから入った方', flippedPairs[0].copy.id, 'bad1');
 same('逆向きの重複: 元の明細も示す', flippedPairs[0].original.id, 'rt2');
 same('逆向きの重複: 金額がちがえば別の明細', findFlippedCopies([...roundTripOriginals, { ...flippedCopy, amount: 299999 }]).length, 0);
 same('逆向きの重複: 向きが同じなら対象外（ふつうの重複）', findFlippedCopies([...roundTripOriginals, { ...roundTripOriginals[1], id: 'same1', createdAt: 99 }]).length, 0);
+const realBuy = { id: 'buy1', date: '2026-09-10', type: 'expense', amount: 5980, account: 'rt-bank', category: 'daily', sub: '日用品', description: 'AMAZON.CO.JP', include: true, createdAt: 1 };
+const realRefund = { ...realBuy, id: 'ref1', type: 'income', category: 'otherIn', sub: 'その他入金', createdAt: 2 };
+same('逆向きの重複: 自分で入れた同じ日の買い物と返金は、重複ではない', findFlippedCopies([realBuy, realRefund]).length, 0);
+same('逆向きの重複: 同じ取り込みの中の買い物と返金も、重複ではない', findFlippedCopies([{ ...realBuy, importId: 'imp-1' }, { ...realRefund, importId: 'imp-1' }]).length, 0);
+same('逆向きの重複: 別の取り込みで逆向きに入ったものは見つける', findFlippedCopies([realBuy, { ...realRefund, importId: 'imp-2' }]).length, 1);
 
 same('日付: 月の足し算（年またぎ）', addMonths('2026-11', 3), '2027-02');
 same('日付: 月末の補正', dayInMonthText('2027-02', 31), '2027-02-28');
@@ -690,6 +699,7 @@ same('メール: 別の書き方の金額（円マーク）', noticeB.amount, 12
 same('メール: 別の書き方のご利用先', noticeB.merchant, 'サンプル書店');
 const noticeC = parseCardNoticeEmail('ご利用日時：10/04 20:18\nご利用金額：500円\nご利用先：テスト', '2026-10-05');
 same('メール: 年がなければ今年', noticeC.date, '2026-10-04');
+same('メール: 年がない日付が今日より先なら、去年の日付にする（年末の買い物を年明けに読む）', parseCardNoticeEmail('ご利用日時：12/31 20:18\nご利用金額：500円\nご利用先：テスト', '2027-01-02').date, '2026-12-31');
 check('メール: 金額がなければ読めない', parseCardNoticeEmail('ご利用日時：2026/10/04\nご利用先：テスト', '2026-10-05') === null);
 check('メール: 関係ない文章は読めない', parseCardNoticeEmail('こんにちは。今日はいい天気ですね。', '2026-10-05') === null);
 check('メール: 空は読めない', parseCardNoticeEmail('', '2026-10-05') === null);
@@ -743,6 +753,15 @@ same('カレンダー（スマホ）: 1000円未満はそのまま', calendarAmo
 same('カレンダー（スマホ）: 1000円以上は「千」で短く', calendarAmountShort(1262), '1.3千');
 same('カレンダー（スマホ）: 1万円以上は「万」で短く', calendarAmountShort(13870), '1.4万');
 same('カレンダー（スマホ）: 10万円以上も短く', calendarAmountShort(125000), '12.5万');
+same('カレンダー（スマホ）: 9,950円は「10千」ではなく「1万」', calendarAmountShort(9950), '1万');
+same('カレンダー（スマホ）: 9,949円は「9.9千」', calendarAmountShort(9949), '9.9千');
+same('グラフの目盛り: 15,000円は「1.5万」（四捨五入で2万にしない）', formatYenShort(15000), '1.5万');
+same('グラフの目盛り: 25,000円は「2.5万」', formatYenShort(25000), '2.5万');
+same('グラフの目盛り: 10,000円は「1万」', formatYenShort(10000), '1万');
+same('グラフの目盛り: 1,234,567円は「123.5万」', formatYenShort(1234567), '123.5万');
+same('グラフの目盛り: 12,345,678円は「1,235万」', formatYenShort(12345678), '1,235万');
+same('グラフの目盛り: 5,000円はそのまま', formatYenShort(5000), '5,000');
+same('グラフの目盛り: マイナス', formatYenShort(-25000), '−2.5万');
 
 section('Face ID で開く');
 check('Face ID: ホーム画面のアプリ（https・WebAuthnあり）なら使える', biometricEnvironmentOk(true, false, true));
@@ -947,6 +966,44 @@ for (const item of transactionsInSub(octoberRange, 'food', '外食')) {
 }
 same('内訳の明細: 合計が家計簿の中項目の金額と同じ', subTotal, summarizeRange(octoberRange).categories.food.subs['外食']);
 allTransactions = [];
+
+section('点検で見つかった計算のまちがい');
+// CSVの口座名: ぴったり同じ名前を先に、なければ長い名前を
+const nameAccounts = [{ id: 'r1', name: '楽天カード' }, { id: 'r2', name: '楽天' }];
+same('口座名: ぴったり同じ名前の口座を選ぶ', accountIdFromName('楽天カード', nameAccounts), 'r1');
+same('口座名: ぴったり同じ名前の口座を選ぶ（順番が逆でも）', accountIdFromName('楽天カード', [...nameAccounts].reverse()), 'r1');
+same('口座名: 一部が合うときは、いちばん長い名前', accountIdFromName('楽天カード（家族）', nameAccounts), 'r1');
+same('口座名: 合う口座がなければ空', accountIdFromName('ゆうちょ', nameAccounts), '');
+
+// カードのポイント: 小数の計算で1ポイント少なくならない
+same('ポイント: 11,000円 × 0.7% = 77ポイント', pointsFromUsage(11000, 0.7), 77);
+same('ポイント: 10,000円 × 1% = 100ポイント', pointsFromUsage(10000, 1), 100);
+same('ポイント: 端数は切り捨て（999円 × 1% = 9）', pointsFromUsage(999, 1), 9);
+
+// ふだんの月の収支の平均: 記録のない月は数えない
+allTransactions = [{ id: 'av1', date: '2026-09-25', type: 'income', amount: 100000, account: 'a', category: 'salary', sub: '給与', description: '給与', include: true }];
+appState.profile = { settings: { startDay: 1 }, accounts: [] };
+same('収支の平均: 記録が1か月分だけなら、その月の収支', averageBaseBalance({ year: 2026, month: 10 }, 3), 100000);
+allTransactions = [];
+same('収支の平均: 記録がなければ0', averageBaseBalance({ year: 2026, month: 10 }, 3), 0);
+appState.profile = null;
+
+// こわれたデータ（null や、リストでない月）があっても止まらない
+const brokenMonthly = { '2026-10': [null, { id: 'ok1', date: '2026-10-01', type: 'expense', amount: 100, account: 'a' }, 'へんな値'], '2026-11': {} };
+const cleanedMonthly = cleanMonthlyData(brokenMonthly);
+same('こわれたデータ: 入出金でないものはのぞく', cleanedMonthly['2026-10'].length, 1);
+same('こわれたデータ: リストでない月は空にする', cleanedMonthly['2026-11'].length, 0);
+check('バックアップ: 月がリストでなければ読まない', parseBackupText(JSON.stringify({ profile: { accounts: [] }, monthly: { '2026-10': {} } })) === null);
+check('バックアップ: ふつうのバックアップは読める', parseBackupText(JSON.stringify({ profile: { accounts: [] }, monthly: { '2026-10': [] } })) !== null);
+
+// 元金がなく手数料だけの請求も、引き落としを記録したら「記録済み」になる
+const feeOnlyCard = makeCard('jcb');
+const feeOnlyRecords = [
+  buy('2026-09-10', 12000, { payMethod: 'installment', installments: 12 }),
+  { id: 'feepaid', date: '2026-10-10', type: 'expense', amount: 50, account: 'bank', paidCard: 'test-card', category: 'other', sub: 'カード手数料', description: '手数料', include: true, createdAt: 3, billMonth: '2026-10' },
+];
+const feeOnlyBill = buildCardBills(feeOnlyCard, feeOnlyRecords).find((item) => item.month === '2026-10');
+check('手数料だけの引き落とし: 記録したら「記録済み」', feeOnlyBill && feeOnlyBill.paid === true);
 
 section('カテゴリのマークの色');
 same('食費は「食べる・暮らす」の色', categoryToneClass(CATEGORY_BY_ID.food), ' tone-meal');
