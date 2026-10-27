@@ -696,5 +696,6 @@ function replaceAllData(newProfile, newMonthly) {
   // 以前あった月も「変わった月」に入れて、空なら箱を消してもらう
   const allMonths = new Set([...oldMonths, ...Object.keys(appState.monthly)]);
   appState.period = periodOf(todayText());
+  resetTemporaryStates(); // 23-app-start.js（前の家計簿の確認や書きかけを残さない）
   afterDataChange([...allMonths], true);
 }

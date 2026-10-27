@@ -15,6 +15,12 @@ let sampleFeature = null;     // Claude に質問する機能（使えないと�
 let canSendImages = false;    // 画像を送れるか
 let reviewController = null;  // ふり返りを途中で止めるためのもの
 let reviewText = '';          // ふり返りの結果（画面を描き直しても消えないように覚えておく）
+let reviewPeriodKey = '';     // そのふり返りが、どの期間・どの家計簿のものか（ちがう月に切りかえたら出さない）
+
+/** 今の期間と家計簿を表す文字（例: "2026-10/own"）。ふり返りの結果がどの月のものかを見分けるのに使う */
+function currentReviewKey() {
+  return appState.period.year + '-' + appState.period.month + '/' + (appState.isSample ? 'sample' : 'own');
+}
 
 /** アプリ起動時に呼ぶ: Claude の機能が使えるか調べる */
 async function connectAiFeatures() {
@@ -93,8 +99,13 @@ async function readReceiptImage(file) {
     '- 年が読めないときは ' + new Date().getFullYear() + ' 年とします。\n' +
     '- category と sub は次の一覧から最も近いものを選びます:\n' + categoryList;
 
+  const openCountAtStart = transactionDialog.openCount; // 読み取りを始めたときのダイアログ
   try {
     const result = await sampleFeature.json(prompt, { images: [file] });
+    // 結果が届く前にダイアログを閉じた・別の記録を開いたときは、入れない
+    if (transactionDialog.openCount !== openCountAtStart || !findOne('#transactionDialog').open) {
+      return;
+    }
     applyReceiptResult(result);
     status.textContent = '読み取りました。内容を確かめてから保存してください。';
   } catch (error) {
@@ -149,7 +160,8 @@ function aiReviewCardHtml() {
   const running = reviewController !== null;
   let html = '<section class="card span-5">';
   html += '<div class="card-head"><h2>AIのふり返り</h2><span class="sub">' + periodShortTitle(appState.period) + 'の数字をもとに Claude がコメントします</span></div>';
-  html += '<div class="ai-output" id="aiOutput" aria-live="polite">' + escapeHtml(reviewText || 'ボタンを押すと、良かった点・気になる点・来月できることを短くまとめます。') + '</div>';
+  const shownText = reviewPeriodKey === currentReviewKey() ? reviewText : '';
+  html += '<div class="ai-output" id="aiOutput" aria-live="polite">' + escapeHtml(shownText || 'ボタンを押すと、良かった点・気になる点・来月できることを短くまとめます。') + '</div>';
   html += '<div class="row-gap" style="margin-top:12px">';
   if (running) {
     html += '<button type="button" class="btn" data-action="stop-review">止める</button>';
@@ -197,6 +209,7 @@ async function runMonthlyReview() {
   }
   reviewController = new AbortController();
   reviewText = '考えています…';
+  reviewPeriodKey = currentReviewKey();
   renderApp();
 
   try {

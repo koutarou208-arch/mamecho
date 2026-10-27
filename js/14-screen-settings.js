@@ -49,6 +49,7 @@ const SettingsScreen = {
     });
     fillCategorySelect(categorySelect, 'expense', '');
     fillSubcategorySelect(subSelect, categorySelect.value, '');
+    restoreRuleForm(typeSelect, categorySelect, subSelect);
 
     setupRecurringForm();
 
@@ -60,19 +61,47 @@ const SettingsScreen = {
       });
     }
 
-    // 直しているルールがあれば、その内容を入力欄に入れておく
-    const editingRule = appState.profile.rules[editingRuleIndex];
-    if (editingRuleIndex !== null && editingRule) {
-      findOne('#ruleKeyword').value = editingRule.keyword;
-      typeSelect.value = editingRule.type;
-      fillCategorySelect(categorySelect, editingRule.type, editingRule.category);
-      fillSubcategorySelect(subSelect, editingRule.category, editingRule.sub);
-    }
   },
 };
 
-// 今「直す」を押しているルールの番号（なければ null）
-let editingRuleIndex = null;
+// 今「直す」を押しているルール（{ keyword, type }。なければ null）
+// 番号（何番目か）で覚えると、新しいルールが増えたときに別のルールを指してしまうので、キーワードと種類で覚える
+let editingRuleKey = null;
+// 「×」を押して削除の確認を出しているルール（{ keyword, type }。なければ null）
+let deletingRuleKey = null;
+// ルールの入力欄の書きかけ（ほかのボタンで画面を描き直しても消えないように覚えておく。なければ null）
+let ruleFormDraft = null;
+
+/** ルールの一覧の中で、key（{ keyword, type }）に当たるルールの番号。見つからなければ -1 */
+function rulePosition(key) {
+  if (!key) {
+    return -1;
+  }
+  return appState.profile.rules.findIndex((rule) => rule.keyword === key.keyword && rule.type === key.type);
+}
+
+/**
+ * ルールの入力欄に内容を入れる: 直しているルールがあればその内容、なければ書きかけ。
+ * あわせて、打った内容を書きかけとして覚えるようにする。
+ */
+function restoreRuleForm(typeSelect, categorySelect, subSelect) {
+  const keywordInput = findOne('#ruleKeyword');
+  const editingRule = appState.profile.rules[rulePosition(editingRuleKey)];
+  const values = editingRule || ruleFormDraft;
+  if (values) {
+    keywordInput.value = values.keyword || '';
+    typeSelect.value = values.type || 'expense';
+    fillCategorySelect(categorySelect, typeSelect.value, values.category || '');
+    fillSubcategorySelect(subSelect, categorySelect.value, values.sub || '');
+  }
+  const remember = () => {
+    ruleFormDraft = { keyword: keywordInput.value, type: typeSelect.value, category: categorySelect.value, sub: subSelect.value };
+  };
+  for (const element of [keywordInput, typeSelect, categorySelect, subSelect]) {
+    element.addEventListener('input', remember);
+    element.addEventListener('change', remember);
+  }
+}
 
 
 /* -----------------------------------------------------------
@@ -165,6 +194,28 @@ function setupRecurringForm() {
   findOne('#recurringAmount').value = values.amount ? String(values.amount) : '';
   findOne('#recurringDay').value = String(values.day || 1);
   findOne('#recurringStart').value = values.startMonth || todayText().slice(0, 7);
+
+  // 打った内容を書きかけとして覚える（ほかのボタンで画面を描き直しても消えないように）
+  const fieldIds = ['#recurringName', '#recurringAmount', '#recurringDay', '#recurringStart', '#recurringCategory', '#recurringSub', '#recurringAccount'];
+  const remember = () => {
+    const index = recurringFormState ? recurringFormState.index : null;
+    recurringFormState = {
+      index: index,
+      values: {
+        description: findOne('#recurringName').value,
+        amount: findOne('#recurringAmount').value,
+        day: findOne('#recurringDay').value,
+        startMonth: findOne('#recurringStart').value,
+        category: categorySelect.value,
+        sub: subSelect.value,
+        account: accountSelect.value,
+      },
+    };
+  };
+  for (const id of fieldIds) {
+    findOne(id).addEventListener('input', remember);
+    findOne(id).addEventListener('change', remember);
+  }
 }
 
 /** 「追加」「更新」が押されたとき */
@@ -346,6 +397,8 @@ function flippedCopiesHtml() {
    ----------------------------------------------------------- */
 function settingsRulesCardHtml() {
   const rules = appState.profile.rules;
+  const isEditingRule = rulePosition(editingRuleKey) !== -1;
+  const deletingIndex = rulePosition(deletingRuleKey);
   let html = '<section class="card span-12">';
   html += '<div class="card-head"><h2>自動分類ルール</h2><span class="sub">キーワード → カテゴリ</span></div>';
 
@@ -356,8 +409,8 @@ function settingsRulesCardHtml() {
     '<label class="field"><span>大項目</span><select id="ruleCategory"></select></label>' +
     '<label class="field"><span>中項目</span><select id="ruleSub"></select></label>' +
     '<div class="row-gap" style="align-self:end">' +
-    '<button type="button" class="btn primary" data-action="add-rule">' + (editingRuleIndex !== null ? '更新' : '追加') + '</button>' +
-    (editingRuleIndex !== null ? '<button type="button" class="btn ghost" data-action="cancel-rule-edit">やめる</button>' : '') +
+    '<button type="button" class="btn primary" data-action="add-rule">' + (isEditingRule ? '更新' : '追加') + '</button>' +
+    (isEditingRule ? '<button type="button" class="btn ghost" data-action="cancel-rule-edit">やめる</button>' : '') +
     '</div></div>';
 
   html += '<p class="small muted" style="margin-block:14px 6px">あなたのルール（' + rules.length + '件）· 入力中にカテゴリを直すと自動で増えます</p>';
@@ -372,6 +425,11 @@ function settingsRulesCardHtml() {
         (rule.type === 'income' ? '収入' : '支出') + ' → ' + escapeHtml(category ? category.name : rule.category) + ' / ' + escapeHtml(rule.sub) + '</span></span>' +
         '<button type="button" class="btn small ghost" data-action="edit-rule" data-index="' + index + '">直す</button>' +
         '<button type="button" class="icon-btn" data-action="delete-rule" data-index="' + index + '" aria-label="このルールを削除">' + iconSvg('close') + '</button></li>';
+      if (deletingIndex === index) {
+        html += '<li class="confirm-box"><p>「' + escapeHtml(rule.keyword) + '」のルールを削除します。これまでの記録のカテゴリは変わりません。</p>' +
+          '<div class="row-gap"><button type="button" class="btn danger small" data-action="delete-rule-yes">削除する</button>' +
+          '<button type="button" class="btn ghost small" data-action="delete-rule-no">やめる</button></div></li>';
+      }
     }
     html += '</ul>';
   }
@@ -394,14 +452,17 @@ function addRuleFromForm() {
     showToast('キーワードを入れてください');
     return;
   }
-  if (editingRuleIndex !== null && appState.profile.rules[editingRuleIndex]) {
+  const editingIndex = rulePosition(editingRuleKey);
+  ruleFormDraft = null; // 書きかけは使い終わった
+  if (editingIndex !== -1) {
     const newRule = { keyword: keyword, type: findOne('#ruleType').value, category: findOne('#ruleCategory').value, sub: findOne('#ruleSub').value };
-    appState.profile.rules = replaceRuleAt(appState.profile.rules, editingRuleIndex, newRule);
-    editingRuleIndex = null;
+    appState.profile.rules = replaceRuleAt(appState.profile.rules, editingIndex, newRule);
+    editingRuleKey = null;
     saveProfile();
     showToast('ルールを更新しました');
     return;
   }
+  editingRuleKey = null;
   rememberCategoryRule(keyword, findOne('#ruleType').value, findOne('#ruleCategory').value, findOne('#ruleSub').value);
   saveProfile();
   showToast('ルールを追加しました');
@@ -409,22 +470,44 @@ function addRuleFromForm() {
 
 /** ルールの「直す」ボタンが押されたとき（入力欄に内容を入れて、更新できるようにする） */
 function startRuleEdit(index) {
-  editingRuleIndex = index;
+  const rule = appState.profile.rules[index];
+  if (!rule) {
+    return;
+  }
+  editingRuleKey = { keyword: rule.keyword, type: rule.type };
+  ruleFormDraft = null;
   renderApp();
   findOne('#ruleKeyword').scrollIntoView({ block: 'center' });
 }
 
 /** 「やめる」が押されたとき */
 function cancelRuleEdit() {
-  editingRuleIndex = null;
+  editingRuleKey = null;
+  ruleFormDraft = null;
   renderApp();
 }
 
-/** ルール削除ボタンが押されたとき */
-function deleteRule(index) {
-  editingRuleIndex = null;
+/** ルールの「×」が押されたとき: 削除してよいかの確認を出す（index が -1 なら確認を閉じる） */
+function askDeleteRule(index) {
+  const rule = appState.profile.rules[index];
+  deletingRuleKey = rule ? { keyword: rule.keyword, type: rule.type } : null;
+  renderApp();
+}
+
+/** 確認で「削除する」が押されたとき */
+function deleteRuleConfirmed() {
+  const index = rulePosition(deletingRuleKey);
+  deletingRuleKey = null;
+  if (index === -1) {
+    renderApp();
+    return;
+  }
+  if (rulePosition(editingRuleKey) === index) {
+    editingRuleKey = null;
+  }
   appState.profile.rules.splice(index, 1);
   saveProfile();
+  showToast('ルールを削除しました');
 }
 
 

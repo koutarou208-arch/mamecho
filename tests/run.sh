@@ -16,6 +16,29 @@ cd "$(dirname "$0")/.." || exit 1
 
 BUNDLE="$(mktemp -t mamecho-test.XXXXXX)"
 
+# 0. すべての js ファイルに書き間違い（文法のまちがい）がないかを先に確かめる
+#    （画面を作るファイルは下のテストでは読まないので、ここで見ておかないと、アプリが開かなくなる失敗に気づけない）
+if command -v node >/dev/null 2>&1; then
+  for FILE in js/*.js sw.js; do
+    if ! node --check "$FILE" 2>/tmp/mamecho-syntax.txt; then
+      echo "書き間違いがあります: $FILE"
+      cat /tmp/mamecho-syntax.txt
+      rm -f /tmp/mamecho-syntax.txt "$BUNDLE"
+      exit 1
+    fi
+  done
+  # ブラウザと同じように全部を1つにつなげても、同じ名前の二重定義などがないか
+  ALL_JS="$(mktemp -t mamecho-all.XXXXXX).js"
+  cat js/vendor/papaparse.min.js js/[0-9]*.js > "$ALL_JS"
+  if ! node --check "$ALL_JS" 2>/tmp/mamecho-syntax.txt; then
+    echo "ファイルをつなげると書き間違いになります（同じ名前を2回使っていないか見てください）"
+    cat /tmp/mamecho-syntax.txt
+    rm -f /tmp/mamecho-syntax.txt "$ALL_JS" "$BUNDLE"
+    exit 1
+  fi
+  rm -f /tmp/mamecho-syntax.txt "$ALL_JS"
+fi
+
 # 1行目: node で動かすときの print の代役（jsc には最初から print がある）
 {
   echo "if (typeof print === 'undefined') { var print = function (text) { console.log(text); }; }"

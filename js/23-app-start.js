@@ -74,7 +74,8 @@ function renderNavigation() {
   }
 
   // 下のタブの「今いる場所」の印を、選ばれたタブの位置へすべらせる
-  let tabIndex = 0;
+  // （設定・手取りのように下のタブに無い画面では、印を出さない）
+  let tabIndex = -1;
   let mobileIndex = 0;
   for (const item of NAV_ITEMS) {
     if (!item.mobile) {
@@ -85,7 +86,10 @@ function renderNavigation() {
     }
     mobileIndex += 1;
   }
-  findOne('#tabBar').style.setProperty('--tab-index', tabIndex);
+  tabBar.classList.toggle('no-current', tabIndex === -1);
+  if (tabIndex !== -1) {
+    tabBar.style.setProperty('--tab-index', tabIndex);
+  }
 }
 
 /** data-icon="plus" のような印が付いた部品に、アイコンの絵を入れる */
@@ -105,7 +109,9 @@ function fillIcons(container) {
 function renderApp() {
   renderNavigation();
   // スマホの浮かぶ「記録する」ボタンは、家計簿を開いているときだけ出す（ロック中・読み込み中は出さない）
-  findOne('#fabRecordButton').hidden = appState.locked || !appState.profile;
+  const canRecord = !appState.locked && Boolean(appState.profile);
+  findOne('#fabRecordButton').hidden = !canRecord;
+  findOne('#newTransactionButton').hidden = !canRecord;
   renderBanner();
   setSaveStatus(appState.saveStatus);
 
@@ -197,9 +203,7 @@ function goToScreen(screenName) {
     return;
   }
   appState.screen = screenName;
-  appState.budgetDraft = null;
-  isWipeConfirmOpen = false;
-  isDisableLockConfirmOpen = false;
+  resetTemporaryStates();
   try {
     history.replaceState(null, '', '#' + screenName); // URLの最後に #cards などを付ける
   } catch (error) {
@@ -207,6 +211,24 @@ function goToScreen(screenName) {
   }
   renderApp();
   window.scrollTo(0, 0);
+}
+
+/**
+ * 画面を移ったとき・家計簿を入れかえたときに、開いたままの「確認」や「編集の途中」を元に戻す。
+ * （戻さないと、別の画面から帰ってきたときに、前の確認がまだ出ている）
+ */
+function resetTemporaryStates() {
+  appState.budgetDraft = null;      // 予算の編集
+  isWipeConfirmOpen = false;        // すべて削除の確認（14）
+  isDisableLockConfirmOpen = false; // ロックを外す確認（21）
+  deletingRecurringIndex = null;    // 固定費の削除の確認（14）
+  recurringFormState = null;        // 固定費の入力欄（14）
+  editingRuleKey = null;            // ルールを直している途中（14）
+  deletingRuleKey = null;           // ルールの削除の確認（14）
+  ruleFormDraft = null;             // ルールの入力欄（14）
+  isImportUndoConfirmOpen = false;  // 取り込みの取り消しの確認（14）
+  isFlippedListOpen = false;        // 逆に入った明細の一覧（14）
+  manualOffsetConfirmId = '';       // 仮の支出を消す確認（12）
 }
 
 /**
@@ -295,7 +317,6 @@ const ACTIONS = {
   'start-own': () => startOwnLedger(),
 
   // --- 入出金 ---
-  'new-from-email': () => openTransactionDialog(null, { openNotice: true }),
   'new-trade': (button) => {
     // 株の売買の損益: 証券口座があればそれを選んでおく
     const securities = appState.profile.accounts.find((account) => account.kind === 'securities');
@@ -452,7 +473,9 @@ const ACTIONS = {
   'recur-from-found': (button) => startRecurringFromFound(Number(button.dataset.index)),
   'edit-rule': (button) => startRuleEdit(Number(button.dataset.index)),
   'cancel-rule-edit': () => cancelRuleEdit(),
-  'delete-rule': (button) => deleteRule(Number(button.dataset.index)),
+  'delete-rule': (button) => askDeleteRule(Number(button.dataset.index)),
+  'delete-rule-yes': () => deleteRuleConfirmed(),
+  'delete-rule-no': () => askDeleteRule(-1),
   'wipe': () => {
     isWipeConfirmOpen = true;
     renderApp();
@@ -563,12 +586,30 @@ function start() {
     }
   });
 
-  // ダイアログの外側（暗いところ）を押したら閉じる
+  // ダイアログの外側（暗いところ）を押したら閉じる。ただし、
+  //   ・ロック画面は閉じない
+  //   ・押し始めがダイアログの中だった（文字を選んで外で指を離した）ときは閉じない
+  //   ・入力の途中なら閉じない（うっかり押して、打った内容が消えないように）
   for (const dialog of findAll('dialog')) {
+    let pressStartedOutside = false;
+    dialog.addEventListener('pointerdown', (event) => {
+      pressStartedOutside = event.target === dialog;
+    });
+    dialog.addEventListener('input', () => {
+      dialog.dataset.typed = '1';
+    });
+    dialog.addEventListener('close', () => {
+      delete dialog.dataset.typed;
+    });
     dialog.addEventListener('click', (event) => {
-      if (event.target === dialog && dialog.id !== 'lockDialog') { // ロック画面は外を押しても閉じない
-        dialog.close();
+      if (event.target !== dialog || !pressStartedOutside || dialog.id === 'lockDialog') {
+        return;
       }
+      if (dialog.dataset.typed) {
+        showToast('入力の途中なので閉じません。閉じるときは右上の × を押してください');
+        return;
+      }
+      dialog.close();
     });
   }
 

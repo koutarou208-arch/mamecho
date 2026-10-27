@@ -18,6 +18,7 @@ const transactionDialog = {
   editing: null,          // 編集中の入出金（新しく記録するときは null）
   categoryTouched: false, // カテゴリを自分で選んだか（選んだら自動分類しない）
   categoryChanged: false, // 今回カテゴリを変えたか（変えたらルールを覚える）
+  openCount: 0,           // ダイアログを開いた回数（遅れて届いたレシートの結果を、別の記録に入れないため）
 };
 
 const LAST_ACCOUNT_KEY = 'mamecho-last-account';
@@ -33,7 +34,12 @@ const LAST_ACCOUNT_KEY = 'mamecho-last-account';
  *   preset      … 新しく記録するときの初期値 { account, date, type }
  */
 function openTransactionDialog(transaction, preset) {
+  // 読み込み中・ロック中は口座の一覧がないので開かない
+  if (!appState.profile || appState.locked) {
+    return;
+  }
   const options = preset || {};
+  transactionDialog.openCount += 1;
   transactionDialog.editing = transaction;
   transactionDialog.categoryTouched = Boolean(transaction);
   transactionDialog.categoryChanged = false;
@@ -44,7 +50,9 @@ function openTransactionDialog(transaction, preset) {
   if (type !== 'adjust') {
     findOne('#transactionForm').elements.transactionType.value = type;
   }
-  findOne('#transactionTypeGroup').hidden = type === 'adjust';
+  // 残高修正と、カードの「仮の支出」（月の支払い金額の手入力）は、種類を変えられないようにする
+  const isManualBill = Boolean(transaction && transaction.manualBill);
+  findOne('#transactionTypeGroup').hidden = type === 'adjust' || isManualBill;
   findOne('#adjustLabel').hidden = type !== 'adjust';
 
   // 金額・日付・内容・メモ
@@ -402,6 +410,12 @@ function readTransactionForm() {
   if (editing && editing.billMonth) {
     transaction.billMonth = editing.billMonth; // カードの引き落とし記録の印は残す
   }
+  if (editing && editing.importId) {
+    transaction.importId = editing.importId; // CSVの取り込みの印も残す（「前回の取り込みを取り消す」で一緒に消せるように）
+  }
+  if (editing && editing.recurringId) {
+    transaction.recurringId = editing.recurringId; // 固定費から自動で記録された印も残す
+  }
   if (editing && editing.manualBill) {
     transaction.manualBill = true; // 「月の支払い金額だけ入力」の印も残す（消えると請求として数えられなくなる）
     transaction.dateFixed = true;  // 日付は決定済み（自分で直した日付を、あとで締め日に置き直さない）
@@ -480,6 +494,7 @@ function saveTransactionFromDialog(keepOpen) {
     findOne('#transactionDescription').value = '';
     findOne('#transactionMemo').value = '';
     findOne('#transactionError').textContent = '';
+    delete findOne('#transactionDialog').dataset.typed; // 入力の途中ではなくなった（外を押せば閉じられる）
     updateAmountHint();
     findOne('#transactionAmount').focus();
   } else {

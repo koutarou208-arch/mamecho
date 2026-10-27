@@ -27,6 +27,10 @@ const TransactionsScreen = {
     if (activeFilterCount() > 0) {
       isFilterPanelOpen = true;
     }
+    // 絞り込みの口座が削除されていたら、絞り込みを外す（何も出ない一覧にならないように）
+    if (filters.account && !accountById[filters.account]) {
+      filters.account = '';
+    }
     let html = '<section class="card">';
 
     // --- 検索と「絞り込み」ボタン（口座・カテゴリ・種類は、ボタンを押すと出る） ---
@@ -165,7 +169,8 @@ function renderTransactionList() {
  */
 function transactionRowHtml(transaction, options) {
   let markText = '';
-  let markClass = transaction.type;
+  // 種類は決まった4つだけをクラス名に使う（バックアップなどから変な値が来ても、HTMLに混ざらないように）
+  let markClass = ['expense', 'income', 'transfer', 'adjust'].includes(transaction.type) ? transaction.type : 'expense';
   let meta = '';
   let fallbackName = '';
 
