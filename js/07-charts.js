@@ -54,28 +54,55 @@ function hideActiveChart() {
 }
 
 /**
- * グラフの「さわる場所」（hitArea）に、マウスと指の操作をつける。
- *   indexAt(x) … SVG の中の横の位置 x から、何番目の月（日）かを返す
+ * グラフに、マウス・指・キーボードの操作をつける（4つのグラフで共通）。
+ *   hitArea      … さわる場所（グラフの中の透明な四角）
+ *   indexAt(x)   … SVG の中の横の位置 x から、何番目の月（日）かを返す
  *   show(index, clientX, clientY) … その月の吹き出しと印を出す
- *   hide() … 印を消す
+ *   hide()       … 印を消す
+ *   keyboard     … キーボードの ← → で動かすとき: { count: 月の数, startIndex: はじめの番号,
+ *                    pointOf(index): 吹き出しを出す SVG の中の位置 { x, y } }
  */
-function attachChartPointer(svgElement, hitArea, indexAt, show, hide) {
-  function showAt(event) {
-    const box = svgElement.getBoundingClientRect();
-    const viewWidth = svgElement.viewBox.baseVal.width || box.width;
-    const index = indexAt((event.clientX - box.left) * (viewWidth / box.width));
+function attachChartPointer(svgElement, hitArea, indexAt, show, hide, keyboard) {
+  let activeIndex = keyboard ? keyboard.startIndex : 0; // 今選んでいる番号（キーボードはここから動く）
+
+  function select(index, clientX, clientY) {
     if (activeChartHide && activeChartHide !== hide) {
       activeChartHide(); // ほかのグラフの印は消す
     }
     activeChartHide = hide;
-    show(index, event.clientX, event.clientY);
+    activeIndex = index;
+    show(index, clientX, clientY);
   }
-  hitArea.addEventListener('pointerdown', showAt);
-  hitArea.addEventListener('pointermove', showAt);
+
+  // マウスと指
+  function selectAtPointer(event) {
+    const box = svgElement.getBoundingClientRect();
+    const viewWidth = svgElement.viewBox.baseVal.width || box.width;
+    select(indexAt((event.clientX - box.left) * (viewWidth / box.width)), event.clientX, event.clientY);
+  }
+  hitArea.addEventListener('pointerdown', selectAtPointer);
+  hitArea.addEventListener('pointermove', selectAtPointer);
   hitArea.addEventListener('pointerleave', (event) => {
     if (event.pointerType === 'mouse') {
       hideActiveChart(); // 指のときは、離しても出したままにする
     }
+  });
+
+  // キーボード（パソコン）: ← → で前後の月へ。グラフから離れたら消す
+  if (!keyboard) {
+    return;
+  }
+  svgElement.addEventListener('blur', hide);
+  svgElement.addEventListener('keydown', (event) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+      return;
+    }
+    event.preventDefault();
+    const nextIndex = event.key === 'ArrowLeft' ? Math.max(0, activeIndex - 1) : Math.min(keyboard.count - 1, activeIndex + 1);
+    const box = svgElement.getBoundingClientRect();
+    const scale = box.width / (svgElement.viewBox.baseVal.width || box.width);
+    const point = keyboard.pointOf(nextIndex);
+    select(nextIndex, box.left + point.x * scale, box.top + point.y * scale);
   });
 }
 
@@ -296,10 +323,8 @@ function drawAssetTrendChart(container, points) {
   const cross = findOne('[data-role="cross"]', container);
   const focusDot = findOne('[data-role="focus"]', container);
   const hitArea = findOne('[data-role="hit"]', container);
-  let activeIndex = lastIndex;
 
   function showPoint(index, clientX, clientY) {
-    activeIndex = index;
     const x = xOf(index);
     const y = yOf(points[index].amount);
     cross.setAttribute('x1', x);
@@ -322,18 +347,10 @@ function drawAssetTrendChart(container, points) {
   attachChartPointer(svgElement, hitArea, (pointerX) => {
     const index = lastIndex === 0 ? 0 : Math.round(((pointerX - padLeft) / plotWidth) * lastIndex);
     return Math.max(0, Math.min(lastIndex, index));
-  }, showPoint, hidePoint);
-  svgElement.addEventListener('blur', hidePoint);
-  svgElement.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-      return;
-    }
-    event.preventDefault();
-    const nextIndex = event.key === 'ArrowLeft' ? Math.max(0, activeIndex - 1) : Math.min(lastIndex, activeIndex + 1);
-    const box = svgElement.getBoundingClientRect();
-    const clientX = box.left + xOf(nextIndex) * (box.width / width);
-    const clientY = box.top + yOf(points[nextIndex].amount) * (box.height / height);
-    showPoint(nextIndex, clientX, clientY);
+  }, showPoint, hidePoint, {
+    count: points.length,
+    startIndex: lastIndex,
+    pointOf: (index) => ({ x: xOf(index), y: yOf(points[index].amount) }),
   });
 }
 
@@ -427,10 +444,8 @@ function drawIncomeExpenseChart(container, rows) {
   const svgElement = findOne('svg', container);
   const highlight = findOne('[data-role="highlight"]', container);
   const hitArea = findOne('[data-role="hit"]', container);
-  let activeIndex = rows.length - 1;
 
   function showMonth(index, clientX, clientY) {
-    activeIndex = index;
     highlight.setAttribute('x', padLeft + bandWidth * index);
     highlight.setAttribute('visibility', 'visible');
     const row = rows[index];
@@ -448,17 +463,10 @@ function drawIncomeExpenseChart(container, rows) {
   attachChartPointer(svgElement, hitArea, (pointerX) => {
     const index = Math.floor((pointerX - padLeft) / bandWidth);
     return Math.max(0, Math.min(rows.length - 1, index));
-  }, showMonth, hideMonth);
-  svgElement.addEventListener('blur', hideMonth);
-  svgElement.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-      return;
-    }
-    event.preventDefault();
-    const nextIndex = event.key === 'ArrowLeft' ? Math.max(0, activeIndex - 1) : Math.min(rows.length - 1, activeIndex + 1);
-    const box = svgElement.getBoundingClientRect();
-    const clientX = box.left + centerOf(nextIndex) * (box.width / width);
-    showMonth(nextIndex, clientX, box.top + zeroY * (box.height / height));
+  }, showMonth, hideMonth, {
+    count: rows.length,
+    startIndex: rows.length - 1,
+    pointOf: (index) => ({ x: centerOf(index), y: zeroY }),
   });
 }
 
@@ -605,10 +613,8 @@ function drawCardDebtChart(container, rows) {
   const svgElement = findOne('svg', container);
   const highlight = findOne('[data-role="highlight"]', container);
   const hitArea = findOne('[data-role="hit"]', container);
-  let activeIndex = 0;
 
   function showMonth(index, clientX, clientY) {
-    activeIndex = index;
     highlight.setAttribute('x', padLeft + bandWidth * index);
     highlight.setAttribute('visibility', 'visible');
     const row = rows[index];
@@ -627,16 +633,10 @@ function drawCardDebtChart(container, rows) {
   attachChartPointer(svgElement, hitArea, (pointerX) => {
     const index = Math.floor((pointerX - padLeft) / bandWidth);
     return Math.max(0, Math.min(rows.length - 1, index));
-  }, showMonth, hideMonth);
-  svgElement.addEventListener('blur', hideMonth);
-  svgElement.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
-      return;
-    }
-    event.preventDefault();
-    const nextIndex = event.key === 'ArrowLeft' ? Math.max(0, activeIndex - 1) : Math.min(rows.length - 1, activeIndex + 1);
-    const box = svgElement.getBoundingClientRect();
-    showMonth(nextIndex, box.left + centerOf(nextIndex) * (box.width / width), box.top + zeroY * (box.height / height));
+  }, showMonth, hideMonth, {
+    count: rows.length,
+    startIndex: 0,
+    pointOf: (index) => ({ x: centerOf(index), y: zeroY }),
   });
 }
 

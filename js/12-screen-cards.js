@@ -313,9 +313,8 @@ function manualCheckHtml(account, entry) {
   }
   if (manualOffsetConfirmId === entry.id) {
     const keepText = check.hasDetail ? '取り込んだ明細は残ります。' : '明細がまだ無いので、この月の支出と引き落とし予定がその分へります。';
-    html += '<div class="confirm-box"><p>仮の ' + formatYen(check.manualAmount) + ' を消します。' + keepText + '</p>' +
-      '<div class="row-gap"><button type="button" class="btn danger" data-action="delete-manual-bill-yes" data-id="' + escapeHtml(entry.id) + '">仮を消す</button>' +
-      '<button type="button" class="btn ghost" data-action="delete-manual-bill-no">やめる</button></div></div>';
+    html += confirmBoxHtml('仮の ' + formatYen(check.manualAmount) + ' を消します。' + keepText, '仮を消す',
+      'delete-manual-bill-yes', 'delete-manual-bill-no', { data: 'data-id="' + escapeHtml(entry.id) + '"' });
   } else if (check.hasDetail) {
     html += '<div class="row-gap"><button type="button" class="btn small" data-action="delete-manual-bill" data-id="' + escapeHtml(entry.id) + '">仮を消して明細にする（相殺）</button></div>';
   }

@@ -1005,6 +1005,15 @@ const feeOnlyRecords = [
 const feeOnlyBill = buildCardBills(feeOnlyCard, feeOnlyRecords).find((item) => item.month === '2026-10');
 check('手数料だけの引き落とし: 記録したら「記録済み」', feeOnlyBill && feeOnlyBill.paid === true);
 
+section('削除の確認の箱（confirmBoxHtml）');
+const sampleConfirm = confirmBoxHtml('「家賃」を削除します。', '削除する', 'delete-x-yes', 'delete-x-no', { tag: 'li', small: true, data: 'data-index="2"' });
+check('確認の箱: 説明の文が入る', sampleConfirm.includes('<p>「家賃」を削除します。</p>'));
+check('確認の箱: 消すボタンに印が付く', sampleConfirm.includes('data-action="delete-x-yes" data-index="2">削除する</button>'));
+check('確認の箱: 「やめる」ボタンがある', sampleConfirm.includes('data-action="delete-x-no">やめる</button>'));
+check('確認の箱: 一覧の中なら li で囲む', sampleConfirm.startsWith('<li class="confirm-box">') && sampleConfirm.endsWith('</li>'));
+check('確認の箱: 小さいボタン', sampleConfirm.includes('class="btn danger small"'));
+check('確認の箱: ふつうは div で囲む', confirmBoxHtml('x', 'y', 'a', 'b').startsWith('<div class="confirm-box">'));
+
 section('カテゴリのマークの色');
 same('食費は「食べる・暮らす」の色', categoryToneClass(CATEGORY_BY_ID.food), ' tone-meal');
 same('家賃は「固定費」の色', categoryToneClass(CATEGORY_BY_ID.housing), ' tone-fixed');

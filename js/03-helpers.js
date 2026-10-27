@@ -37,6 +37,28 @@ function escapeHtml(text) {
     .replace(/'/g, '&#39;');
 }
 
+/**
+ * 「本当に消しますか？」の確認の箱のHTMLを作る。消す操作は、かならずこれで確認を出す。
+ *   message   … 説明の文（そのままHTMLとして入るので、ユーザーが入れた文字は escapeHtml してから渡す）
+ *   yesLabel  … 消すボタンの文字（例: '削除する'）
+ *   yesAction … 消すボタンを押したときの data-action
+ *   noAction  … 「やめる」を押したときの data-action
+ *   options   … 足したいときだけ: { tag: 'li'（一覧の中に出すとき）, small: true（小さいボタン）,
+ *                                   data: 'data-index="3"'（消すボタンに付ける印）, style: '…' }
+ */
+function confirmBoxHtml(message, yesLabel, yesAction, noAction, options) {
+  const settings = options || {};
+  const tag = settings.tag || 'div';
+  const size = settings.small ? ' small' : '';
+  const mark = settings.data ? ' ' + settings.data : '';
+  const style = settings.style ? ' style="' + settings.style + '"' : '';
+  return '<' + tag + ' class="confirm-box"' + style + '><p>' + message + '</p>' +
+    '<div class="row-gap">' +
+    '<button type="button" class="btn danger' + size + '" data-action="' + yesAction + '"' + mark + '>' + yesLabel + '</button>' +
+    '<button type="button" class="btn ghost' + size + '" data-action="' + noAction + '">やめる</button>' +
+    '</div></' + tag + '>';
+}
+
 /** だれとも重ならない番号（ID）を作る。入出金や口座に1つずつ付ける */
 function makeId() {
   const timePart = Date.now().toString(36);
@@ -346,13 +368,6 @@ function addMonths(monthText, count) {
   const year = Math.floor(total / 12);
   const month = (total % 12) + 1;
   return makeMonthText(year, month);
-}
-
-/** "2026-10" と "2027-01" の間が何か月あるか（b − a） */
-function monthsBetween(monthTextA, monthTextB) {
-  const a = monthTextA.split('-').map(Number);
-  const b = monthTextB.split('-').map(Number);
-  return (b[0] * 12 + b[1]) - (a[0] * 12 + a[1]);
 }
 
 /**

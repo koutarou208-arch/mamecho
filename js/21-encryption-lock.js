@@ -633,9 +633,8 @@ function lockCardHtml() {
     }
     html += '</div>';
     if (isDisableLockConfirmOpen) {
-      html += '<div class="confirm-box" style="margin-top:12px"><p>暗号化をやめて、データを元の（暗号化されない）形で保存し直します。</p>' +
-        '<div class="row-gap"><button type="button" class="btn danger" data-action="disable-lock-yes">オフにする</button>' +
-        '<button type="button" class="btn ghost" data-action="disable-lock-no">やめる</button></div></div>';
+      html += confirmBoxHtml('暗号化をやめて、データを元の（暗号化されない）形で保存し直します。', 'オフにする',
+        'disable-lock-yes', 'disable-lock-no', { style: 'margin-top:12px' });
     }
     html += biometricSectionHtml();
   }

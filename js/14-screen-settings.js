@@ -150,9 +150,8 @@ function settingsRecurringCardHtml() {
         '<button type="button" class="btn small ghost" data-action="edit-recurring" data-index="' + index + '">直す</button>' +
         '<button type="button" class="icon-btn" data-action="delete-recurring" data-index="' + index + '" aria-label="この固定費を削除">' + iconSvg('close') + '</button></li>';
       if (deletingRecurringIndex === index) {
-        html += '<li class="confirm-box"><p>「' + escapeHtml(rule.description) + '」の固定費を削除します。これまでに記録された分は消えません。</p>' +
-          '<div class="row-gap"><button type="button" class="btn danger small" data-action="delete-recurring-yes" data-index="' + index + '">削除する</button>' +
-          '<button type="button" class="btn ghost small" data-action="delete-recurring-no">やめる</button></div></li>';
+        html += confirmBoxHtml('「' + escapeHtml(rule.description) + '」の固定費を削除します。これまでに記録された分は消えません。', '削除する',
+          'delete-recurring-yes', 'delete-recurring-no', { tag: 'li', small: true, data: 'data-index="' + index + '"' });
       }
     }
     html += '</ul>';
@@ -376,9 +375,8 @@ function importUndoHtml() {
     escapeHtml(lastImport.fileName || 'CSV') + ' · ' + escapeHtml(lastImport.at || '') + ' · 残り' + imported.length + '件</span></span>' +
     '<button type="button" class="btn small" data-action="undo-import">取り消す</button></div>';
   if (isImportUndoConfirmOpen) {
-    html += '<div class="confirm-box"><p>前回の取り込みで入った ' + imported.length + '件を削除します。ほかの明細は消えません。</p>' +
-      '<div class="row-gap"><button type="button" class="btn danger" data-action="undo-import-yes">' + imported.length + '件を削除</button>' +
-      '<button type="button" class="btn ghost" data-action="undo-import-no">やめる</button></div></div>';
+    html += confirmBoxHtml('前回の取り込みで入った ' + imported.length + '件を削除します。ほかの明細は消えません。', imported.length + '件を削除',
+      'undo-import-yes', 'undo-import-no');
   }
   return html;
 }
@@ -445,9 +443,8 @@ function settingsRulesCardHtml() {
         '<button type="button" class="btn small ghost" data-action="edit-rule" data-index="' + index + '">直す</button>' +
         '<button type="button" class="icon-btn" data-action="delete-rule" data-index="' + index + '" aria-label="このルールを削除">' + iconSvg('close') + '</button></li>';
       if (deletingIndex === index) {
-        html += '<li class="confirm-box"><p>「' + escapeHtml(rule.keyword) + '」のルールを削除します。これまでの記録のカテゴリは変わりません。</p>' +
-          '<div class="row-gap"><button type="button" class="btn danger small" data-action="delete-rule-yes">削除する</button>' +
-          '<button type="button" class="btn ghost small" data-action="delete-rule-no">やめる</button></div></li>';
+        html += confirmBoxHtml('「' + escapeHtml(rule.keyword) + '」のルールを削除します。これまでの記録のカテゴリは変わりません。', '削除する',
+          'delete-rule-yes', 'delete-rule-no', { tag: 'li', small: true });
       }
     }
     html += '</ul>';

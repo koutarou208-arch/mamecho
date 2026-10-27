@@ -257,9 +257,7 @@ function askRestoreFromText(text) {
   findOne('#importBody').innerHTML =
     '<p>このバックアップ（口座 ' + backup.profile.accounts.length + '件・入出金 ' + count + '件' +
     (backup.exportedAt ? '・' + escapeHtml(backupDateText(backup.exportedAt)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
-    '<div class="confirm-box"><p>今のデータは消えます。元に戻せません。</p><div class="row-gap">' +
-    '<button type="button" class="btn danger" data-action="restore-yes">置きかえる</button>' +
-    '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div></div>';
+    confirmBoxHtml('今のデータは消えます。元に戻せません。', '置きかえる', 'restore-yes', 'close-dialog');
   findOne('#importDialog').showModal();
 }
 
