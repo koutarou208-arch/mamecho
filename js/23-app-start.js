@@ -404,6 +404,7 @@ const ACTIONS = {
     renderTransactionList();
   },
   'show-breakdown': (button) => showCategoryBreakdown(button.dataset.value),
+  'open-next-bill': (button) => openNextBill(button.dataset.id, button.dataset.month),
   'open-sub': (button) => openSubTransactions(button.dataset.category, button.dataset.sub),
   'report-type': (button) => {
     appState.reportType = button.dataset.value;

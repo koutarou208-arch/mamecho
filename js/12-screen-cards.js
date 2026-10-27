@@ -58,8 +58,21 @@ const CardsScreen = {
       }
     }
     attachSimpleTooltips(findOne('#screen'));
+    // 「これからの請求」で開いた月を覚えておく（明細を直して描き直したあとも、開いたままにする）
+    for (const details of findAll('details[data-bill-key]')) {
+      details.addEventListener('toggle', () => {
+        if (details.open) {
+          openBillKeys.add(details.dataset.billKey);
+        } else {
+          openBillKeys.delete(details.dataset.billKey);
+        }
+      });
+    }
   },
 };
+
+// 「これからの請求」で開いている月（'カードのid|2026-11'）
+const openBillKeys = new Set();
 
 // 「支払い予定をまとめて入力」の欄を開いたままにするカード（口座id → true）
 const openManualPanels = {};
@@ -85,9 +98,11 @@ function cardPanelHtml(account) {
   if (summary.nextBill) {
     const bill = summary.nextBill;
     const confirmed = today > bill.closeDate;
-    html += '<div class="stat"><span class="label">次の引き落とし ' + formatMonthDay(bill.payDate) + '</span>' +
-      '<span class="value num">' + formatYen(bill.total) + '</span>' +
-      '<span class="small muted">' + (confirmed ? '請求確定' : formatShortDate(bill.closeDate) + 'の締めまで増えます') + (bill.fee > 0 ? ' · うち手数料 ' + formatYen(bill.fee) : '') + '</span></div>';
+    // 押すと、この請求の中身を直せる（中身が1件だけならすぐ編集画面、いくつかなら下の「これからの請求」のその月を開く）
+    html += '<button type="button" class="stat stat-link" data-action="open-next-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '" aria-label="次の引き落としの中身を見る・直す">' +
+      '<span class="label">次の引き落とし ' + formatMonthDay(bill.payDate) + '</span>' +
+      '<span class="value num">' + formatYen(bill.total) + iconSvg('chevron-right') + '</span>' +
+      '<span class="small muted">' + (confirmed ? '請求確定' : formatShortDate(bill.closeDate) + 'の締めまで増えます') + (bill.fee > 0 ? ' · うち手数料 ' + formatYen(bill.fee) : '') + ' · 押すと直せます</span></button>';
   } else {
     html += '<div class="stat"><span class="label">次の引き落とし</span><span class="value num">¥0</span><span class="small muted">予定はありません</span></div>';
   }
@@ -197,7 +212,8 @@ function billRowHtml(account, bill, today) {
     state = '<span class="tag" style="margin:0">未確定</span>';
   }
 
-  let html = '<details><summary class="bill-row">' +
+  const billKey = account.id + '|' + bill.month;
+  let html = '<details data-bill-key="' + escapeHtml(billKey) + '" id="bill-' + escapeHtml(account.id) + '-' + bill.month + '"' + (openBillKeys.has(billKey) ? ' open' : '') + '><summary class="bill-row">' +
     '<span>' + formatMonthDay(bill.payDate) + '</span>' +
     '<span>' + state + '</span>' +
     '<span class="num">' + formatYen(bill.principal) + '</span>' +
@@ -207,8 +223,16 @@ function billRowHtml(account, bill, today) {
 
   for (const detail of bill.details) {
     const name = detail.transaction ? (detail.transaction.description || '（内容なし）') + '（' + formatShortDate(detail.transaction.date) + '利用）' : '';
-    html += '<div class="sub-row"><span>' + escapeHtml(detail.label) + (name ? ' · ' + escapeHtml(name) : '') + '</span>' +
-      '<span class="num">' + formatYen(detail.principal) + (detail.fee > 0 ? ' ＋手数料 ' + formatYen(detail.fee) : '') + '</span></div>';
+    const text = '<span>' + escapeHtml(detail.label) + (name ? ' · ' + escapeHtml(name) : '') + '</span>';
+    const amount = formatYen(detail.principal) + (detail.fee > 0 ? ' ＋手数料 ' + formatYen(detail.fee) : '');
+    if (detail.transaction) {
+      // 元になった記録がある明細は、押すと直せる
+      html += '<button type="button" class="sub-row sub-link" data-action="edit-transaction" data-id="' + escapeHtml(detail.transaction.id) + '">' + text +
+        '<span class="num">' + amount + iconSvg('chevron-right') + '</span></button>';
+    } else {
+      // リボの毎月の分・登録したときの残高などは、計算でできた金額なので直せない
+      html += '<div class="sub-row">' + text + '<span class="num">' + amount + '</span></div>';
+    }
   }
   if (!bill.paid) {
     html += '<div style="margin-top:6px"><button type="button" class="btn small" data-action="record-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '">この引き落としを記録する</button>' +
@@ -218,6 +242,36 @@ function billRowHtml(account, bill, today) {
   return html;
 }
 
+
+/**
+ * 「次の引き落とし」を押したとき: その請求の中身を直せるようにする。
+ *   ・中身が記録1件だけ（月の支払い金額の手入力など）なら、すぐ編集画面を開く
+ *   ・いくつかあるなら、下の「これからの請求」のその月を開いて、そこまでスクロールする
+ */
+function openNextBill(accountId, month) {
+  const account = accountById[accountId];
+  if (!account) {
+    return;
+  }
+  const bill = buildCardBills(account).find((item) => item.month === month);
+  if (!bill) {
+    return;
+  }
+  if (bill.details.length === 1 && bill.details[0].transaction) {
+    openTransactionDialog(bill.details[0].transaction); // 15-dialog-transaction.js
+    return;
+  }
+  openBillKeys.add(accountId + '|' + month);
+  renderApp();
+  // その月の見出しの行が、上の見出しの帯（画面名）のすぐ下に来るようにスクロールする
+  const row = document.getElementById('bill-' + accountId + '-' + month);
+  if (row) {
+    const topbar = findOne('.topbar');
+    const topbarHeight = topbar ? topbar.getBoundingClientRect().height : 0;
+    const top = row.getBoundingClientRect().top + window.scrollY - topbarHeight - 12;
+    window.scrollTo({ top: Math.max(0, top), behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+  }
+}
 
 /** 支払い方法のしくみ（勉強用の説明） */
 function paymentMethodGuideHtml() {
