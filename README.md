@@ -52,7 +52,7 @@ mamecho/
    ├─ 15-dialog-transaction.js【画面】入出金の入力ダイアログ
    ├─ 16-dialog-account.js …… 【画面】口座の設定と、通帳ふうの明細
    ├─ 17-csv-and-backup.js …… 【機能】CSVの取り込み・書き出し、バックアップ
-   ├─ 18-ai-features.js ……… 【機能】レシート読み取り、Claude と話す（月のまとめ・会話）
+   ├─ 18-ai-features.js ……… 【機能】レシート読み取り、Claude と話す（月のまとめ・会話）、Claude 用のまとめのコピー
    ├─ 19-sample-data.js ……… 【機能】お試し用のサンプルデータ
    ├─ 20-rules-alerts.js …… 【機能】制度変更のお知らせ、不具合の報告文
    ├─ 21-encryption-lock.js 【機能】暗号化ロック（パスフレーズ）

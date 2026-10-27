@@ -1022,10 +1022,12 @@ allTransactions = [
   { id: 'ai5', date: '2026-09-10', type: 'expense', amount: 5000, account: 'bank1', category: 'food', sub: '食料品', description: 'テストショウテンC', memo: '', include: true },
   { id: 'ai6', date: '2026-10-15', type: 'expense', amount: 90000, account: 'card1', category: 'other', sub: 'カード引き落とし（仮）', description: '支払い予定（仮）2026年11月', memo: '', include: true, manualBill: true, billMonth: '2026-11' },
 ];
+allTransactions.push({ id: 'ai7', date: '2026-10-10', type: 'expense', amount: 300, account: 'bank1', category: 'other', sub: 'カード手数料', description: 'ヒミツのカード 手数料（2026年10月請求分）', memo: '', include: true });
+allTransactions.push({ id: 'ai8', date: '2026-10-11', type: 'expense', amount: 100, account: 'bank1', category: 'other', sub: '雑費', description: 'ヒミツ銀行 ATM手数料', memo: '', include: true });
 const aiFacts = monthFactsForAi({ year: 2026, month: 10 });
 same('渡すデータ: 収入', aiFacts.income, 250000);
-same('渡すデータ: 支出（仮の支出もふくむ）', aiFacts.spending, 95000);
-same('渡すデータ: 収支', aiFacts.balance, 155000);
+same('渡すデータ: 支出（仮の支出もふくむ）', aiFacts.spending, 95400);
+same('渡すデータ: 収支', aiFacts.balance, 154600);
 const aiFood = aiFacts.expenseByCategory.find((item) => item.category === '食費');
 same('渡すデータ: カテゴリの合計', aiFood && aiFood.total, 2000);
 same('渡すデータ: 中項目の合計', aiFood && aiFood.subs['外食'], 2000);
@@ -1042,11 +1044,26 @@ check('渡すデータ: メモは入らない', !aiAllText.includes('ないし�
 check('渡すデータ: 口座の名前は入らない', !aiAllText.includes('ヒミツ'));
 check('渡すデータ: お店の名前は、ふだんは入らない', !aiAllText.includes('テストショウテン'));
 
+// ホーム画面のアプリ用: Claude のアプリに貼るための「まとめの文」
+const summaryText = claudeSummaryText({ year: 2026, month: 10 });
+check('まとめの文: はじめに、Claude へのお願いがある', summaryText.startsWith('【まめ帳の家計のまとめ】'));
+check('まとめの文: 収入・支出・収支', summaryText.includes('収入 250,000円') && summaryText.includes('支出 95,400円') && summaryText.includes('収支 +154,600円'));
+check('まとめの文: カテゴリと中項目', summaryText.includes('食費 2,000円') && summaryText.includes('外食 2,000円'));
+check('まとめの文: 予算', summaryText.includes('食費: 予算 40,000円 / 使った額 2,000円'));
+check('まとめの文: 直近12か月', summaryText.includes('2026-09') && summaryText.includes('2025-11'));
+check('まとめの文: カードは会社名だけ', summaryText.includes('カード1（JCB）') && !summaryText.includes('ヒミツ'));
+check('まとめの文: お店ごとの合計が入る（利用者の許可ずみ）', summaryText.includes('テストショウテンB 3,000円（1回）'));
+check('まとめの文: メモは入らない', !summaryText.includes('ないしょ'));
+check('まとめの文: 仮の支出はお店に入れない', !summaryText.includes('支払い予定（仮）'));
+
 const aiStores = storeTotalsForAi({ year: 2026, month: 10 }, '');
-same('お店ごと: 多い順', aiStores.map((item) => item.store + ':' + item.total).join(','), 'テストショウテンB:3000,テストショウテンA:2000');
+same('お店ごと: 多い順', aiStores.slice(0, 2).map((item) => item.store + ':' + item.total).join(','), 'テストショウテンB:3000,テストショウテンA:2000');
 same('お店ごと: 回数', aiStores[1].count, 2);
 same('お店ごと: カテゴリでしぼれる', storeTotalsForAi({ year: 2026, month: 10 }, '食費').map((item) => item.store).join(','), 'テストショウテンA');
 check('お店ごと: 仮の支出（手入力の支払い予定）は入れない', !JSON.stringify(aiStores).includes('支払い予定'));
+check('お店ごと: 内容に入っている口座の名前は隠す', !JSON.stringify(aiStores).includes('ヒミツ'));
+check('お店ごと: カードの名前は「カード1（JCB）」に置きかえる', JSON.stringify(aiStores).includes('カード1（JCB） 手数料'));
+check('お店ごと: 銀行などの名前は「（口座）」に置きかえる', JSON.stringify(aiStores).includes('（口座） ATM手数料'));
 check('お店ごと: メモは入らない', !JSON.stringify(aiStores).includes('ないしょ'));
 allTransactions = [];
 accountById = {};

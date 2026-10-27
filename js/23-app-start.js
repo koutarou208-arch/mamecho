@@ -647,6 +647,7 @@ const ACTIONS = {
   },
   'chat-clear-yes': () => clearChatConfirmed(),
   'go-chat': () => goToChat(),
+  'open-claude-summary': () => openClaudeSummary(),
 
   // --- ダイアログ ---
   'close-dialog': (button) => button.closest('dialog').close(),

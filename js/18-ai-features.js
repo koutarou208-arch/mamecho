@@ -269,10 +269,33 @@ function cardBillsForAi() {
 }
 
 /**
+ * 文の中に入っている口座の名前を隠す（カードは「カード1（JCB）」、ほかは「（口座）」に置きかえる）。
+ * カードの手数料の記録のように、内容に口座の名前が自動で入ることがあるため。長い名前から順に置きかえる。
+ */
+function maskAccountNames(text) {
+  const replacements = [];
+  const cards = cardAccounts();
+  for (const account of appState.profile.accounts) {
+    if (!account.name) {
+      continue;
+    }
+    const cardIndex = cards.indexOf(account);
+    const label = cardIndex >= 0 ? 'カード' + (cardIndex + 1) + '（' + cardSettings(account).company.name + '）' : '（口座）';
+    replacements.push({ name: account.name, label: label });
+  }
+  replacements.sort((a, b) => b.name.length - a.name.length);
+  let masked = String(text || '');
+  for (const replacement of replacements) {
+    masked = masked.split(replacement.name).join(replacement.label);
+  }
+  return masked;
+}
+
+/**
  * Claude に渡す、ある月のお店ごとの支出の合計（多い順に STORE_LIMIT 件）。
  * Claude が「お店ごと」を知りたいときに問い合わせたときだけ使う（利用者の許可ずみ）。
  *   categoryName … '食費' のようにカテゴリの名前でしぼる（'' ならすべて）
- * お店の名前は入出金の「内容」。メモ・口座の名前は入れない。仮の支出（支払い予定の手入力）は入れない。
+ * お店の名前は入出金の「内容」。メモは入れない。内容に口座の名前が入っていたら隠す。仮の支出（支払い予定の手入力）は入れない。
  */
 function storeTotalsForAi(period, categoryName) {
   const range = periodRange(period);
@@ -288,15 +311,99 @@ function storeTotalsForAi(period, categoryName) {
     if (categoryName && (!category || category.name !== categoryName)) {
       continue;
     }
-    const key = normalizeText(transaction.description) || '（内容なし）';
+    const storeName = maskAccountNames(transaction.description) || '（内容なし）'; // 口座の名前は隠す
+    const key = normalizeText(storeName);
     if (!groups.has(key)) {
-      groups.set(key, { store: transaction.description || '（内容なし）', total: 0, count: 0 });
+      groups.set(key, { store: storeName, total: 0, count: 0 });
     }
     const group = groups.get(key);
     group.total = group.total + transaction.amount;
     group.count = group.count + 1;
   }
   return [...groups.values()].sort((a, b) => b.total - a.total).slice(0, STORE_LIMIT);
+}
+
+/**
+ * ホーム画面のアプリ用: Claude のアプリに貼って相談するための「まとめの文」。
+ * アプリは外と通信しないので、利用者がこの文をコピーして、自分で Claude に貼る。
+ * 入れるもの・入れないものは、「Claude と話す」と同じ（お店ごとの合計は入れる。メモ・口座の名前は入れない）。
+ */
+function claudeSummaryText(period) {
+  const facts = monthFactsForAi(period);
+  const yen = (amount) => formatNumber(amount) + '円';
+  const signedYen = (amount) => (amount > 0 ? '+' : '') + formatNumber(amount) + '円';
+  const lines = [];
+
+  lines.push('【まめ帳の家計のまとめ】' + facts.title + '（' + facts.range + '。期間の' + facts.elapsedPercent + '%が過ぎたところ）');
+  lines.push('次の家計簿のデータをもとに、やさしい日本語で家計の相談にのってください。数字を作らず、分からないことは分からないと言ってください。投資・保険の具体的なおすすめはしないでください。');
+  lines.push('');
+  lines.push('■ ' + facts.title + 'の収支');
+  lines.push('収入 ' + yen(facts.income) + '（先月 ' + yen(facts.lastMonth.income) + '）');
+  lines.push('支出 ' + yen(facts.spending) + '（先月 ' + yen(facts.lastMonth.spending) + '）');
+  lines.push('収支 ' + signedYen(facts.balance));
+  if (facts.investmentGainLoss !== 0) {
+    lines.push('株などの損益 ' + signedYen(facts.investmentGainLoss));
+  }
+
+  lines.push('');
+  lines.push('■ 支出のカテゴリ別（かっこの中は先月）');
+  for (const row of facts.expenseByCategory) {
+    const subs = Object.entries(row.subs).sort((a, b) => b[1] - a[1]).map((entry) => entry[0] + ' ' + yen(entry[1])).join(' / ');
+    lines.push('・' + row.category + ' ' + yen(row.total) + '（' + yen(row.lastMonth) + '）: ' + subs);
+  }
+  if (facts.incomeByCategory.length > 0) {
+    lines.push('');
+    lines.push('■ 収入のカテゴリ別');
+    for (const row of facts.incomeByCategory) {
+      lines.push('・' + row.category + ' ' + yen(row.total));
+    }
+  }
+  if (facts.budgets.length > 0) {
+    lines.push('');
+    lines.push('■ 予算');
+    for (const row of facts.budgets) {
+      lines.push('・' + row.category + ': 予算 ' + yen(row.budget) + ' / 使った額 ' + yen(row.used));
+    }
+  }
+  if (facts.savingsGoal > 0) {
+    lines.push('毎月の貯金目標 ' + yen(facts.savingsGoal));
+  }
+
+  lines.push('');
+  lines.push('■ 直近12か月（月: 収入 / 支出 / 収支）');
+  for (const row of monthsOverviewForAi(period, 12)) {
+    lines.push(row.month + ': ' + yen(row.income) + ' / ' + yen(row.spending) + ' / ' + signedYen(row.balance));
+  }
+
+  const cards = cardBillsForAi();
+  if (cards.length > 0) {
+    lines.push('');
+    lines.push('■ カードの引き落とし予定');
+    for (const card of cards) {
+      const bills = card.upcomingBills.map((bill) => formatShortDate(bill.payDate) + ' ' + yen(bill.total) + (bill.fee > 0 ? '（うち手数料 ' + yen(bill.fee) + '）' : '')).join('、');
+      lines.push('・' + card.card + ': ' + (bills || '予定なし') + '。これから払う元金の合計 ' + yen(card.remainingPrincipal));
+    }
+  }
+
+  const stores = storeTotalsForAi(period, '');
+  if (stores.length > 0) {
+    lines.push('');
+    lines.push('■ お店ごとの支出（多い順' + stores.length + '件）');
+    for (const store of stores) {
+      lines.push('・' + store.store + ' ' + yen(store.total) + '（' + store.count + '回）');
+    }
+  }
+  return lines.join('\n');
+}
+
+/** 「Claude 用のまとめをコピー」: まとめの文を表示して、コピーできるようにする（貼る前に中身を見て、消したいところは消せる） */
+function openClaudeSummary() {
+  findOne('#textDialogTitle').textContent = 'Claude 用のまとめ';
+  findOne('#textDialogHint').textContent = '「コピーする」を押して、Claude のアプリに貼り付けると、この数字をもとに相談できます。見せたくないところは、ここで消してからコピーしてください。メモ・口座の名前は入っていません。';
+  const area = findOne('#textDialogContent');
+  area.readOnly = false; // まとめは、貼る前に消したり直したりできる
+  area.value = claudeSummaryText(appState.period);
+  findOne('#textDialog').showModal();
 }
 
 /** Claude への説明の文（答え方の決まりと、今の家計簿の数字） */
@@ -372,9 +479,12 @@ function aiChatCardHtml() {
   let html = '<section class="card span-12" id="aiChatCard">';
   html += '<div class="card-head"><h2>Claude と話す</h2><span class="sub">家計簿の数字をもとに、ふつうの言葉で答えます</span></div>';
 
-  // Claude 版でないとき（ホーム画面のアプリ・ブラウザ）は使えないので、案内だけ出す
+  // Claude 版でないとき（ホーム画面のアプリ・ブラウザ）: アプリからは Claude に送れない（送るには有料の鍵が要る）ので、
+  // まとめの文をコピーして、利用者が自分で Claude のアプリに貼る
   if (!sampleFeature) {
-    html += '<p class="hint">この機能は、Claude 版のまめ帳（claude.ai で開いたとき）で使えます。ホーム画面のアプリでは、お金のかかる鍵が要るため使えません。</p>';
+    html += '<p>' + periodShortTitle(appState.period) + 'の数字のまとめをコピーして、Claude のアプリに貼り付けると、ふつうの言葉で相談できます（お金はかかりません。このアプリから外へは何も送りません）。</p>';
+    html += '<div class="row-gap" style="margin-top:10px"><button type="button" class="btn primary" data-action="open-claude-summary">Claude 用のまとめをコピー</button></div>';
+    html += '<p class="hint" style="margin-top:8px">入るもの: 収入・支出、カテゴリと中項目、予算、直近12か月、カードの引き落とし予定、お店ごとの合計。入らないもの: メモ・口座の名前。コピーする前に中身を見て、消したいところは消せます。</p>';
     html += '</section>';
     return html;
   }

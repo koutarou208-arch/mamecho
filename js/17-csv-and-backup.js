@@ -80,6 +80,7 @@ async function offerDownload(filename, text) {
   findOne('#textDialogTitle').textContent = filename;
   findOne('#textDialogHint').textContent = 'この環境ではファイルを保存できないため、内容を表示しています。コピーしてテキストファイルに貼り付けてください。';
   findOne('#textDialogContent').value = text;
+  findOne('#textDialogContent').readOnly = true;
   findOne('#textDialog').showModal();
 }
 
@@ -280,6 +281,7 @@ function showBackupText() {
   findOne('#textDialogTitle').textContent = 'バックアップの文字';
   findOne('#textDialogHint').textContent = '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。家計簿の中身がそのまま入っているので、人には見せないでください。';
   findOne('#textDialogContent').value = backupToText(backup);
+  findOne('#textDialogContent').readOnly = true;
   findOne('#textDialog').showModal();
 }
 
