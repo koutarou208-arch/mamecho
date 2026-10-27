@@ -432,12 +432,16 @@ function showToast(message) {
 /**
  * 指を横にすべらせた動きから、期間を動かす向きを決める。
  *   dx … 横にどれだけ動いたか（右が＋）  dy … 縦にどれだけ動いたか
+ *   durationMs … 指を置いてから離すまでの時間（素早く払ったときは、短い距離でも動かす。省略可）
  * 返す値: -1（前の期間へ） / 1（次の期間へ） / 0（何もしない）
  * 短い動きや、縦のほうが大きい動き（ふつうの上下スクロール）は 0 にします。
  */
-function swipeStepOf(dx, dy) {
-  const minimumDistance = 60;
-  if (Math.abs(dx) < minimumDistance) {
+function swipeStepOf(dx, dy, durationMs) {
+  const minimumDistance = 60;   // ゆっくり動かしたときは、これだけ横に動いたら
+  const flickDistance = 25;     // 素早く払ったときは、これだけでよい
+  const flickTimeMs = 250;      // 「素早い」とみなす時間
+  const isFlick = durationMs !== undefined && durationMs <= flickTimeMs;
+  if (Math.abs(dx) < (isFlick ? flickDistance : minimumDistance)) {
     return 0;
   }
   if (Math.abs(dx) < Math.abs(dy) * 1.5) {

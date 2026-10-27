@@ -237,6 +237,9 @@ button { font: inherit; color: inherit; }
   min-width: 0;
   padding-inline: var(--gutter);
   padding-block: 0 48px;
+  /* 月を変えるスライドで画面が横に動いている間、横にはみ出した分を見せない（横スクロールを出さない）。
+     clip は hidden とちがって、上の見出しの帯の「固定（sticky）」をこわさない */
+  overflow-x: clip;
 }
 main { display: block; max-width: 1160px; margin-inline: auto; }
 main:focus { outline: none; }

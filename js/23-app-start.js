@@ -292,38 +292,94 @@ function enablePressedLook() {
 
 /**
  * 画面を左右になぞって、前の月・次の月へ動かせるようにする（スマホ向け）。
- * 入力欄・グラフ・横にスクロールする表の上では動かさない。
+ *   ・なぞっている間は、指に合わせて画面が横に動く
+ *   ・十分動かして離す（または素早く払う）と、横に抜けて、次の月がすべり込む。少しだけなら元に戻る
+ *   ・明細の行（ボタン）の上から始めてもよい。入力欄・グラフ・横にスクロールする表の上では動かさない
+ *   ・縦の動きのほうが大きいときは、ふつうの上下スクロールにまかせる
+ *   ・「動きを減らす」設定の人には、指に合わせて動かさず、離したときに月だけ変える
  */
 function setupSwipe() {
-  const screenArea = findOne('#screen');
+  const screenArea = findOne('#screen');           // 指に合わせて動かすところ（画面の中身）
+  const touchArea = findOne('.main-wrap') || screenArea; // なぞりを受け取るところ（中身の外の余白や、上の月の表示も含む）
   let startX = 0;
   let startY = 0;
-  let tracking = false;
+  let startTime = 0;
+  let mode = 'none'; // 'none'（見ていない）/ 'deciding'（縦か横かまだ分からない）/ 'horizontal'（横になぞっている）
 
-  screenArea.addEventListener('touchstart', (event) => {
-    const blocked = event.target.closest('input, select, textarea, button, .chart, .scroll-x, table');
-    tracking = !blocked && event.touches.length === 1;
-    if (tracking) {
+  // 画面の位置を、横に px だけずらす（0 で元の位置）。animate が true なら、なめらかに動かす
+  function slideScreen(px, animate) {
+    screenArea.style.transition = animate ? 'transform 0.2s ease-out' : 'none';
+    screenArea.style.transform = px === 0 ? '' : 'translateX(' + px + 'px)';
+  }
+
+  function canSwipeHere() {
+    const screen = SCREENS[appState.screen];
+    return screen && screen.usesPeriod && !appState.locked && Boolean(appState.profile);
+  }
+
+  touchArea.addEventListener('touchstart', (event) => {
+    const blocked = event.target.closest('input, select, textarea, .chart, .scroll-x, table, .takehome-slider, .money3d-svg');
+    mode = !blocked && event.touches.length === 1 && canSwipeHere() ? 'deciding' : 'none';
+    if (mode === 'deciding') {
       startX = event.touches[0].clientX;
       startY = event.touches[0].clientY;
+      startTime = Date.now();
     }
   }, { passive: true });
 
-  screenArea.addEventListener('touchend', (event) => {
-    if (!tracking) {
+  touchArea.addEventListener('touchmove', (event) => {
+    if (mode === 'none') {
       return;
     }
-    tracking = false;
-    const screen = SCREENS[appState.screen];
-    if (!screen || !screen.usesPeriod || appState.locked || !appState.profile) {
+    const dx = event.touches[0].clientX - startX;
+    const dy = event.touches[0].clientY - startY;
+    if (mode === 'deciding') {
+      if (Math.abs(dx) < 10 && Math.abs(dy) < 10) {
+        return; // まだ、縦か横か分からない
+      }
+      mode = Math.abs(dx) > Math.abs(dy) * 1.2 ? 'horizontal' : 'none'; // 縦ならふつうのスクロール
+      if (mode === 'none') {
+        return;
+      }
+    }
+    event.preventDefault(); // 横になぞっている間は、画面を上下にスクロールさせない
+    if (!prefersReducedMotion()) {
+      slideScreen(dx * 0.85, false);
+    }
+  }, { passive: false });
+
+  function finishSwipe(event, isCancelled) {
+    if (mode !== 'horizontal') {
+      mode = 'none';
       return;
     }
+    mode = 'none';
     const touch = event.changedTouches[0];
-    const step = swipeStepOf(touch.clientX - startX, touch.clientY - startY);
-    if (step !== 0) {
-      movePeriod(step);
+    const dx = touch.clientX - startX;
+    const step = isCancelled ? 0 : swipeStepOf(dx, touch.clientY - startY, Date.now() - startTime);
+    if (step === 0) {
+      slideScreen(0, !prefersReducedMotion()); // 足りなかった: 元の位置に戻す
+      return;
     }
-  }, { passive: true });
+    if (prefersReducedMotion()) {
+      slideScreen(0, false);
+      movePeriod(step);
+      return;
+    }
+    // 横に抜ける → 月を変える → 反対側から少しすべり込む
+    const width = screenArea.getBoundingClientRect().width;
+    slideScreen(step > 0 ? -width : width, true);
+    setTimeout(() => {
+      appState.period = shiftPeriod(appState.period, step);
+      appState.filters.date = '';
+      renderApp();
+      slideScreen(step > 0 ? 48 : -48, false);
+      void screenArea.offsetWidth; // 位置をいったん反映させてから、元の位置へ動かす
+      slideScreen(0, true);
+    }, 200);
+  }
+  touchArea.addEventListener('touchend', (event) => finishSwipe(event, false), { passive: true });
+  touchArea.addEventListener('touchcancel', (event) => finishSwipe(event, true), { passive: true });
 }
 
 /** 入出金画面の絞り込みを全部外す */
