@@ -25,9 +25,8 @@ const ReportScreen = {
     html += reportFlowCardHtml(period);
     html += reportCategoryCardHtml(period);
     html += reportFixedCostCardHtml(period);
-    const aiCard = aiReviewCardHtml(); // 18-ai-features.js（使えないときは空）
-    html += reportCalendarCardHtml(period, aiCard === '' ? 'span-12' : 'span-7');
-    html += aiCard;
+    html += reportCalendarCardHtml(period, 'span-12');
+    html += aiChatCardHtml(); // 18-ai-features.js（Claude と話す）
     html += '</div>';
     return html;
   },
@@ -36,6 +35,7 @@ const ReportScreen = {
     const chartArea = findOne('#flowChart');
     const rows = reportFlowRows(appState.period);
     registerChart(() => drawIncomeExpenseChart(chartArea, rows));
+    setupChatInput(); // 18-ai-features.js（入力欄の書きかけを覚える・Ctrl+Enter で送る）
     // カテゴリを開いた・閉じたを覚えておく（明細を直して描き直したあとも、同じところを開いておくため）
     for (const details of findAll('#categoryCard details[data-category-id]')) {
       details.addEventListener('toggle', () => {

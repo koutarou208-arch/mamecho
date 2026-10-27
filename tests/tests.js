@@ -1009,6 +1009,62 @@ const feeOnlyRecords = [
 const feeOnlyBill = buildCardBills(feeOnlyCard, feeOnlyRecords).find((item) => item.month === '2026-10');
 check('手数料だけの引き落とし: 記録したら「記録済み」', feeOnlyBill && feeOnlyBill.paid === true);
 
+section('Claude と話す: Claude に渡すデータ');
+const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
+const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };
+appState.profile = { settings: { startDay: 1, savingsGoal: 30000 }, accounts: [aiBank, aiCard], budgets: { food: 40000 }, rules: [], recurring: [], chat: [] };
+accountById = { bank1: aiBank, card1: aiCard };
+allTransactions = [
+  { id: 'ai1', date: '2026-10-03', type: 'expense', amount: 1200, account: 'card1', category: 'food', sub: '外食', description: 'テストショウテンA', memo: 'ないしょのメモ', include: true },
+  { id: 'ai2', date: '2026-10-05', type: 'expense', amount: 800, account: 'card1', category: 'food', sub: '外食', description: 'テストショウテンA', memo: '', include: true },
+  { id: 'ai3', date: '2026-10-06', type: 'expense', amount: 3000, account: 'bank1', category: 'daily', sub: '日用品', description: 'テストショウテンB', memo: '', include: true },
+  { id: 'ai4', date: '2026-10-25', type: 'income', amount: 250000, account: 'bank1', category: 'salary', sub: '給与', description: 'テスト給与', memo: '', include: true },
+  { id: 'ai5', date: '2026-09-10', type: 'expense', amount: 5000, account: 'bank1', category: 'food', sub: '食料品', description: 'テストショウテンC', memo: '', include: true },
+  { id: 'ai6', date: '2026-10-15', type: 'expense', amount: 90000, account: 'card1', category: 'other', sub: 'カード引き落とし（仮）', description: '支払い予定（仮）2026年11月', memo: '', include: true, manualBill: true, billMonth: '2026-11' },
+];
+const aiFacts = monthFactsForAi({ year: 2026, month: 10 });
+same('渡すデータ: 収入', aiFacts.income, 250000);
+same('渡すデータ: 支出（仮の支出もふくむ）', aiFacts.spending, 95000);
+same('渡すデータ: 収支', aiFacts.balance, 155000);
+const aiFood = aiFacts.expenseByCategory.find((item) => item.category === '食費');
+same('渡すデータ: カテゴリの合計', aiFood && aiFood.total, 2000);
+same('渡すデータ: 中項目の合計', aiFood && aiFood.subs['外食'], 2000);
+const aiFoodBudget = aiFacts.budgets.find((item) => item.category === '食費');
+check('渡すデータ: 予算と使った額', aiFoodBudget && aiFoodBudget.budget === 40000 && aiFoodBudget.used === 2000);
+const aiOverview = monthsOverviewForAi({ year: 2026, month: 10 }, 3);
+same('12か月の流れ: 古い順に3か月', aiOverview.map((item) => item.month).join(','), '2026-08,2026-09,2026-10');
+same('12か月の流れ: 9月の支出', aiOverview[1].spending, 5000);
+const aiBills = cardBillsForAi();
+same('カード: 名前は会社名だけ（口座の名前は出さない）', aiBills[0].card, 'カード1（JCB）');
+check('カード: 引き落とし予定がある', aiBills[0].upcomingBills.length > 0);
+const aiAllText = JSON.stringify(aiFacts) + JSON.stringify(aiOverview) + JSON.stringify(aiBills);
+check('渡すデータ: メモは入らない', !aiAllText.includes('ないしょのメモ'));
+check('渡すデータ: 口座の名前は入らない', !aiAllText.includes('ヒミツ'));
+check('渡すデータ: お店の名前は、ふだんは入らない', !aiAllText.includes('テストショウテン'));
+
+const aiStores = storeTotalsForAi({ year: 2026, month: 10 }, '');
+same('お店ごと: 多い順', aiStores.map((item) => item.store + ':' + item.total).join(','), 'テストショウテンB:3000,テストショウテンA:2000');
+same('お店ごと: 回数', aiStores[1].count, 2);
+same('お店ごと: カテゴリでしぼれる', storeTotalsForAi({ year: 2026, month: 10 }, '食費').map((item) => item.store).join(','), 'テストショウテンA');
+check('お店ごと: 仮の支出（手入力の支払い予定）は入れない', !JSON.stringify(aiStores).includes('支払い予定'));
+check('お店ごと: メモは入らない', !JSON.stringify(aiStores).includes('ないしょ'));
+allTransactions = [];
+accountById = {};
+appState.profile = null;
+
+section('Claude と話す: 会話の形');
+const chatHistory = [];
+for (let index = 0; index < 25; index++) {
+  chatHistory.push({ role: index % 2 === 0 ? 'user' : 'assistant', text: 'メッセージ' + index });
+}
+const chatTurns = chatTurnsForClaude('説明の文', chatHistory);
+same('会話: 最初は説明（user）', chatTurns[0].role + ':' + chatTurns[0].content, 'user:説明の文');
+same('会話: 最後は利用者の言葉（user）', chatTurns[chatTurns.length - 1].role + ':' + chatTurns[chatTurns.length - 1].content, 'user:メッセージ24');
+same('会話: 古いやりとりは送らない（説明＋直近20件）', chatTurns.length, 21);
+const savedChat = trimSavedChat([...chatHistory, ...chatHistory, { role: 'assistant', text: 'あ'.repeat(5000) }]);
+same('会話の保存: 30件まで', savedChat.length, 30);
+same('会話の保存: 長すぎる答えは切る', savedChat[29].text.length, 2500);
+
 section('削除の確認の箱（confirmBoxHtml）');
 const sampleConfirm = confirmBoxHtml('「家賃」を削除します。', '削除する', 'delete-x-yes', 'delete-x-no', { tag: 'li', small: true, data: 'data-index="2"' });
 check('確認の箱: 説明の文が入る', sampleConfirm.includes('<p>「家賃」を削除します。</p>'));

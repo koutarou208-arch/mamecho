@@ -236,6 +236,7 @@ function resetTemporaryStates() {
   isImportUndoConfirmOpen = false;  // 取り込みの取り消しの確認（14）
   isFlippedListOpen = false;        // 逆に入った明細の一覧（14）
   manualOffsetConfirmId = '';       // 仮の支出を消す確認（12）
+  isChatClearConfirmOpen = false;   // 会話を消す確認（18）
   settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
   settingsOpenForms.rule = false;
 }
@@ -632,8 +633,20 @@ const ACTIONS = {
   },
 
   // --- AI ---
-  'run-review': () => runMonthlyReview(),
-  'stop-review': () => stopMonthlyReview(),
+  // --- Claude と話す（18-ai-features.js） ---
+  'chat-send': () => sendChatFromInput(),
+  'chat-ask': (button) => askClaude(button.dataset.text),
+  'chat-stop': () => stopClaude(),
+  'chat-clear': () => {
+    isChatClearConfirmOpen = true;
+    renderApp();
+  },
+  'chat-clear-no': () => {
+    isChatClearConfirmOpen = false;
+    renderApp();
+  },
+  'chat-clear-yes': () => clearChatConfirmed(),
+  'go-chat': () => goToChat(),
 
   // --- ダイアログ ---
   'close-dialog': (button) => button.closest('dialog').close(),

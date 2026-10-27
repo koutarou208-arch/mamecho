@@ -138,7 +138,9 @@ function homeMonthCardHtml(period) {
 
   let html = '<section class="card span-7 home-month">';
   html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の収支</h2><span class="sub">' + periodRangeText(period) + '</span>' +
-    '<button class="link-btn" data-action="go" data-screen="report">家計簿を見る</button></div>';
+    '<span class="row-gap" style="margin-left:auto; gap:4px">' +
+    (sampleFeature ? '<button class="link-btn" data-action="go-chat">Claude に聞く</button>' : '') +
+    '<button class="link-btn" data-action="go" data-screen="report">家計簿を見る</button></span></div>';
 
   html += '<div class="stats">' +
     // 収入・支出は押すと、家計簿の「カテゴリ別」（内訳）がその種類で開く

@@ -57,7 +57,7 @@ done
   echo "if (typeof Papa === 'undefined' && typeof module !== 'undefined') { var Papa = module.exports; }"
   cat js/01-categories.js js/02-card-companies.js js/03-helpers.js js/04-state-and-storage.js \
       js/05-calculations.js js/06-credit-card-billing.js js/07-charts.js js/17-csv-and-backup.js \
-      js/19-sample-data.js js/21-encryption-lock.js js/22-take-home-pay.js
+      js/18-ai-features.js js/19-sample-data.js js/21-encryption-lock.js js/22-take-home-pay.js
   cat tests/tests.js
 } > "$BUNDLE"
 

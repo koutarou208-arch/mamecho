@@ -79,6 +79,7 @@ function createEmptyProfile() {
     budgets: {},          // 例: { food: 50000, daily: 8000 }
     rules: [],            // 自分で覚えさせた自動分類ルール
     recurring: [],        // 毎月自動で記録する固定費（家賃など）
+    chat: [],             // 「Claude と話す」の会話（18-ai-features.js。最大30件）
   };
 }
 
@@ -99,6 +100,7 @@ function normalizeProfile(raw) {
     budgets: profile.budgets || {},
     rules: Array.isArray(profile.rules) ? profile.rules : [],
     recurring: Array.isArray(profile.recurring) ? profile.recurring : [],
+    chat: Array.isArray(profile.chat) ? profile.chat : [],
   };
 }
 
