@@ -25,7 +25,9 @@ const AccountsScreen = {
       '<div class="stat"><span class="label">資産</span><span class="value num">' + formatYen(breakdown.assets) + '</span></div>' +
       '<div class="stat"><span class="label">負債</span><span class="value num">' + formatYen(breakdown.debts) + '</span></div>' +
       '<div class="stat"><span class="label">純資産</span><span class="value num total">' + formatYen(breakdown.net) + '</span></div>' +
-      '</div></section>';
+      '</div>' +
+      '<p class="hint" style="margin-top:8px">資産＝持っているお金。負債＝カードの未払いやローンなど、これから払うお金。純資産＝資産から負債を引いた、本当の手持ち。</p>' +
+      '</section>';
 
     // --- 種類ごと ---
     for (const kindId of ACCOUNT_KIND_ORDER) {

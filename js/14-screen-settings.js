@@ -15,13 +15,14 @@ const SettingsScreen = {
   usesPeriod: false,
 
   html() {
+    // よく使うもの（CSVの取り込み・固定費・自動分類）を上に、めったに変えないもの（集計期間・制度データ）を下に
     let html = '<div class="grid">';
-    html += settingsPeriodCardHtml();
     html += settingsDataCardHtml();
-    html += lockCardHtml();            // 21-encryption-lock.js
-    html += rulesDataCardHtml();       // 20-rules-alerts.js
     html += settingsRecurringCardHtml();
     html += settingsRulesCardHtml();
+    html += lockCardHtml();            // 21-encryption-lock.js
+    html += settingsPeriodCardHtml();
+    html += rulesDataCardHtml();       // 20-rules-alerts.js
     html += settingsStorageCardHtml();
     html += '</div>';
     return html;
@@ -53,6 +54,13 @@ const SettingsScreen = {
 
     setupRecurringForm();
 
+    // 「＋ 追加する」を開いた・閉じたを覚えておく（描き直しても、開いたままにする）
+    for (const details of findAll('details[data-form-box]')) {
+      details.addEventListener('toggle', () => {
+        settingsOpenForms[details.dataset.formBox] = details.open;
+      });
+    }
+
     // 「すべてのデータを削除」: 「削除」と入力したときだけ、消すボタンを押せるようにする
     const wipeWord = findOne('#wipeConfirmWord');
     if (wipeWord) {
@@ -63,6 +71,9 @@ const SettingsScreen = {
 
   },
 };
+
+// 設定の「＋ 追加する」の入力欄を開いているか（'recurring' / 'rule' → true）
+const settingsOpenForms = {};
 
 // 今「直す」を押しているルール（{ keyword, type }。なければ null）
 // 番号（何番目か）で覚えると、新しいルールが増えたときに別のルールを指してしまうので、キーワードと種類で覚える
@@ -152,7 +163,9 @@ function settingsRecurringCardHtml() {
   for (let day = 1; day <= 31; day++) {
     dayOptions += '<option value="' + day + '">' + (day === 31 ? '月末' : day + '日') + '</option>';
   }
-  html += '<p class="small muted" style="margin-block:14px 6px">' + (isEditing ? '固定費を直す' : '固定費を追加') + '</p>';
+  // 入力欄は「＋ 固定費を追加する」を押したときだけ開く（直しているとき・書きかけ・まだ1つもないときは、はじめから開く）
+  const isFormOpen = isEditing || recurringFormState !== null || list.length === 0 || settingsOpenForms.recurring;
+  html += '<details class="more form-box" data-form-box="recurring"' + (isFormOpen ? ' open' : '') + '><summary>' + (isEditing ? '固定費を直す' : '＋ 固定費を追加する') + '</summary>';
   html += '<div class="recurring-form">' +
     '<label class="field"><span>名前</span><input id="recurringName" autocomplete="off" placeholder="例: 家賃"></label>' +
     '<label class="field"><span>金額</span><div class="amount-input"><span aria-hidden="true">¥</span><input id="recurringAmount" inputmode="numeric" autocomplete="off" placeholder="80000"></div></label>' +
@@ -165,6 +178,7 @@ function settingsRecurringCardHtml() {
   html += '<p class="form-error" id="recurringError" role="alert"></p>';
   html += '<div class="row-gap" style="margin-top:8px"><button type="button" class="btn primary" data-action="save-recurring">' + (isEditing ? '更新' : '追加') + '</button>' +
     (recurringFormState !== null ? '<button type="button" class="btn ghost" data-action="cancel-recurring">やめる</button>' : '') + '</div>';
+  html += '</details>';
   html += '</section>';
   return html;
 }
@@ -261,6 +275,7 @@ function saveRecurringFromForm() {
     showToast('固定費を追加しました');
   }
   recurringFormState = null;
+  settingsOpenForms.recurring = false; // 登録できたら入力欄はたたむ
   saveProfile();
   applyRecurringRules(); // 指定日がもう過ぎている月があれば、すぐ記録する
 }
@@ -291,6 +306,7 @@ function startRecurringFromFound(index) {
 
 function cancelRecurringEdit() {
   recurringFormState = null;
+  settingsOpenForms.recurring = false;
   renderApp();
 }
 
@@ -402,7 +418,10 @@ function settingsRulesCardHtml() {
   let html = '<section class="card span-12">';
   html += '<div class="card-head"><h2>自動分類ルール</h2><span class="sub">キーワード → カテゴリ</span></div>';
 
-  // 追加フォーム
+  // 追加フォーム（「＋ ルールを自分で追加する」を押したときだけ開く。直しているとき・書きかけのときは、はじめから開く）
+  const isRuleFormOpen = isEditingRule || ruleFormDraft !== null || settingsOpenForms.rule;
+  html += '<p class="hint">お店の名前（キーワード）が入った記録を、決めたカテゴリに自動で分けます。記録するときにカテゴリを直すと、ここに自動で増えます。</p>';
+  html += '<details class="more form-box" data-form-box="rule"' + (isRuleFormOpen ? ' open' : '') + '><summary>' + (isEditingRule ? 'ルールを直す' : '＋ ルールを自分で追加する') + '</summary>';
   html += '<div class="rule-form">' +
     '<label class="field"><span>キーワード（お店の名前など）</span><input id="ruleKeyword" autocomplete="off" placeholder="例: まるみや"></label>' +
     '<label class="field"><span>種類</span><select id="ruleType"><option value="expense">支出</option><option value="income">収入</option></select></label>' +
@@ -411,9 +430,9 @@ function settingsRulesCardHtml() {
     '<div class="row-gap" style="align-self:end">' +
     '<button type="button" class="btn primary" data-action="add-rule">' + (isEditingRule ? '更新' : '追加') + '</button>' +
     (isEditingRule ? '<button type="button" class="btn ghost" data-action="cancel-rule-edit">やめる</button>' : '') +
-    '</div></div>';
+    '</div></div></details>';
 
-  html += '<p class="small muted" style="margin-block:14px 6px">あなたのルール（' + rules.length + '件）· 入力中にカテゴリを直すと自動で増えます</p>';
+  html += '<p class="small muted" style="margin-block:14px 6px">あなたのルール（' + rules.length + '件）</p>';
   if (rules.length === 0) {
     html += '<p class="hint">まだありません。</p>';
   } else {
@@ -454,6 +473,7 @@ function addRuleFromForm() {
   }
   const editingIndex = rulePosition(editingRuleKey);
   ruleFormDraft = null; // 書きかけは使い終わった
+  settingsOpenForms.rule = false; // 登録できたら入力欄はたたむ
   if (editingIndex !== -1) {
     const newRule = { keyword: keyword, type: findOne('#ruleType').value, category: findOne('#ruleCategory').value, sub: findOne('#ruleSub').value };
     appState.profile.rules = replaceRuleAt(appState.profile.rules, editingIndex, newRule);
@@ -484,6 +504,7 @@ function startRuleEdit(index) {
 function cancelRuleEdit() {
   editingRuleKey = null;
   ruleFormDraft = null;
+  settingsOpenForms.rule = false;
   renderApp();
 }
 

@@ -185,7 +185,9 @@ function renderBanner() {
     return;
   }
   // 20-rules-alerts.js（制度変更のお知らせ）と、21-encryption-lock.js（パスフレーズで開いたあとの「Face ID を使いますか？」）
-  let alertsHtml = biometricOfferHtml() + rulesAlertsHtml();
+  // 制度変更のお知らせは、ホームとカードの画面だけに出す（全部の画面の上に出ると、中身が押し下げられて見づらいため）
+  const showRuleAlerts = appState.screen === 'home' || appState.screen === 'cards';
+  let alertsHtml = biometricOfferHtml() + (showRuleAlerts ? rulesAlertsHtml() : '');
   // 別のタブ・ウィンドウで家計簿が変わったとき（04-state-and-storage.js）: 上書きしないよう、読み込み直しをすすめる
   if (browserStore.changedElsewhere) {
     alertsHtml = '<div class="banner"><p><strong>別のタブ（ウィンドウ）で家計簿が変わりました。</strong>こちらで入れた内容で上書きしないよう、保存を止めています。読み込み直すと最新になります。</p>' +
@@ -234,6 +236,8 @@ function resetTemporaryStates() {
   isImportUndoConfirmOpen = false;  // 取り込みの取り消しの確認（14）
   isFlippedListOpen = false;        // 逆に入った明細の一覧（14）
   manualOffsetConfirmId = '';       // 仮の支出を消す確認（12）
+  settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
+  settingsOpenForms.rule = false;
 }
 
 /**

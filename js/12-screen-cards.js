@@ -153,6 +153,7 @@ function cardPanelHtml(account) {
   // --- これからの請求の一覧 ---
   html += '<hr class="divider">';
   html += '<div class="card-head" style="margin-bottom:4px"><h2>これからの請求</h2></div>';
+  html += '<p class="hint" style="margin-bottom:6px">確定＝締め日を過ぎて金額が決まった請求。未確定＝これから使う分で、まだ増えることがある請求。</p>';
   if (summary.upcomingBills.length === 0) {
     html += '<p class="small muted">これからの請求はありません。</p>';
   } else {

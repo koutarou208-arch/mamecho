@@ -221,13 +221,22 @@ function currentDialogType() {
   return findOne('#transactionForm').elements.transactionType.value;
 }
 
+// 種類を選んだときに、下に出す「どんなときに使うか」の説明
+const TYPE_HINTS = {
+  expense: 'お金を使ったとき（買い物・支払い）',
+  income: 'お金が入ったとき（給料・おこづかい・返金）',
+  transfer: '自分の口座どうしでお金を動かしたとき（銀行から財布へ・チャージなど）。使ったお金には入りません',
+  adjust: '口座の残高が、本当の残高とずれていたときに合わせる記録です',
+};
+
 function applyTypeToDialog(type) {
+  findOne('#typeHint').textContent = TYPE_HINTS[type] || '';
   const isMoneyInOut = type === 'expense' || type === 'income';
   findOne('#categoryFields').hidden = !isMoneyInOut;
   findOne('#includeField').hidden = !isMoneyInOut;
   findOne('#toAccountField').hidden = type !== 'transfer';
 
-  const accountLabels = { expense: '支払元', income: '入金先', transfer: '振替元', adjust: '口座' };
+  const accountLabels = { expense: '支払元', income: '入金先', transfer: 'どこから（振替元）', adjust: '口座' };
   findOne('#fromAccountLabel').textContent = accountLabels[type];
 
   if (type === 'adjust') {
