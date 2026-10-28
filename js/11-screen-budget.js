@@ -110,7 +110,9 @@ function budgetViewHtml(period) {
   html += '<section class="card span-4"><div class="card-head"><h2>貯金目標</h2></div>';
   if (goal > 0) {
     const goalPercent = Math.max(0, Math.min(100, (saved / goal) * 100));
-    html += '<div class="stat"><span class="label">' + periodShortTitle(period) + 'の収支 / 目標</span><span class="value num">' + formatYen(saved, { showPlus: true }) + ' <span class="muted small">/ ' + formatYen(goal) + '</span></span></div>';
+    // 目標は、金額の下の行に小さく出す（大きな金額でも、カードの右からはみ出さないように）
+    html += '<div class="stat"><span class="label">' + periodShortTitle(period) + 'の収支</span><span class="value num">' + formatYen(saved, { showPlus: true }) + '</span>' +
+      '<span class="small muted">目標 <span class="num">' + formatYen(goal) + '</span></span></div>';
     html += '<div class="meter" style="margin-top:12px"><div class="meter-fill" style="width:' + goalPercent.toFixed(1) + '%; background:var(--accent)"></div></div>';
     html += '<p class="small" style="margin-top:10px">' + (saved >= goal ? statusChipHtml('good', '達成') : 'あと <strong class="num">' + formatYen(goal - saved) + '</strong>') + '</p>';
   } else {

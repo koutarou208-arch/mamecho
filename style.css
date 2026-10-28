@@ -758,7 +758,8 @@ details.more > summary { cursor: pointer; color: var(--accent); font-weight: 600
   border-bottom: 1px solid var(--rule);
 }
 .budget-row:last-child { border-bottom: 0; }
-.budget-figures { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+/* 「使った額 / 予算」と「残り・超過」。入りきらないときは、2つめを次の行に送る（となりの札に重ならないように） */
+.budget-figures { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 8px; margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 .budget-input { width: 9em; text-align: right; }
 .budget-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--rule); }
 
