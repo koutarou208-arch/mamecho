@@ -39,7 +39,8 @@ const CardsScreen = {
     if (cards.length > 0) {
       html += '<div class="span-12 row-gap" style="justify-content:space-between; align-items:center">' +
         '<span class="small muted">' + cards.length + '枚のカード' + (cards.length > 1 ? ' · 次の引き落とし合計 ' + formatYen(nextBillsTotal(cards)) : '') + '</span>' +
-        '<button type="button" class="btn small primary" data-action="add-account" data-kind="card" data-icon="plus">カードを追加</button></div>';
+        '<button type="button" class="btn small primary" data-action="add-account" data-kind="card" data-icon="plus">カードを追加</button></div>' +
+        '<p class="span-12 small muted">金額が多すぎる・少なすぎると思ったら <button type="button" class="link-btn" data-action="go-number-check">数字の点検</button></p>';
     }
     for (const card of cards) {
       html += cardPanelHtml(card);
@@ -87,7 +88,7 @@ function cardPanelHtml(account) {
   const settings = summary.settings;
   const today = todayText();
 
-  let html = '<section class="card span-12">';
+  let html = '<section class="card span-12" id="cardPanel-' + escapeHtml(account.id) + '">';
   html += '<div class="card-head">' +
     '<h2 style="font-size:16px; color:var(--ink)">' + escapeHtml(account.name) + '</h2>' +
     '<span class="sub">' + escapeHtml(settings.company.name) + ' · ' + describeCycle(settings) + (settings.autoRevolving ? ' · 登録型リボ設定中' : '') + '</span>' +
@@ -198,6 +199,17 @@ function cardPanelHtml(account) {
   return html;
 }
 
+
+/** 「数字の点検」などから: カード画面のそのカードのところへ移る */
+function goToCardPanel(accountId) {
+  goToScreen('cards');
+  requestAnimationFrame(() => {
+    const panel = document.getElementById('cardPanel-' + accountId);
+    if (panel) {
+      panel.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    }
+  });
+}
 
 /** 請求1回分の行（押すと内訳が開く） */
 function billRowHtml(account, bill, today) {

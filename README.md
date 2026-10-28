@@ -46,7 +46,7 @@ mamecho/
    ├─ 03-helpers.js …………… 【道具】金額や日付を扱う小さな関数
    ├─ 04-state-and-storage.js 【記憶】アプリの状態と、データの保存
    ├─ 05-calculations.js ……… 【計算】残高・収支・期間・自動分類
-   ├─ 06-credit-card-billing.js【計算】カードの請求（分割・リボなど）、02 のデータを読む道具
+   ├─ 06-credit-card-billing.js【計算】カードの請求（分割・リボなど）、02 のデータを読む道具、数字の点検
    ├─ 07-charts.js …………… 【部品】グラフを描く
    ├─ 08〜14-screen-○○.js …【画面】ホーム／入出金／家計簿／予算／カード／口座／設定
    ├─ 15-dialog-transaction.js【画面】入出金の入力ダイアログ

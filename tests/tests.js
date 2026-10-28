@@ -1036,6 +1036,114 @@ const feeOnlyRecords = [
 const feeOnlyBill = buildCardBills(feeOnlyCard, feeOnlyRecords).find((item) => item.month === '2026-10');
 check('手数料だけの引き落とし: 記録したら「記録済み」', feeOnlyBill && feeOnlyBill.paid === true);
 
+section('記録を月の箱に入れる（二重にしない）');
+const placeMonthly = { '2026-09': [{ id: 'p1', date: '2026-09-30', amount: 1 }], '2026-10': [] };
+const placeChanged = placeTransaction(placeMonthly, { id: 'p1', date: '2026-10-02', amount: 2 });
+same('箱に入れる: 日付を変えても、同じ記録は1つだけ', placeMonthly['2026-09'].length + placeMonthly['2026-10'].length, 1);
+same('箱に入れる: 新しい日付の月の箱に入る', placeMonthly['2026-10'][0].amount, 2);
+same('箱に入れる: 変えた月（前の箱と新しい箱）', placeChanged.sort().join(','), '2026-09,2026-10');
+const strayMonthly = { '2026-08': [{ id: 's1', date: '2026-10-05', amount: 100 }] };
+placeTransaction(strayMonthly, { id: 's1', date: '2026-10-05', amount: 150 });
+same('箱に入れる: 日付とちがう箱に入っていた記録を直しても、二重にならない', JSON.stringify(strayMonthly), JSON.stringify({ '2026-08': [], '2026-10': [{ id: 's1', date: '2026-10-05', amount: 150 }] }));
+
+section('同じ記録が2つ（二重に数える）を見つけて直す');
+const dupRecord = { id: 'd1', date: '2026-10-05', type: 'expense', amount: 140000, account: 'bank', description: 'テスト' };
+const dupMonthly = { '2026-09': [{ ...dupRecord }], '2026-10': [dupRecord, { id: 'd2', date: '2026-10-06', amount: 5 }] };
+same('同じ記録: 見つける', duplicateRecordGroups(dupMonthly).length, 1);
+same('同じ記録: いくつ入っているか', duplicateRecordGroups(dupMonthly)[0].copies.length, 2);
+const dupChanged = removeDuplicateCopies(dupMonthly);
+same('同じ記録: 1つにする（日付の月の箱のほうを残す）', dupMonthly['2026-10'].length + ':' + dupMonthly['2026-09'].length, '2:0');
+same('同じ記録: 変えた月', dupChanged.join(','), '2026-09');
+same('同じ記録: 直したあとは見つからない', duplicateRecordGroups(dupMonthly).length, 0);
+const twiceSame = { id: 't1', date: '2026-10-01', amount: 1 };
+const twiceMonthly = { '2026-10': [twiceSame, twiceSame] };
+removeDuplicateCopies(twiceMonthly);
+same('同じ記録: 同じ箱に2回入っていても1つにする', twiceMonthly['2026-10'].length, 1);
+
+// 古い「仮」を締め日の月へ移すとき、移す先に同じ記録があっても二重にしない
+const moveCard = { id: 'mv-card', name: 'テストカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
+const savedProfileForMove = appState.profile;
+const savedMonthlyForMove = appState.monthly;
+const moveManual = { id: 'mv1', date: '2026-10-15', dateFixed: true, type: 'expense', amount: 90000, account: 'mv-card', category: 'other', sub: 'カード引き落とし（仮）', description: '支払い予定（仮）', memo: '', include: true, createdAt: 1, manualBill: true, billMonth: '2026-11' };
+appState.profile = { settings: { startDay: 1 }, accounts: [moveCard], budgets: {}, rules: [], recurring: [], chat: [] };
+appState.monthly = { '2026-09': [{ ...moveManual }], '2026-10': [moveManual] };
+upgradeAllManualBills();
+same('古い「仮」の引っ越し: 同じ記録を二重にしない', appState.monthly['2026-09'].length + appState.monthly['2026-10'].length, 1);
+appState.profile = savedProfileForMove;
+appState.monthly = savedMonthlyForMove;
+
+section('返金はカードの請求の「返金」の欄に入る');
+const refundCard = makeCard('jcb');
+const refundBill = billOf(refundCard, [buy('2026-09-01', 5000), { ...buy('2026-09-02', 2000), id: 'rf', type: 'income' }], '2026-10');
+same('返金: 返金の欄', refundBill && refundBill.parts.refund, -2000);
+same('返金: 1回払いの欄には入れない', refundBill && refundBill.parts.once, 5000);
+same('返金: 合計は差し引き', refundBill && refundBill.total, 3000);
+
+section('数字の点検（二重に数えていないか・数字が合っているか）');
+const checkBank = { id: 'chk-bank', name: 'テスト銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };
+const checkJcb = { id: 'chk-jcb', name: 'テストJCB', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
+const checkEpos = { id: 'chk-epos', name: 'テストエポス', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'epos', cycleIndex: 0 } };
+const savedProfileForCheck = appState.profile;
+const savedMonthlyForCheck = appState.monthly;
+appState.profile = { settings: { startDay: 1 }, accounts: [checkBank, checkJcb, checkEpos], budgets: {}, rules: [], recurring: [], chat: [] };
+accountById = { 'chk-bank': checkBank, 'chk-jcb': checkJcb, 'chk-epos': checkEpos };
+const eposSettings = cardSettings(checkEpos);
+const eposMonth = billingMonthOf('2026-10-20', eposSettings);
+const refundMonth = addMonths(eposMonth, 2);
+const checkRecords = [
+  { ...manualBillRecord(checkJcb, '2026-12', 95000, null), id: 'chk-m1' },
+  { ...manualBillRecord(checkJcb, '2026-12', 95000, null), id: 'chk-m2' },
+  { id: 'chk-old', date: '2026-09-01', type: 'expense', amount: 3000, account: 'chk-jcb', category: 'food', sub: '外食', description: 'テストショウテン', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-paycard', date: '2026-10-10', type: 'expense', amount: 50000, account: 'chk-jcb', category: 'other', sub: '', description: 'JCB 引き落とし', memo: '', include: true, createdAt: 1 },
+  { ...manualBillRecord(checkEpos, eposMonth, 55525, null), id: 'chk-m3' },
+  { id: 'chk-eposbuy', date: '2026-10-20', type: 'expense', amount: 1000, account: 'chk-epos', category: 'food', sub: '外食', description: 'テストショウテン', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-refund', date: '2026-12-20', type: 'income', amount: 46000, account: 'chk-epos', category: 'other_income', sub: '', description: 'エポスカード お支払い', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-bankpay', date: '2026-10-05', type: 'expense', amount: 140000, account: 'chk-bank', category: 'other', sub: '未分類', description: 'カード', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-minus', date: '2026-10-06', type: 'expense', amount: -500, account: 'chk-bank', category: 'other', sub: '', description: 'テストマイナス', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-rent', date: '2026-10-27', type: 'expense', amount: 159000, account: 'chk-bank', category: 'housing', sub: '家賃・地代', description: 'テスト家賃', memo: '', include: true, createdAt: 1 },
+  { id: 'chk-fee', date: '2026-10-27', type: 'expense', amount: 1375, account: 'chk-bank', category: 'other', sub: '', description: 'カード年会費', memo: '', include: true, createdAt: 1 },
+];
+appState.monthly = {};
+for (const record of checkRecords) {
+  placeTransaction(appState.monthly, record);
+}
+appState.monthly['2026-09'].push({ ...checkRecords[9] }); // 家賃の記録が、ちがう月の箱にもう1つ入っている
+rebuildIndexes();
+const checkResult = findNumberProblems('2026-10-28');
+const checkKinds = checkResult.problems.map((problem) => problem.kind);
+check('点検: 同じ記録が2つ', checkKinds.includes('duplicate'));
+check('点検: 同じ月の「仮」が2つ', checkKinds.includes('manual-twice'));
+check('点検: 「仮」と明細の両方がある', checkKinds.includes('manual-and-detail'));
+check('点検: マイナスの請求', checkKinds.includes('minus-bill'));
+check('点検: 支払日を過ぎて未記録の引き落とし', checkKinds.includes('overdue'));
+check('点検: 銀行からカードへの引き落としが「支出」', checkKinds.includes('payment-as-bank-expense'));
+check('点検: カードへの支払いが、カードの買い物', checkKinds.includes('payment-as-card-expense'));
+check('点検: カードへの支払いが「返金」', checkKinds.includes('payment-as-refund'));
+check('点検: 金額がマイナス', checkKinds.includes('minus-amount'));
+const checkProblem = (kind) => checkResult.problems.find((problem) => problem.kind === kind);
+same('点検: 銀行の「カード」140,000円を見つける', checkProblem('payment-as-bank-expense').lines.join('|'), '10/5 カード ¥140,000');
+same('点検: 直すときは、その記録を開く', checkProblem('payment-as-card-expense').action.id, 'chk-paycard');
+check('点検: ふつうの家賃は、カードの引き落としとまちがえない', !JSON.stringify(checkResult.problems.filter((problem) => problem.kind !== 'duplicate')).includes('テスト家賃'));
+check('点検: 小さいカードの年会費は知らせない', !JSON.stringify(checkResult.problems).includes('カード年会費'));
+same('点検: 同じ月の「仮」の説明', checkProblem('manual-twice').lines[0], 'テストJCB 2026年12月払い: ¥95,000 と ¥95,000');
+const jcbCheck = checkResult.cards.find((item) => item.account.id === 'chk-jcb');
+const eposCheck = checkResult.cards.find((item) => item.account.id === 'chk-epos');
+const sumRows = (item) => item.rows.reduce((total, row) => total + row.amount, 0);
+same('カードの内訳: 足すと合計になる（JCB）', sumRows(jcbCheck), jcbCheck.total);
+same('カードの内訳: 足すと合計になる（エポス）', sumRows(eposCheck), eposCheck.total);
+const jcbUnpaidTotal = buildCardBills(checkJcb).filter((bill) => !bill.paid).reduce((total, bill) => total + bill.total, 0);
+same('カードの内訳: 合計は、まだ記録していない請求をすべて足したもの', jcbCheck.total, jcbUnpaidTotal);
+same('カードの内訳: 「仮」の分（2つで二重）', (jcbCheck.rows.find((row) => row.label === '手入力の「仮」') || {}).amount, 190000);
+same('カードの内訳: 返金はマイナスで見える', (eposCheck.rows.find((row) => row.label === '返金（マイナス）') || {}).amount, -46000);
+// 同じ記録を1つにしたら、もう知らせない
+removeDuplicateCopies(appState.monthly);
+rebuildIndexes();
+check('点検: 1つにしたら「同じ記録」は出ない', !findNumberProblems('2026-10-28').problems.some((problem) => problem.kind === 'duplicate'));
+appState.profile = savedProfileForCheck;
+appState.monthly = savedMonthlyForCheck;
+allTransactions = [];
+accountById = {};
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };
@@ -1063,25 +1171,46 @@ check('渡すデータ: 予算と使った額', aiFoodBudget && aiFoodBudget.bud
 const aiOverview = monthsOverviewForAi({ year: 2026, month: 10 }, 3);
 same('12か月の流れ: 古い順に3か月', aiOverview.map((item) => item.month).join(','), '2026-08,2026-09,2026-10');
 same('12か月の流れ: 9月の支出', aiOverview[1].spending, 5000);
-const aiBills = cardBillsForAi();
+same('12か月の流れ: 記録がある月か（8月はない・9月はある）', aiOverview.map((item) => item.hasRecords).join(','), 'false,true,true');
+same('先月に記録があるか', aiFacts.lastMonth.hasRecords, true);
+const aiBills = cardBillsForAi('2026-10-20');
 same('カード: 名前は会社名だけ（口座の名前は出さない）', aiBills[0].card, 'カード1（JCB）');
 check('カード: 引き落とし予定がある', aiBills[0].upcomingBills.length > 0);
+same('カード: 予定を足すと「これから払う合計」になる', aiBills[0].upcomingBills.reduce((total, bill) => total + bill.total, 0) + (aiBills[0].moreBills ? aiBills[0].moreBills.total : 0), aiBills[0].upcomingTotal);
 const aiAllText = JSON.stringify(aiFacts) + JSON.stringify(aiOverview) + JSON.stringify(aiBills);
 check('渡すデータ: メモは入らない', !aiAllText.includes('ないしょのメモ'));
 check('渡すデータ: 口座の名前は入らない', !aiAllText.includes('ヒミツ'));
 check('渡すデータ: お店の名前は、ふだんは入らない', !aiAllText.includes('テストショウテン'));
 
 // ホーム画面のアプリ用: Claude のアプリに貼るための「まとめの文」
-const summaryText = claudeSummaryText({ year: 2026, month: 10 });
+const summaryText = claudeSummaryText({ year: 2026, month: 10 }, '2026-10-20');
 check('まとめの文: はじめに、Claude へのお願いがある', summaryText.startsWith('【まめ帳の家計のまとめ】'));
 check('まとめの文: 収入・支出・収支', summaryText.includes('収入 250,000円') && summaryText.includes('支出 95,400円') && summaryText.includes('収支 +154,600円'));
 check('まとめの文: カテゴリと中項目', summaryText.includes('食費 2,000円') && summaryText.includes('外食 2,000円'));
 check('まとめの文: 予算', summaryText.includes('食費: 予算 40,000円 / 使った額 2,000円'));
-check('まとめの文: 直近12か月', summaryText.includes('2026-09') && summaryText.includes('2025-11'));
+check('まとめの文: 直近12か月（記録がある月から）', summaryText.includes('2026-09: ') && summaryText.includes('2026-10: '));
+check('まとめの文: 記録をつける前の月は「0円」と書かない', summaryText.includes('2026-09 より前は記録なし') && !summaryText.includes('2025-11: '));
+check('まとめの文: カードは「これから払う合計」（足し算が合う形）', summaryText.includes('これから払う合計') && !summaryText.includes('元金の合計'));
+check('まとめの文: 点検で見つかったことを知らせる（名前や金額は入れない）', summaryText.includes('「仮」と取り込んだ明細が、両方入っています'));
 check('まとめの文: カードは会社名だけ', summaryText.includes('カード1（JCB）') && !summaryText.includes('ヒミツ'));
 check('まとめの文: お店ごとの合計が入る（利用者の許可ずみ）', summaryText.includes('テストショウテンB 3,000円（1回）'));
 check('まとめの文: メモは入らない', !summaryText.includes('ないしょ'));
 check('まとめの文: 仮の支出はお店に入れない', !summaryText.includes('支払い予定（仮）'));
+
+// カードの予定が多いとき（スキップ払いを毎月入れたなど）も、全部出す
+const manyBills = [];
+for (let count = 0; count < 8; count++) {
+  manyBills.push({ ...manualBillRecord(aiCard, addMonths('2026-11', count), 10000 + count, null), id: 'many' + count });
+}
+const allTransactionsBeforeMany = allTransactions;
+allTransactions = allTransactionsBeforeMany.filter((item) => item.id !== 'ai6').concat(manyBills);
+const manyAiBills = cardBillsForAi('2026-10-20');
+same('カード: 6回より多い予定も全部出す', manyAiBills[0].upcomingBills.length, 8);
+same('カード: 全部足すと合計になる', manyAiBills[0].upcomingBills.reduce((total, bill) => total + bill.total, 0), manyAiBills[0].upcomingTotal);
+check('まとめの文: 回数が分かる', claudeSummaryText({ year: 2026, month: 10 }, '2026-10-20').includes('（全8回）'));
+allTransactions = allTransactionsBeforeMany;
+const firstMonthText = claudeSummaryText({ year: 2026, month: 9 }, '2026-10-20');
+check('まとめの文: 先月に記録がなければ「先月は記録なし」', firstMonthText.includes('（先月は記録なし）') && !firstMonthText.includes('（先月 0円）'));
 
 const aiStores = storeTotalsForAi({ year: 2026, month: 10 }, '');
 same('お店ごと: 多い順', aiStores.slice(0, 2).map((item) => item.store + ':' + item.total).join(','), 'テストショウテンB:3000,テストショウテンA:2000');

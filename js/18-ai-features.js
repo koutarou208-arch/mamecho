@@ -12,6 +12,7 @@
 
    【Claude に渡すもの・渡さないもの】（2026-10-27 に利用者と決めた）
      渡す   … 集計した数字（月ごとの収入・支出、カテゴリと中項目の合計、予算、カードの引き落とし予定）
+              「数字の点検」で見つかったことの見出し（名前・金額・内容は入れない）
               お店ごとの合計（お店の名前と金額）は、Claude が必要なときに問い合わせたときだけ
      渡さない … メモ・口座の名前・1件ずつの明細。カードは「カード1（JCB）」のように会社名だけ
    =========================================================== */
@@ -191,6 +192,12 @@ function monthTextOfPeriod(period) {
   return period.year + '-' + pad2(period.month);
 }
 
+/** その期間に、記録（入出金）が1件でもあるか（記録をつけ始める前の月を「0円」と言わないため） */
+function periodHasRecords(period) {
+  const range = periodRange(period);
+  return allTransactions.some((transaction) => transaction.date >= range.start && transaction.date < range.end);
+}
+
 /**
  * Claude に渡す、ある月の数字（集計した数字だけ。お店の名前・メモ・口座の名前は入れない）。
  */
@@ -234,7 +241,7 @@ function monthFactsForAi(period) {
     spending: summary.spending,
     balance: summary.income - summary.spending,
     investmentGainLoss: summary.tradeNet,
-    lastMonth: { income: previous.income, spending: previous.spending },
+    lastMonth: { income: previous.income, spending: previous.spending, hasRecords: periodHasRecords(shiftPeriod(period, -1)) },
     expenseByCategory: categoryList(EXPENSE_CATEGORIES),
     incomeByCategory: categoryList(INCOME_CATEGORIES),
     budgets: budgetList,
@@ -248,24 +255,54 @@ function monthsOverviewForAi(endPeriod, count) {
   for (let back = count - 1; back >= 0; back--) {
     const period = shiftPeriod(endPeriod, -back);
     const summary = summarizePeriod(period);
-    rows.push({ month: monthTextOfPeriod(period), income: summary.income, spending: summary.spending, balance: summary.income - summary.spending });
+    rows.push({
+      month: monthTextOfPeriod(period),
+      hasRecords: periodHasRecords(period),
+      income: summary.income,
+      spending: summary.spending,
+      balance: summary.income - summary.spending,
+    });
   }
   return rows;
 }
 
-/** Claude に渡す、カードの引き落とし予定。カードの名前は出さず「カード1（JCB）」のように会社名だけ */
-function cardBillsForAi() {
+const AI_BILL_LIMIT = 24; // カードの予定を1回ずつ書く回数（これより多い分は「ほか○回 ○円」にまとめる）
+
+/**
+ * Claude に渡す、カードの引き落とし予定。カードの名前は出さず「カード1（JCB）」のように会社名だけ。
+ * 予定は全部（AI_BILL_LIMIT 回より多い分はまとめて）出し、1回ずつの金額を足すと upcomingTotal になるようにする。
+ *   today … 今日の日付（省略すると本当の今日。テストでは決めて渡す）
+ */
+function cardBillsForAi(today) {
   const result = [];
   const cards = cardAccounts();
+  const sumOf = (bills, key) => bills.reduce((total, bill) => total + bill[key], 0);
   for (let index = 0; index < cards.length; index++) {
-    const summary = cardSummary(cards[index]);
+    const summary = cardSummary(cards[index], today);
+    const upcoming = summary.upcomingBills;
+    const shown = upcoming.slice(0, AI_BILL_LIMIT);
+    const rest = upcoming.slice(AI_BILL_LIMIT);
+    const minusBills = summary.bills.filter((bill) => !bill.paid && bill.total < 0);
     result.push({
       card: 'カード' + (index + 1) + '（' + summary.settings.company.name + '）',
-      upcomingBills: summary.upcomingBills.slice(0, 6).map((bill) => ({ payDate: bill.payDate, total: bill.total, fee: bill.fee })),
-      remainingPrincipal: summary.remaining.total,
+      upcomingBills: shown.map((bill) => ({ payDate: bill.payDate, total: bill.total, fee: bill.fee })),
+      moreBills: rest.length > 0 ? { count: rest.length, total: sumOf(rest, 'total') } : null,
+      upcomingCount: upcoming.length,
+      upcomingTotal: sumOf(upcoming, 'total'),
+      upcomingFee: sumOf(upcoming, 'fee'),
+      overdue: summary.overdueBills.length > 0 ? { count: summary.overdueBills.length, total: sumOf(summary.overdueBills, 'total') } : null,
+      minusTotal: sumOf(minusBills, 'total'),
     });
   }
   return result;
+}
+
+/** 「数字の点検」で見つかったことの見出しだけ（名前・金額・内容は入れない）。Claude に「数字がずれているかも」と伝えるため */
+function numberCheckTitlesForAi(today) {
+  if (!appState.profile) {
+    return [];
+  }
+  return findNumberProblems(today).problems.map((problem) => problem.title);
 }
 
 /**
@@ -328,7 +365,7 @@ function storeTotalsForAi(period, categoryName) {
  * アプリは外と通信しないので、利用者がこの文をコピーして、自分で Claude に貼る。
  * 入れるもの・入れないものは、「Claude と話す」と同じ（お店ごとの合計は入れる。メモ・口座の名前は入れない）。
  */
-function claudeSummaryText(period) {
+function claudeSummaryText(period, today) {
   const facts = monthFactsForAi(period);
   const yen = (amount) => formatNumber(amount) + '円';
   const signedYen = (amount) => (amount > 0 ? '+' : '') + formatNumber(amount) + '円';
@@ -338,18 +375,23 @@ function claudeSummaryText(period) {
   lines.push('次の家計簿のデータをもとに、やさしい日本語で家計の相談にのってください。数字を作らず、分からないことは分からないと言ってください。投資・保険の具体的なおすすめはしないでください。');
   lines.push('');
   lines.push('■ ' + facts.title + 'の収支');
-  lines.push('収入 ' + yen(facts.income) + '（先月 ' + yen(facts.lastMonth.income) + '）');
-  lines.push('支出 ' + yen(facts.spending) + '（先月 ' + yen(facts.lastMonth.spending) + '）');
+  if (facts.lastMonth.hasRecords) {
+    lines.push('収入 ' + yen(facts.income) + '（先月 ' + yen(facts.lastMonth.income) + '）');
+    lines.push('支出 ' + yen(facts.spending) + '（先月 ' + yen(facts.lastMonth.spending) + '）');
+  } else {
+    lines.push('収入 ' + yen(facts.income) + '（先月は記録なし）');
+    lines.push('支出 ' + yen(facts.spending) + '（先月は記録なし）');
+  }
   lines.push('収支 ' + signedYen(facts.balance));
   if (facts.investmentGainLoss !== 0) {
     lines.push('株などの損益 ' + signedYen(facts.investmentGainLoss));
   }
 
   lines.push('');
-  lines.push('■ 支出のカテゴリ別（かっこの中は先月）');
+  lines.push('■ 支出のカテゴリ別' + (facts.lastMonth.hasRecords ? '（かっこの中は先月）' : ''));
   for (const row of facts.expenseByCategory) {
     const subs = Object.entries(row.subs).sort((a, b) => b[1] - a[1]).map((entry) => entry[0] + ' ' + yen(entry[1])).join(' / ');
-    lines.push('・' + row.category + ' ' + yen(row.total) + '（' + yen(row.lastMonth) + '）: ' + subs);
+    lines.push('・' + row.category + ' ' + yen(row.total) + (facts.lastMonth.hasRecords ? '（' + yen(row.lastMonth) + '）' : '') + ': ' + subs);
   }
   if (facts.incomeByCategory.length > 0) {
     lines.push('');
@@ -371,17 +413,54 @@ function claudeSummaryText(period) {
 
   lines.push('');
   lines.push('■ 直近12か月（月: 収入 / 支出 / 収支）');
-  for (const row of monthsOverviewForAi(period, 12)) {
-    lines.push(row.month + ': ' + yen(row.income) + ' / ' + yen(row.spending) + ' / ' + signedYen(row.balance));
+  // 記録をつけ始める前の月は「0円」と書かず、まとめて「記録なし」と書く（収入が0円だったと読みちがえないように）
+  const months = monthsOverviewForAi(period, 12);
+  let firstRecorded = months.findIndex((row) => row.hasRecords);
+  if (firstRecorded < 0) {
+    lines.push('記録なし');
+    firstRecorded = months.length;
+  } else if (firstRecorded > 0) {
+    lines.push('（' + months[firstRecorded].month + ' より前は記録なし）');
+  }
+  for (const row of months.slice(firstRecorded)) {
+    if (row.hasRecords) {
+      lines.push(row.month + ': ' + yen(row.income) + ' / ' + yen(row.spending) + ' / ' + signedYen(row.balance));
+    } else {
+      lines.push(row.month + ': 記録なし');
+    }
   }
 
-  const cards = cardBillsForAi();
+  const cards = cardBillsForAi(today);
   if (cards.length > 0) {
     lines.push('');
-    lines.push('■ カードの引き落とし予定');
+    lines.push('■ カードの引き落とし予定（金額は手数料こみ）');
     for (const card of cards) {
-      const bills = card.upcomingBills.map((bill) => formatShortDate(bill.payDate) + ' ' + yen(bill.total) + (bill.fee > 0 ? '（うち手数料 ' + yen(bill.fee) + '）' : '')).join('、');
-      lines.push('・' + card.card + ': ' + (bills || '予定なし') + '。これから払う元金の合計 ' + yen(card.remainingPrincipal));
+      if (card.upcomingCount === 0) {
+        lines.push('・' + card.card + ': 予定なし');
+      } else {
+        let text = card.upcomingBills.map((bill) => formatShortDate(bill.payDate) + ' ' + yen(bill.total) + (bill.fee > 0 ? '（うち手数料 ' + yen(bill.fee) + '）' : '')).join('、');
+        if (card.moreBills) {
+          text = text + '、ほか ' + card.moreBills.count + '回 ' + yen(card.moreBills.total);
+        }
+        text = text + '（全' + card.upcomingCount + '回）。これから払う合計 ' + yen(card.upcomingTotal) + (card.upcomingFee > 0 ? '（うち手数料 ' + yen(card.upcomingFee) + '）' : '');
+        lines.push('・' + card.card + ': ' + text);
+      }
+      if (card.overdue) {
+        lines.push('  支払日を過ぎて、まだ記録していない引き落とし ' + card.overdue.count + '回 ' + yen(card.overdue.total) + '（上の合計には入っていない）');
+      }
+      if (card.minusTotal < 0) {
+        lines.push('  マイナスの請求（返金など） ' + yen(card.minusTotal) + '（上の合計には入っていない）');
+      }
+    }
+  }
+
+  // 数字の点検で気になることがあれば、見出しだけ伝える（名前・金額・内容は入れない）
+  const checkTitles = numberCheckTitlesForAi(today);
+  if (checkTitles.length > 0) {
+    lines.push('');
+    lines.push('■ アプリの「数字の点検」で見つかったこと（このため、上の数字がずれているかもしれません）');
+    for (const title of checkTitles) {
+      lines.push('・' + title);
     }
   }
 
@@ -415,6 +494,7 @@ function chatInstructions() {
     viewingMonth: monthFactsForAi(period),
     last12Months: monthsOverviewForAi(period, 12),
     cardBills: cardBillsForAi(),
+    numberCheck: numberCheckTitlesForAi(), // 数字の点検で見つかったことの見出し（あれば、数字がずれているかもしれない）
   };
   return 'あなたは家計簿アプリ「まめ帳」の中で、利用者の家計の相談にのるアシスタントです。\n' +
     '答え方の決まり:\n' +
@@ -423,6 +503,7 @@ function chatInstructions() {
     '- マークダウンは使わない（# の見出し・表・** の強調は使わない）。箇条書きは「・」で。\n' +
     '- 金額は「12,345円」のように書く。責めない口調で。\n' +
     '- 投資・金融商品・保険の具体的なおすすめはしない。税金や法律は一般的な話にとどめる。\n' +
+    '- numberCheck に何か入っていたら、記録が二重などで数字がずれているかもしれないことを一言そえ、設定の「数字の点検」で確かめるようすすめる。\n' +
     (canUseTools ? '- ほかの月の詳しい数字は get_month、お店ごとの支出は get_store_totals で調べられる。必要なときだけ使う。\n' : '- お店ごとの支出は分からない（聞かれたら、カテゴリの数字で答えられる範囲で答える）。\n') +
     '\n家計簿のデータ（JSON。金額は円）:\n' + JSON.stringify(data);
 }

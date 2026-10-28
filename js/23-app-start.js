@@ -238,6 +238,8 @@ function resetTemporaryStates() {
   manualOffsetConfirmId = '';       // 仮の支出を消す確認（12）
   isChatClearConfirmOpen = false;   // 会話を消す確認（18）
   pendingEncryptedBackup = null;    // パスフレーズ待ちのバックアップ（17）
+  isNumberCheckOpen = false;        // 数字の点検の結果（14）
+  isDuplicateFixConfirmOpen = false; // 同じ記録を1つにする確認（14）
   settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
   settingsOpenForms.rule = false;
 }
@@ -522,6 +524,33 @@ const ACTIONS = {
   'restore-backup': () => findOne('#restoreFile').click(),
   'restore-yes': () => restoreBackupConfirmed(),
   'backup-passphrase-open': () => openEncryptedBackupFromForm(),
+  // 数字の点検（14）
+  'run-number-check': () => {
+    isNumberCheckOpen = true;
+    isDuplicateFixConfirmOpen = false;
+    renderApp();
+  },
+  'close-number-check': () => {
+    isNumberCheckOpen = false;
+    isDuplicateFixConfirmOpen = false;
+    renderApp();
+  },
+  'go-number-check': () => goToNumberCheck(),
+  'go-card': (button) => goToCardPanel(button.dataset.id),
+  'fix-duplicates': () => {
+    isDuplicateFixConfirmOpen = true;
+    renderApp();
+  },
+  'fix-duplicates-no': () => {
+    isDuplicateFixConfirmOpen = false;
+    renderApp();
+  },
+  'fix-duplicates-yes': () => {
+    isDuplicateFixConfirmOpen = false;
+    const count = fixDuplicateRecords(); // 04-state-and-storage.js
+    renderApp();
+    showToast(count > 0 ? '同じ記録を1つにしました' : '直すものはありませんでした');
+  },
   'copy-text': () => copyTextDialogContent(),
   'undo-import': () => {
     isImportUndoConfirmOpen = true;

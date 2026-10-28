@@ -369,7 +369,7 @@ function buildCardBills(account, records) {
         month: month,
         payDate: paymentDateOf(month, settings),
         closeDate: closingDateOf(month, settings),
-        parts: { opening: 0, manual: 0, once: 0, twice: 0, bonus: 0, bonus2: 0, installment: 0, revolving: 0, skip: 0 },
+        parts: { opening: 0, manual: 0, once: 0, refund: 0, twice: 0, bonus: 0, bonus2: 0, installment: 0, revolving: 0, skip: 0 },
         principal: 0,
         fee: 0,
         total: 0,
@@ -417,8 +417,8 @@ function buildCardBills(account, records) {
     } else if (transaction.type === 'transfer' && transaction.account === account.id) {
       amount = transaction.amount;
     } else if (transaction.type === 'income' && transaction.account === account.id) {
-      // 返品・返金（マイナスの利用として1回払いの分から引く）
-      addToBill(billingMonthOf(transaction.date, settings), 'once', transaction, '返金', -transaction.amount, 0);
+      // 返品・返金（マイナスの利用として請求から引く。「数字の点検」で分けて見せるため、欄は refund）
+      addToBill(billingMonthOf(transaction.date, settings), 'refund', transaction, '返金', -transaction.amount, 0);
       continue;
     } else {
       continue;
@@ -536,10 +536,10 @@ function pointsFromUsage(used, ratePercent) {
  *     pointsThisPeriod: 今の期間の利用でもらえるポイントの目安
  *   }
  */
-function cardSummary(account) {
+function cardSummary(account, todayOverride) {
   const settings = cardSettings(account);
   const bills = buildCardBills(account);
-  const today = todayText();
+  const today = todayOverride || todayText(); // テストでは日付を決めて渡す
 
   const overdueBills = bills.filter((bill) => !bill.paid && bill.payDate < today && bill.total > 0);
   const upcomingBills = bills.filter((bill) => !bill.paid && bill.payDate >= today && bill.total > 0);
@@ -813,15 +813,11 @@ function upgradeAllManualBills() {
       }
     }
   }
+  // 移すときは、移す先にすでに同じ記録があっても二重にしない（04 の placeTransaction）
   for (const move of moves) {
-    const toMonth = monthOfDate(move.transaction.date);
-    appState.monthly[move.fromMonth] = appState.monthly[move.fromMonth].filter((item) => item.id !== move.transaction.id);
-    if (!appState.monthly[toMonth]) {
-      appState.monthly[toMonth] = [];
+    for (const month of placeTransaction(appState.monthly, move.transaction)) {
+      changedMonths.add(month);
     }
-    appState.monthly[toMonth].push(move.transaction);
-    changedMonths.add(move.fromMonth);
-    changedMonths.add(toMonth);
   }
   return [...changedMonths];
 }
@@ -950,4 +946,254 @@ function cardDebtRows(summary) {
     month = addMonths(month, 1);
   }
   return rows;
+}
+
+
+/* ===========================================================
+   9. 数字の点検（二重に数えていないか・数字が合っているか）
+   -----------------------------------------------------------
+   設定画面の「数字の点検」から呼ばれます。点検は、この端末の中だけで行い、
+   結果は画面に出すだけです（外へは何も送りません）。
+   見つけるもの:
+     duplicate               … 同じ記録が2つ入っている（二重に数える）
+     manual-twice            … 同じカード・同じ月の「仮」が2つある
+     manual-and-detail       … 「仮」と取り込んだ明細が両方ある（二重）
+     minus-bill              … マイナスの請求がある（返金が多い月か、支払いが「返金」で入っている）
+     overdue                 … 支払日を過ぎて、記録していない引き落とし
+     payment-as-bank-expense … 銀行からカードへの引き落としが「支出」で入っている
+     payment-as-card-expense … カードへの支払いが、カードの買い物（支出）として入っている
+     payment-as-refund       … カードへの支払いが、カードの「返金（収入）」として入っている
+     minus-amount            … 金額がマイナスの記録
+   あわせて、カードごとに「これから払う金額が、何からできているか」の内訳を出します。
+   =========================================================== */
+
+const CARD_PAYMENT_CHECK_MIN = 10000;  // 「カードの引き落としかも」と知らせる、いちばん小さい金額
+const CARD_PAYMENT_WORDS = /引き?落と?し|引落|支払|返済|入金/; // カードへの支払いによく出ることば
+
+// 内訳の名前（請求の parts の名前 → 画面に出す名前）
+const BILL_PART_LABELS = [
+  ['manual', '手入力の「仮」'],
+  ['once', '1回払い'],
+  ['twice', '2回払い'],
+  ['installment', '分割払い'],
+  ['revolving', 'リボ払い'],
+  ['skip', 'スキップ払い'],
+  ['bonus', 'ボーナス払い'],
+  ['bonus2', 'ボーナス2回払い'],
+  ['opening', '登録したときの残高'],
+  ['refund', '返金（マイナス）'],
+];
+
+/** 点検の結果に出す、記録1件の説明（"10/5 カード 140,000円"） */
+function recordLineForCheck(transaction) {
+  return formatShortDate(transaction.date) + ' ' + (transaction.description || '（内容なし）') + ' ' + formatYen(transaction.amount);
+}
+
+/** 銀行などの支出のうち、カードへの引き落としらしいものか（カードの名前・会社名・「カード」が入っている大きな支出） */
+function looksLikeCardPaymentFromBank(transaction, cardWords) {
+  if (transaction.type !== 'expense' || transaction.manualBill || transaction.amount < CARD_PAYMENT_CHECK_MIN) {
+    return false;
+  }
+  const account = accountById[transaction.account];
+  if (!account || account.kind === 'card') {
+    return false;
+  }
+  const text = normalizeText(transaction.description);
+  for (const word of cardWords) {
+    if (word && text.includes(word)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** カードの記録のうち、カードへの支払いらしい内容か（「引き落とし」「支払」「返済」など。内容が「カード」だけのものも） */
+function looksLikePaymentText(description) {
+  const text = normalizeText(description);
+  return CARD_PAYMENT_WORDS.test(text) || text === 'カード';
+}
+
+/**
+ * カード1枚の「これから払う金額」の内訳（まだ記録していない請求をすべて足す）。
+ * 返す形: { total: 合計（手数料こみ）, fee: 手数料, count: 請求の回数, rows: [{ label, amount }] }
+ * rows を全部足すと total になる（数字が合っていることを、テストでも確かめる）。
+ */
+function cardBreakdown(summary) {
+  const sums = {};
+  let total = 0;
+  let fee = 0;
+  let count = 0;
+  for (const bill of summary.bills) {
+    if (bill.paid) {
+      continue;
+    }
+    count = count + 1;
+    total = total + bill.total;
+    fee = fee + bill.fee;
+    for (const [part] of BILL_PART_LABELS) {
+      sums[part] = (sums[part] || 0) + (bill.parts[part] || 0);
+    }
+  }
+  const rows = [];
+  for (const [part, label] of BILL_PART_LABELS) {
+    if (sums[part]) {
+      rows.push({ label: label, amount: sums[part] });
+    }
+  }
+  if (fee) {
+    rows.push({ label: '手数料', amount: fee });
+  }
+  return { total: total, fee: fee, count: count, rows: rows };
+}
+
+/**
+ * 数字の点検をする。
+ *   today … 今日の日付（省略すると本当の今日。テストでは決めて渡す）
+ * 返す形: { problems: [{ kind, title, explain, lines: [文], recordIds, action: { kind, id } }],
+ *          cards: [{ account, total, fee, count, rows }] }
+ *   recordIds   … 記録1件ずつの点検のとき、lines と同じ順の記録の id（画面で1行ずつ開けるように）。それ以外は []
+ *   action.kind … 'edit'（記録を開いて直す）/ 'card'（カード画面へ。id はカードの口座の id）/ 'fix-duplicates'（同じ記録を1つにする）
+ */
+function findNumberProblems(today) {
+  const day = today || todayText();
+  const problems = [];
+  const cards = appState.profile ? cardAccounts() : [];
+
+  // 1. 同じ記録が2つ
+  const duplicates = duplicateRecordGroups(appState.monthly);
+  if (duplicates.length > 0) {
+    problems.push({
+      kind: 'duplicate',
+      title: '同じ記録が2つ入っています',
+      explain: '同じ記録を二重に数えています。「1つにする」を押すと直ります。',
+      lines: duplicates.map((group) => recordLineForCheck(group.copies[0].transaction) + '（' + group.copies.length + 'つ）'),
+      recordIds: [],
+      action: { kind: 'fix-duplicates', id: '' },
+    });
+  }
+
+  // 2. カードごとの点検と内訳
+  const cardResults = [];
+  for (const account of cards) {
+    const summary = cardSummary(account, day);
+    cardResults.push({ account: account, ...cardBreakdown(summary) });
+
+    // 同じ月の「仮」が2つ
+    const manualByMonth = {};
+    for (const entry of manualBillsOf(account)) {
+      if (!manualByMonth[entry.billMonth]) {
+        manualByMonth[entry.billMonth] = [];
+      }
+      manualByMonth[entry.billMonth].push(entry);
+    }
+    for (const month of Object.keys(manualByMonth)) {
+      const entries = manualByMonth[month];
+      if (entries.length > 1) {
+        problems.push({
+          kind: 'manual-twice',
+          title: '同じ月の「仮」が2つあります',
+          explain: '同じ月の支払いを二重に数えています。カード画面の「月の支払い金額だけをまとめて入力する」で、1つを消してください。',
+          lines: [account.name + ' ' + formatMonthText(month) + '払い: ' + entries.map((entry) => formatYen(manualBillAmountOf(entry))).join(' と ')],
+          recordIds: [],
+          action: { kind: 'card', id: account.id },
+        });
+      }
+    }
+
+    // 「仮」と取り込んだ明細が両方ある（同じ月の仮が2つのときは、上で知らせるので1回だけ）
+    for (const month of Object.keys(manualByMonth)) {
+      const check = manualBillCheck(account, manualByMonth[month][0]);
+      if (check.hasDetail) {
+        problems.push({
+          kind: 'manual-and-detail',
+          title: '「仮」と取り込んだ明細が、両方入っています',
+          explain: '同じ月の支払いを二重に数えています。明細を取り込んだら、カード画面で「仮を消す」を押してください。',
+          lines: [account.name + ' ' + formatMonthText(month) + '払い: 仮 ' + formatYen(check.manualAmount) + ' / 明細 ' + formatYen(check.detailAmount) + '（' + check.detailCount + '件）'],
+          recordIds: [],
+          action: { kind: 'card', id: account.id },
+        });
+      }
+    }
+
+    // マイナスの請求
+    for (const bill of summary.bills) {
+      if (!bill.paid && bill.total < 0) {
+        problems.push({
+          kind: 'minus-bill',
+          title: 'マイナスの請求があります',
+          explain: '返金が多い月か、カードへの支払いが「返金（収入）」として入っているかもしれません。そのぶん、ほかの数字が少なく見えます。',
+          lines: [account.name + ' ' + formatShortDate(bill.payDate) + '払い ' + formatYen(bill.total)],
+          recordIds: [],
+          action: { kind: 'card', id: account.id },
+        });
+      }
+    }
+
+    // 支払日を過ぎて、記録していない引き落とし
+    if (summary.overdueBills.length > 0) {
+      problems.push({
+        kind: 'overdue',
+        title: '支払日を過ぎて、記録していない引き落としがあります',
+        explain: '引き落とされていたら、カード画面で「記録する」を押してください。記録するまで「これから払う金額」に入ったままです。',
+        lines: summary.overdueBills.map((bill) => account.name + ' ' + formatShortDate(bill.payDate) + '払い ' + formatYen(bill.total)),
+        recordIds: [],
+        action: { kind: 'card', id: account.id },
+      });
+    }
+  }
+
+  // 3. 記録1件ずつの点検（カードへの支払いの入れ方・マイナスの金額）
+  // 「カード」と、登録しているカードの名前・会社名（1文字の名前は、ほかの言葉にまざりやすいので使わない）
+  const cardWords = ['カード'];
+  for (const account of cards) {
+    for (const word of [normalizeText(account.name), normalizeText(cardSettings(account).company.name)]) {
+      if (word.length >= 2) {
+        cardWords.push(word);
+      }
+    }
+  }
+  const recordChecks = [
+    {
+      kind: 'payment-as-bank-expense',
+      title: 'カードの引き落としが「支出」で入っていませんか',
+      explain: 'カードで買ったもの（明細や「仮」）と、この引き落としの両方を支出に数えると、二重になります。カードへの支払いは「振替」（銀行 → カード）で入れてください。',
+      matches: (transaction) => looksLikeCardPaymentFromBank(transaction, cardWords),
+    },
+    {
+      kind: 'payment-as-card-expense',
+      title: 'カードへの支払いが、カードの買い物として入っていませんか',
+      explain: 'そのカードの請求が、実際より多く見えます。カードへの支払いなら「振替」（銀行 → カード）にしてください。',
+      matches: (transaction) => transaction.type === 'expense' && !transaction.manualBill && accountById[transaction.account] &&
+        accountById[transaction.account].kind === 'card' && looksLikePaymentText(transaction.description),
+    },
+    {
+      kind: 'payment-as-refund',
+      title: 'カードへの支払いが「返金」として入っていませんか',
+      explain: 'そのカードの請求が、実際より少なく見えます（マイナスになることも）。カードへの支払いなら「振替」（銀行 → カード）にしてください。',
+      matches: (transaction) => transaction.type === 'income' && accountById[transaction.account] &&
+        accountById[transaction.account].kind === 'card' && looksLikePaymentText(transaction.description),
+    },
+    {
+      kind: 'minus-amount',
+      title: '金額がマイナスの記録があります',
+      explain: '支出・収入の金額は、プラスで入れます（返金は「収入」で入れます）。合計がずれる原因になります。',
+      matches: (transaction) => (transaction.type === 'expense' || transaction.type === 'income') && transaction.amount < 0,
+    },
+  ];
+  for (const rule of recordChecks) {
+    const found = allTransactions.filter(rule.matches);
+    if (found.length === 0) {
+      continue;
+    }
+    problems.push({
+      kind: rule.kind,
+      title: rule.title,
+      explain: rule.explain,
+      lines: found.slice(0, 10).map(recordLineForCheck).concat(found.length > 10 ? ['ほか ' + (found.length - 10) + '件'] : []),
+      recordIds: found.slice(0, 10).map((transaction) => transaction.id),
+      action: { kind: 'edit', id: found[0].id },
+    });
+  }
+
+  return { problems: problems, cards: cardResults };
 }

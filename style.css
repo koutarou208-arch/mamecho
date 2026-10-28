@@ -1290,3 +1290,15 @@ html.privacy-cover::after {
   background: var(--bg);
   visibility: visible;
 }
+
+/* -----------------------------------------------------------
+   数字の点検（設定画面。14-screen-settings.js）
+   ----------------------------------------------------------- */
+.check-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.check-item { border: 1px solid var(--rule); border-left: 4px solid var(--warn); border-radius: 10px; padding: 10px 12px; display: grid; gap: 6px; }
+.check-lines { list-style: none; margin: 0; padding: 0; font-size: 13px; color: var(--ink-2); overflow-wrap: anywhere; }
+.check-lines li { padding: 2px 0; }
+.check-lines .sub-link { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.check-subhead { font-size: 14px; margin: 18px 0 4px; }
+.check-breakdown { border-top: 1px solid var(--rule); padding: 10px 0 4px; }
+.check-breakdown-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }

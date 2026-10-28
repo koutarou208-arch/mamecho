@@ -4,6 +4,7 @@
      ・1か月の始まりの日（給料日に合わせるなど）
      ・データの取り込み・書き出し（CSV・バックアップ）
      ・自動分類ルールの確認と追加
+     ・数字の点検（二重に数えていないか・数字が合っているか）
      ・保存先の表示と、データの全削除
    =========================================================== */
 
@@ -18,6 +19,7 @@ const SettingsScreen = {
     // よく使うもの（CSVの取り込み・固定費・自動分類）を上に、めったに変えないもの（集計期間・制度データ）を下に
     let html = '<div class="grid">';
     html += settingsDataCardHtml();
+    html += settingsNumberCheckCardHtml();
     html += settingsRecurringCardHtml();
     html += settingsRulesCardHtml();
     html += lockCardHtml();            // 21-encryption-lock.js
@@ -404,6 +406,102 @@ function flippedCopiesHtml() {
   html += '</ul><div class="row-gap"><button type="button" class="btn danger" data-action="delete-flipped-yes">あとから入った ' + pairs.length + '件を削除</button>' +
     '<button type="button" class="btn ghost" data-action="hide-flipped">やめる</button></div></div>';
   return html;
+}
+
+
+/* -----------------------------------------------------------
+   数字の点検（中身は 06-credit-card-billing.js の findNumberProblems）
+   この端末の中だけで調べて、結果を画面に出す（外へは何も送らない）
+   ----------------------------------------------------------- */
+
+let isNumberCheckOpen = false;          // 点検の結果を出しているか
+let isDuplicateFixConfirmOpen = false;  // 「同じ記録を1つにする」の確認を出しているか
+
+function settingsNumberCheckCardHtml() {
+  let html = '<section class="card span-12" id="numberCheckCard">' +
+    '<div class="card-head"><h2>数字の点検</h2><span class="sub">二重に数えていないか・数字が合っているか</span></div>';
+  if (!isNumberCheckOpen) {
+    html += '<p class="hint">カードの請求が多すぎる・少なすぎるなど、数字がおかしいと思ったときに押してください。この端末の中だけで調べて、外へは何も送りません。</p>' +
+      '<div class="row-gap" style="margin-top:10px"><button type="button" class="btn primary" data-action="run-number-check">点検する</button></div>';
+    return html + '</section>';
+  }
+
+  const result = findNumberProblems();
+  if (result.problems.length === 0) {
+    html += '<p>' + statusChipHtml('good', '問題なし') + ' 二重に数えている記録や、合わない数字は見つかりませんでした。</p>';
+  } else {
+    html += '<p>' + statusChipHtml('warn', result.problems.length + '件') + ' 気になるところが見つかりました。上から順に確かめてください。</p>';
+    html += '<ul class="check-list">';
+    for (const problem of result.problems) {
+      html += '<li class="check-item"><p><strong>' + escapeHtml(problem.title) + '</strong></p>' +
+        numberCheckLinesHtml(problem) +
+        '<p class="hint">' + escapeHtml(problem.explain) + '</p>' +
+        numberCheckActionHtml(problem) + '</li>';
+    }
+    html += '</ul>';
+  }
+
+  // カードごとの「これから払う金額」の内訳（どの行が多いかで、原因が分かる）
+  if (result.cards.length > 0) {
+    html += '<h3 class="check-subhead">カードの「これから払う金額」の内訳</h3>' +
+      '<p class="hint">まだ記録していない請求を全部足したものです。多すぎるときは、どの行が多いかを見てください。</p>';
+    for (const card of result.cards) {
+      html += '<div class="check-breakdown"><div class="check-breakdown-head"><span>' + escapeHtml(card.account.name) + '</span>' +
+        '<strong class="num">' + formatYen(card.total) + '</strong></div>';
+      if (card.rows.length === 0) {
+        html += '<p class="small muted">これから払う請求はありません。</p>';
+      }
+      for (const row of card.rows) {
+        html += '<div class="sub-row"><span>' + escapeHtml(row.label) + '</span><span class="num">' + formatYen(row.amount) + '</span></div>';
+      }
+      html += '<button type="button" class="link-btn" data-action="go-card" data-id="' + escapeHtml(card.account.id) + '">カード画面で見る</button></div>';
+    }
+  }
+  html += '<div class="row-gap" style="margin-top:14px"><button type="button" class="btn small" data-action="run-number-check">もう一度点検する</button>' +
+    '<button type="button" class="btn small ghost" data-action="close-number-check">閉じる</button></div>';
+  return html + '</section>';
+}
+
+/** 点検の1件の中身（記録1件ずつのときは、押すとその記録が開く） */
+function numberCheckLinesHtml(problem) {
+  let html = '<ul class="check-lines">';
+  for (let index = 0; index < problem.lines.length; index++) {
+    const recordId = problem.recordIds[index];
+    if (recordId) {
+      html += '<li><button type="button" class="sub-row sub-link" data-action="edit-transaction" data-id="' + escapeHtml(recordId) + '">' +
+        '<span>' + escapeHtml(problem.lines[index]) + '</span>' + iconSvg('chevron-right') + '</button></li>';
+    } else {
+      html += '<li>' + escapeHtml(problem.lines[index]) + '</li>';
+    }
+  }
+  return html + '</ul>';
+}
+
+/** 点検の1件の下に出すボタン（同じ記録を1つにする・カード画面へ） */
+function numberCheckActionHtml(problem) {
+  if (problem.action.kind === 'fix-duplicates') {
+    if (isDuplicateFixConfirmOpen) {
+      return confirmBoxHtml('同じ記録のうち、余分なほうを消して1つにします。', '1つにする', 'fix-duplicates-yes', 'fix-duplicates-no');
+    }
+    return '<div class="row-gap"><button type="button" class="btn small" data-action="fix-duplicates">1つにする</button></div>';
+  }
+  if (problem.action.kind === 'card') {
+    return '<div class="row-gap"><button type="button" class="btn small" data-action="go-card" data-id="' + escapeHtml(problem.action.id) + '">カード画面へ</button></div>';
+  }
+  return ''; // 記録1件ずつのときは、上の行を押すと開く
+}
+
+/** カード画面などから「数字の点検」へ移って、点検の結果を出す */
+function goToNumberCheck() {
+  goToScreen('settings');
+  isNumberCheckOpen = true;
+  renderApp();
+  requestAnimationFrame(() => {
+    const card = findOne('#numberCheckCard');
+    if (card) {
+      card.scrollIntoView({ block: 'start', behavior: prefersReducedMotion() ? 'auto' : 'smooth' });
+    }
+  });
 }
 
 

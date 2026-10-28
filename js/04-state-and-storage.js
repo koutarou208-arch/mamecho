@@ -666,27 +666,107 @@ function afterDataChange(changedMonths, profileChanged) {
 }
 
 /**
+ * 入出金を、日付の月の箱に入れる（monthly を直接変える）。
+ * 同じ id の記録がほかの箱に残っていたら、先に全部取りのぞく
+ * （記録が日付とちがう箱に入っていても、二重に数えないように）。
+ * 変えた月のリストを返す。
+ */
+function placeTransaction(monthly, transaction) {
+  const changedMonths = new Set();
+  for (const month of Object.keys(monthly)) {
+    const list = monthly[month];
+    const kept = list.filter((item) => item.id !== transaction.id);
+    if (kept.length !== list.length) {
+      monthly[month] = kept;
+      changedMonths.add(month);
+    }
+  }
+  const month = monthOfDate(transaction.date);
+  if (!monthly[month]) {
+    monthly[month] = [];
+  }
+  monthly[month].push(transaction);
+  changedMonths.add(month);
+  return [...changedMonths];
+}
+
+/**
  * 入出金を1件追加（または上書き）する。
- * 編集のときは oldDate に「変更前の日付」を渡す（月の箱を移すため）。
+ * oldDate（変更前の日付）は、前の版との互換のために受け取るだけ。
+ * 同じ id の古い記録は、どの月の箱にあっても placeTransaction が取りのぞく。
  */
 function putTransaction(transaction, oldDate) {
+  const changedMonths = placeTransaction(appState.monthly, transaction);
+  afterDataChange(changedMonths, false);
+}
+
+/**
+ * 同じ id の記録が2つ以上入っているところを探す（そのままだと二重に数えてしまう）。
+ * 返す形: [{ id, copies: [{ month: 入っている月の箱, index: 箱の中の位置, transaction }] }]
+ */
+function duplicateRecordGroups(monthly) {
+  const copiesById = new Map();
+  for (const month of Object.keys(monthly || {})) {
+    const list = monthly[month] || [];
+    for (let index = 0; index < list.length; index++) {
+      const transaction = list[index];
+      if (!transaction || !transaction.id) {
+        continue;
+      }
+      if (!copiesById.has(transaction.id)) {
+        copiesById.set(transaction.id, []);
+      }
+      copiesById.get(transaction.id).push({ month: month, index: index, transaction: transaction });
+    }
+  }
+  const groups = [];
+  for (const [id, copies] of copiesById) {
+    if (copies.length > 1) {
+      groups.push({ id: id, copies: copies });
+    }
+  }
+  return groups;
+}
+
+/**
+ * 同じ id の記録を1つだけ残して、ほかを取りのぞく（monthly を直接変える）。
+ * 残すのは、日付の月の箱に入っているもの（なければ最初に見つけたもの）。変えた月のリストを返す。
+ */
+function removeDuplicateCopies(monthly) {
+  const removePositions = new Set(); // 取りのぞく場所（"月#位置"）
+  for (const group of duplicateRecordGroups(monthly)) {
+    let keeper = group.copies[0];
+    for (const copy of group.copies) {
+      if (copy.month === monthOfDate(copy.transaction.date)) {
+        keeper = copy;
+        break;
+      }
+    }
+    for (const copy of group.copies) {
+      if (copy !== keeper) {
+        removePositions.add(copy.month + '#' + copy.index);
+      }
+    }
+  }
   const changedMonths = new Set();
-
-  if (oldDate) {
-    const oldMonth = monthOfDate(oldDate);
-    const list = appState.monthly[oldMonth] || [];
-    appState.monthly[oldMonth] = list.filter((item) => item.id !== transaction.id);
-    changedMonths.add(oldMonth);
+  for (const month of Object.keys(monthly)) {
+    const list = monthly[month];
+    const kept = list.filter((item, index) => !removePositions.has(month + '#' + index));
+    if (kept.length !== list.length) {
+      monthly[month] = kept;
+      changedMonths.add(month);
+    }
   }
+  return [...changedMonths];
+}
 
-  const month = monthOfDate(transaction.date);
-  if (!appState.monthly[month]) {
-    appState.monthly[month] = [];
+/** 「数字の点検」の「直す」: 同じ記録を1つにして保存する */
+function fixDuplicateRecords() {
+  const changedMonths = removeDuplicateCopies(appState.monthly);
+  if (changedMonths.length > 0) {
+    afterDataChange(changedMonths, false);
   }
-  appState.monthly[month].push(transaction);
-  changedMonths.add(month);
-
-  afterDataChange([...changedMonths], false);
+  return changedMonths.length;
 }
 
 /** 入出金をまとめて追加する（CSVの取り込みなど） */
