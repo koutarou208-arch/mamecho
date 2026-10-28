@@ -615,6 +615,23 @@ same('バックアップの文字: 空なら null', parseBackupText(''), null);
 same('バックアップの文字: 口座がない形は null', parseBackupText('{"profile":{},"monthly":{}}'), null);
 same('バックアップの文字: 入出金の入れ物がない形は null', parseBackupText('{"profile":{"accounts":[]}}'), null);
 
+section('バックアップの暗号化（形の確認）');
+const sampleEnvelope = { app: 'mamecho', version: 2, exportedAt: '2026-10-28T00:00:00.000Z', locked: { salt: 'c2FsdA==', iter: 600000 }, box: { enc: 1, iv: 'aXY=', data: 'ZGF0YQ==' } };
+check('暗号化バックアップ: 正しい形なら読める', parseEncryptedBackupText(JSON.stringify(sampleEnvelope)) !== null);
+same('暗号化バックアップ: ふつうのバックアップとしては読まない', parseBackupText(JSON.stringify(sampleEnvelope)), null);
+same('ふつうのバックアップは、暗号化バックアップとしては読まない', parseEncryptedBackupText(backupText), null);
+same('暗号化バックアップ: 計算の回数が大きすぎる（アプリが固まる）ものは読まない', parseEncryptedBackupText(JSON.stringify({ ...sampleEnvelope, locked: { salt: 'c2FsdA==', iter: 999999999 } })), null);
+same('暗号化バックアップ: 計算の回数が少なすぎるものは読まない', parseEncryptedBackupText(JSON.stringify({ ...sampleEnvelope, locked: { salt: 'c2FsdA==', iter: 10 } })), null);
+same('暗号化バックアップ: まぜもの（salt）がなければ読まない', parseEncryptedBackupText(JSON.stringify({ ...sampleEnvelope, locked: { salt: '', iter: 600000 } })), null);
+same('暗号化バックアップ: 暗号文がなければ読まない', parseEncryptedBackupText(JSON.stringify({ ...sampleEnvelope, box: { enc: 1, iv: 'aXY=' } })), null);
+same('暗号化バックアップ: ほかのアプリのものは読まない', parseEncryptedBackupText(JSON.stringify({ ...sampleEnvelope, app: 'other' })), null);
+check('暗号化したバックアップかどうかを見分ける', isEncryptedBackup(sampleEnvelope) && !isEncryptedBackup(sampleBackup));
+lockState.enabled = false;
+check('ロックがオフ: 「バックアップは暗号化されない」と説明する', backupSafetyText().includes('暗号化されません'));
+lockState.enabled = true;
+check('ロックがオン: 「パスフレーズで暗号化する」と説明する', backupSafetyText().includes('パスフレーズで暗号化します'));
+lockState.enabled = false;
+
 section('固定費（毎月自動で記録）');
 const rentRule = { id: 'r1', description: '家賃', amount: 80000, category: 'housing', sub: '家賃・地代', account: 'bank1', day: 27, startMonth: '2026-08', generatedUntil: '' };
 const dueA = recurringDueList(rentRule, '2026-10-03');
@@ -787,6 +804,16 @@ check('自動 Face ID: 1回やめたら、勝手にくり返さない', !shouldA
 check('自動 Face ID: 確認している途中は、重ねて出さない', !shouldAutoStartBiometric({ ...autoBase, inProgress: true }));
 check('自動 Face ID: ロックしていないときは出さない', !shouldAutoStartBiometric({ ...autoBase, locked: false }));
 check('自動 Face ID: ロック画面が閉じていれば出さない', !shouldAutoStartBiometric({ ...autoBase, dialogOpen: false }));
+
+section('アプリから離れたときのロック（1分）');
+const leaveBase = { enabled: true, hasKey: true, locked: false, insideClaude: false, leftAt: 1000000, now: 1000000 + 60 * 1000 };
+check('離れて1分たって戻ったら、ロックする', shouldLockAfterLeaving(leaveBase));
+check('離れて59秒で戻ったら、ロックしない（LINE を見て戻るくらいなら、そのまま）', !shouldLockAfterLeaving({ ...leaveBase, now: leaveBase.leftAt + 59 * 1000 }));
+check('離れていなければ、ロックしない', !shouldLockAfterLeaving({ ...leaveBase, leftAt: 0 }));
+check('ロックがオフなら、ロックしない', !shouldLockAfterLeaving({ ...leaveBase, enabled: false }));
+check('もうロック中なら、重ねてロックしない', !shouldLockAfterLeaving({ ...leaveBase, locked: true }));
+check('開いていない（鍵がない）なら、ロックしない', !shouldLockAfterLeaving({ ...leaveBase, hasKey: false }));
+check('Claude の中では、1分のロックはしない（10分のまま）', !shouldLockAfterLeaving({ ...leaveBase, insideClaude: true }));
 
 section('Face ID が出ないときの説明と、登録のおすすめ');
 same('Face ID の状態: Claude の中で開いている', biometricStatusOf(true, false, false), 'claude');
@@ -1100,17 +1127,86 @@ check('固定費のカテゴリはすべて「固定費」の色', EXPENSE_CATEG
 check('使っている色の系統は、すべて説明がある', EXPENSE_CATEGORIES.every((category) => !category.tone || Boolean(CATEGORY_TONES[category.tone])));
 
 /* ===========================================================
+   暗号のテスト（node で動かすときだけ。Mac の jsc には暗号の道具がないので飛ばす）
+   暗号の計算は「あとで終わる」（async）ので、ほかのテストのあとにまとめて動かす。
+   =========================================================== */
+async function runEncryptionTests() {
+  if (typeof crypto === 'undefined' || !crypto.subtle) {
+    print('\n（暗号のテストは、この実行機では飛ばしました）');
+    return;
+  }
+  section('バックアップの暗号化（本当に暗号化して、元に戻す）');
+  const savedLock = { enabled: lockState.enabled, key: lockState.key, salt: lockState.salt, iter: lockState.iter };
+  lockState.salt = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
+  lockState.iter = 100000; // テストを速くするため、本物（60万回）より少なくする（受け付ける最小の回数）
+  lockState.key = await deriveKey('テストのパスフレーズ123', lockState.salt, lockState.iter);
+  lockState.enabled = true;
+
+  const secretBackup = {
+    app: 'mamecho', version: 1, exportedAt: '2026-10-28T00:00:00.000Z',
+    profile: { accounts: [{ id: 'a', name: 'テスト銀行' }] },
+    monthly: { '2026-10': [{ id: 't', description: 'テストショウテン', amount: 1234 }] },
+  };
+  const envelope = await encryptBackupForExport(secretBackup);
+  const envelopeText = backupToText(envelope);
+  check('暗号化: 書き出した文字に、お店の名前が入っていない', !envelopeText.includes('テストショウテン'));
+  check('暗号化: 口座の名前も入っていない', !envelopeText.includes('テスト銀行'));
+  check('暗号化: 暗号化バックアップとして読める', parseEncryptedBackupText(envelopeText) !== null);
+  check('暗号化: 同じパスフレーズの家計簿なら、パスフレーズを聞かずに開ける', canOpenBackupWithCurrentKey(envelope));
+  const openedWithKey = await decryptBackup(envelope, null);
+  same('暗号化: 今の鍵で元に戻せる', openedWithKey && openedWithKey.monthly['2026-10'][0].description, 'テストショウテン');
+
+  // ここから、ロックのない別のスマホに戻すつもり
+  lockState.key = null;
+  lockState.enabled = false;
+  check('暗号化: 鍵のない端末では、パスフレーズを聞く', !canOpenBackupWithCurrentKey(envelope));
+  const openedWithPassphrase = await decryptBackup(parseEncryptedBackupText(envelopeText), 'テストのパスフレーズ123');
+  same('暗号化: パスフレーズで元に戻せる', openedWithPassphrase && openedWithPassphrase.monthly['2026-10'][0].amount, 1234);
+  check('暗号化: 戻した中身は、ふつうのバックアップの形', backupShapeOk(openedWithPassphrase));
+  same('暗号化: 保存した日も戻る', openedWithPassphrase && openedWithPassphrase.exportedAt, '2026-10-28T00:00:00.000Z');
+  check('暗号化: 数字が全角になっていても開ける', (await decryptBackup(envelope, 'テストのパスフレーズ１２３')) !== null);
+  same('暗号化: パスフレーズがちがえば開けない', await decryptBackup(envelope, 'ちがうパスフレーズ'), null);
+  const tampered = JSON.parse(envelopeText);
+  tampered.box.data = (tampered.box.data[0] === 'A' ? 'B' : 'A') + tampered.box.data.slice(1);
+  same('暗号化: 暗号文を書きかえられたら開けない', await decryptBackup(tampered, 'テストのパスフレーズ123'), null);
+
+  same('ロックがオフ: バックアップはそのまま（暗号化しない）', (await encryptBackupForExport(secretBackup)).version, 1);
+  lockState.enabled = true;
+  let lockedError = '';
+  try {
+    await encryptBackupForExport(secretBackup);
+  } catch (error) {
+    lockedError = error.message;
+  }
+  same('ロック中（鍵がない）: 暗号化しないまま書き出さず、エラーにする', lockedError, 'locked_no_key');
+
+  lockState.enabled = savedLock.enabled;
+  lockState.key = savedLock.key;
+  lockState.salt = savedLock.salt;
+  lockState.iter = savedLock.iter;
+}
+
+/* ===========================================================
    結果
    =========================================================== */
-print('\n==========================================');
-print('合格 ' + passes + ' 件 / 不合格 ' + failures + ' 件');
-if (failures > 0) {
-  print('→ 不合格があります。公開しないでください。');
-  if (typeof quit === 'function') {
-    quit(1);
-  } else if (typeof process !== 'undefined') {
-    process.exit(1);
+function printResults() {
+  print('\n==========================================');
+  print('合格 ' + passes + ' 件 / 不合格 ' + failures + ' 件');
+  if (failures > 0) {
+    print('→ 不合格があります。公開しないでください。');
+    if (typeof quit === 'function') {
+      quit(1);
+    } else if (typeof process !== 'undefined') {
+      process.exit(1);
+    }
+  } else {
+    print('→ すべて合格です。');
   }
-} else {
-  print('→ すべて合格です。');
 }
+
+runEncryptionTests()
+  .catch((error) => {
+    failures = failures + 1;
+    print('✗ 暗号のテストが途中で止まりました: ' + error);
+  })
+  .then(printResults);

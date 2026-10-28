@@ -14,6 +14,13 @@
    書きかえたときは RULES_CHANGELOG に1件足され、アプリの上部に
    「制度が変わりました」というお知らせが出ます。
 
+   【このファイルにはデータだけを書く】
+   書いてよいのは「const 大文字の名前 = 値;」だけです（値は '文字'・数字・true/false/null・[ ]・{ }、
+   このファイルで先に作った名前）。function や =>、( )、+ などのプログラムは書きません。
+   tests/security-check.js が毎回確かめ、データ以外が入っていたらテストが不合格になります
+   （毎月の自動更新が、ページの中の悪い指示にだまされても、アプリに悪いプログラムが入らないように）。
+   データを読むプログラム（pickRate など）は 06-credit-card-billing.js にあります。
+
    【大事】ここに書いた数字は、各社が公表している情報をもとにした「目安」です。
    各社の confidence（確からしさ）を見てください:
      'official'  … 公式ページで確認できた
@@ -173,62 +180,12 @@ const STANDARD_BONUS = {
   winter: { from: '07-16', to: '11-15', payMonth: 1 },
 };
 
-/** 日付が古い順に並んだ「いつから何%」の表のうち、dateText の時点で使うものを選ぶ */
+/** 「ずっと前から」の意味の日付（手数料率の表のいちばん古い from に使う） */
 const ALWAYS = '0000-00-00'; // 「ずっと前から」の意味の日付
 
 
 /* ===========================================================
-   3. 手数料率の表から率を取り出す道具
-   =========================================================== */
-
-/**
- * rates … [{ from, rate }]（from の古い順）
- * dateText … 買い物をした日（"2026-09-14"）
- * count … 分割の回数（分割以外は省略）
- * 回数ごとの表のときは「count 以上で一番近い回数」の率を使う（なければ最大の回数）。
- * ※間の回数は高いほうの率を使うので、費用は少し多めに出ます。
- */
-function pickRate(rates, dateText, count) {
-  if (!rates || rates.length === 0) {
-    return 0;
-  }
-  let chosen = rates[0];
-  for (const entry of rates) {
-    if (entry.from <= dateText) {
-      chosen = entry;
-    }
-  }
-  const rate = chosen.rate;
-  if (typeof rate === 'number') {
-    return rate;
-  }
-  const keys = Object.keys(rate).map(Number).sort((a, b) => a - b);
-  for (const key of keys) {
-    if (key >= (count || keys[0])) {
-      return rate[key];
-    }
-  }
-  return rate[keys[keys.length - 1]];
-}
-
-/** 表の中の最小と最大の率（画面に「年14.7〜17.9%」と出すため） */
-function rateRangeAt(rates, dateText) {
-  if (!rates || rates.length === 0) {
-    return null;
-  }
-  let chosen = rates[0];
-  for (const entry of rates) {
-    if (entry.from <= dateText) {
-      chosen = entry;
-    }
-  }
-  const values = typeof chosen.rate === 'number' ? [chosen.rate] : Object.values(chosen.rate);
-  return { min: Math.min(...values), max: Math.max(...values) };
-}
-
-
-/* ===========================================================
-   4. カード会社の一覧
+   3. カード会社の一覧
      id           … プログラムの中で使う名前（変えないこと）
      name         … 表示名
      cycles       … 締め日と支払日の組み合わせ（複数ある会社は選べる）
@@ -609,13 +566,3 @@ const CONFIDENCE_LABELS = {
   secondary: '解説サイトなどの情報（公式では未確認）',
   inferred: '推定（要確認）',
 };
-
-/** id からカード会社を探す（見つからなければ「その他」を返す） */
-function findCardCompany(companyId) {
-  for (const company of CARD_COMPANIES) {
-    if (company.id === companyId) {
-      return company;
-    }
-  }
-  return CARD_COMPANIES[CARD_COMPANIES.length - 1];
-}

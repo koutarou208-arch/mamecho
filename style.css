@@ -1270,3 +1270,23 @@ html { -webkit-tap-highlight-color: transparent; }
 .chat-input { display: grid; gap: 8px; }
 .chat-input .btn { justify-self: start; min-width: 120px; }
 .chat-input textarea { font-family: inherit; min-height: 46px; resize: vertical; }
+
+/* -----------------------------------------------------------
+   のぞき見防止の目隠し（21-encryption-lock.js の 9.）
+   アプリから離れるとき、中身をすべて見えなくして「まめ帳」の文字だけを出す。
+   （ダイアログも body の中なので、いっしょに見えなくなる）
+   ----------------------------------------------------------- */
+html.privacy-cover { background: var(--bg); }
+html.privacy-cover body { visibility: hidden; }
+html.privacy-cover::after {
+  content: '\307E\3081\5E33';  /* 「まめ帳」 */
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--muted);
+  background: var(--bg);
+  visibility: visible;
+}

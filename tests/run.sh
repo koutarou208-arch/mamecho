@@ -39,6 +39,24 @@ if command -v node >/dev/null 2>&1; then
   rm -f /tmp/mamecho-syntax.txt "$ALL_JS"
 fi
 
+# 同じ名前の関数（function）が2つないか（あとから読んだほうが、前のほうを黙って消してしまうため）
+DUPLICATE_FUNCTIONS="$(cat js/[0-9]*.js | grep -oE '^(async )?function [A-Za-z0-9_]+' | sed 's/^async //' | sort | uniq -d)"
+if [ -n "$DUPLICATE_FUNCTIONS" ]; then
+  echo "同じ名前の関数が2つあります（どちらかの名前を変えてください）:"
+  echo "$DUPLICATE_FUNCTIONS"
+  rm -f "$BUNDLE"
+  exit 1
+fi
+
+JSC="/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc"
+
+# 安全の見張り: 外へ送る部品がないか・CSP が変わっていないか・02 がデータだけか など（くわしくは tests/security-check.js）
+if command -v node >/dev/null 2>&1; then
+  node tests/security-check.js || { rm -f "$BUNDLE"; exit 1; }
+elif [ -x "$JSC" ]; then
+  "$JSC" tests/security-check.js || { rm -f "$BUNDLE"; exit 1; }
+fi
+
 # 電波がなくても開けるように、sw.js の覚えておくファイルに、すべての js が入っているか
 for FILE in js/*.js js/vendor/*.js; do
   if ! grep -q "'./$FILE'" sw.js; then
@@ -60,8 +78,6 @@ done
       js/18-ai-features.js js/19-sample-data.js js/21-encryption-lock.js js/22-take-home-pay.js
   cat tests/tests.js
 } > "$BUNDLE"
-
-JSC="/System/Library/Frameworks/JavaScriptCore.framework/Versions/Current/Helpers/jsc"
 
 if command -v node >/dev/null 2>&1; then
   node "$BUNDLE"

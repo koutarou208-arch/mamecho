@@ -37,16 +37,16 @@ mamecho/
 ├─ style.css ………………… 見た目（いちばん上に色の一覧があります）
 ├─ CLAUDE.md ……………… Claude 向けの案内（直し方・約束ごと）
 ├─ docs/仕様書.md ………… アプリの仕様
-├─ tests/ …………………… 自動テスト（sh tests/run.sh で実行）
+├─ tests/ …………………… 自動テスト（sh tests/run.sh で実行）。security-check.js は「外へ送る部品がないか」の見張り
 └─ tools/UPDATE_RULES.md … 毎月のデータ見直しの手順書
    js/
    ├─ vendor/ ……………… 【よその部品】PapaParse（CSVを読む）。中身は書きかえない（vendor/README.md）
    ├─ 01-categories.js ………… 【辞書】カテゴリ・口座の種類・自動分類ルール
-   ├─ 02-card-companies.js …… 【辞書】カード会社の締め日・支払日・手数料
+   ├─ 02-card-companies.js …… 【辞書】カード会社の締め日・支払日・手数料（データだけ）
    ├─ 03-helpers.js …………… 【道具】金額や日付を扱う小さな関数
    ├─ 04-state-and-storage.js 【記憶】アプリの状態と、データの保存
    ├─ 05-calculations.js ……… 【計算】残高・収支・期間・自動分類
-   ├─ 06-credit-card-billing.js【計算】カードの請求（分割・リボなど）
+   ├─ 06-credit-card-billing.js【計算】カードの請求（分割・リボなど）、02 のデータを読む道具
    ├─ 07-charts.js …………… 【部品】グラフを描く
    ├─ 08〜14-screen-○○.js …【画面】ホーム／入出金／家計簿／予算／カード／口座／設定
    ├─ 15-dialog-transaction.js【画面】入出金の入力ダイアログ
@@ -192,6 +192,8 @@ sh tests/run.sh
 
 - すべての js ファイルに書き間違い（文法のまちがい）がないか
 - ファイルをつなげたときに、同じ名前を2回使っていないか（ブラウザでアプリが開かなくなる失敗）
+- 同じ名前の関数（function）が2つないか（あとから読んだほうが、前のほうを黙って消してしまう）
+- **安全の見張り（`tests/security-check.js`）**: 外と通信する・ほかのページへ移る部品がないか、index.html の「安全のための約束」（CSP）が変わっていないか、`js/02-card-companies.js` がデータだけか、CSV を読む部品が入れたときのままか
 - 電波がなくても開けるように、`sw.js` の `APP_FILES` にすべての js が入っているか
 `js/` の計算部分を直したときと、データを更新したときは、必ず実行します。
 
@@ -225,3 +227,6 @@ sh tests/run.sh
   （`<` などの記号がHTMLの命令として動いてしまうのを防ぐため）
 - 消す操作（入出金・口座・全データ）は、必ず画面の中で「本当に削除しますか」を確認する
 - サンプル表示中は保存しない
+- 外と通信する部品（fetch など）・ほかのページへ移る部品を足さない（`tests/security-check.js` が止める）
+- `js/02-card-companies.js` にはデータだけを書く。データを読むプログラムは `06` に置く
+- バックアップは `encryptBackupForExport`（21）を通して書き出す（ロックがオンなら暗号化される）

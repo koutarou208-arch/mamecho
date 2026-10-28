@@ -188,14 +188,49 @@ function profileForExport(profile) {
   return copy;
 }
 
-function exportBackup() {
-  const backup = {
+/** 今の家計簿から、バックアップの中身（ふつうの形）を作る */
+function currentBackup() {
+  return {
     app: 'mamecho',
     version: 1,
     exportedAt: new Date().toISOString(),
     profile: profileForExport(appState.profile),
     monthly: appState.monthly,
   };
+}
+
+/**
+ * 書き出すバックアップを作る。ロックがオンなら、パスフレーズで暗号化する（21 の encryptBackupForExport）。
+ * 作れなければ null（ロック中など）。
+ */
+async function backupForExport() {
+  try {
+    return await encryptBackupForExport(currentBackup());
+  } catch (error) {
+    showToast('ロック中は書き出せません。ロックを解除してください');
+    return null;
+  }
+}
+
+/** 設定画面に出す、バックアップの安全の説明 */
+function backupSafetyText() {
+  if (lockState.enabled) {
+    return 'バックアップ（保存・文字でコピー）は、パスフレーズで暗号化します。戻すときにパスフレーズが要ります。CSV の書き出しは暗号化されません。';
+  }
+  return '暗号化ロックがオフなので、バックアップは暗号化されません。人に見られない場所に保存してください。';
+}
+
+/** 暗号化したバックアップか */
+function isEncryptedBackup(backup) {
+  return Boolean(backup) && backup.version === 2 && Boolean(backup.box);
+}
+
+/** 「保存」: バックアップをファイルにする */
+async function exportBackup() {
+  const backup = await backupForExport();
+  if (!backup) {
+    return;
+  }
   offerDownload('mamecho-backup-' + todayText() + '.json', JSON.stringify(backup, null, 1));
 }
 
@@ -205,33 +240,67 @@ function backupToText(backup) {
 }
 
 /**
- * バックアップの文字を読んで、データにして返す。読めなければ null。
+ * 文字を JSON として読む。読めなければ null。
  * 前後の空白・改行や、先頭の目に見えない印（BOM）はむししてよい。
  */
-function parseBackupText(text) {
-  let source = String(text || '').replace(/^\uFEFF/, '').trim();
+function readJsonText(text) {
+  const source = String(text || '').replace(/^\uFEFF/, '').trim();
   if (source === '') {
     return null;
   }
-  let backup = null;
   try {
-    backup = JSON.parse(source);
+    return JSON.parse(source);
   } catch (error) {
     return null;
   }
+}
+
+/** まめ帳のバックアップとして正しい形か（口座のリストと、月ごとの入出金のリストがある） */
+function backupShapeOk(backup) {
   if (!backup || !backup.profile || !Array.isArray(backup.profile.accounts) || !backup.monthly || typeof backup.monthly !== 'object') {
-    return null;
+    return false;
   }
   // 月ごとの中身は、入出金のリストでないといけない（こわれたバックアップで、アプリが止まらないように）
   for (const month of Object.keys(backup.monthly)) {
     if (!Array.isArray(backup.monthly[month])) {
-      return null;
+      return false;
     }
   }
-  return backup;
+  return true;
 }
 
-let pendingRestore = null; // 読み込んだバックアップ（確認待ち）
+/**
+ * バックアップの文字を読んで、データにして返す。読めなければ null。
+ * （暗号化したバックアップは、ここでは null。parseEncryptedBackupText で読む）
+ */
+function parseBackupText(text) {
+  const backup = readJsonText(text);
+  return backupShapeOk(backup) ? backup : null;
+}
+
+/**
+ * 暗号化したバックアップの文字を読む。正しい形なら、その中身（まだ暗号のまま）を返す。ちがえば null。
+ * 計算の回数（iter）は、ふつうの範囲だけ受け付ける（とても大きな数で、アプリが固まらないように）。
+ */
+function parseEncryptedBackupText(text) {
+  const envelope = readJsonText(text);
+  if (!envelope || envelope.app !== 'mamecho' || !isEncryptedBackup(envelope) || !envelope.locked) {
+    return null;
+  }
+  const iterations = envelope.locked.iter;
+  if (typeof envelope.locked.salt !== 'string' || envelope.locked.salt === '' ||
+      !Number.isInteger(iterations) || iterations < 100000 || iterations > 2000000) {
+    return null;
+  }
+  const box = envelope.box;
+  if (box.enc !== 1 || typeof box.iv !== 'string' || typeof box.data !== 'string') {
+    return null;
+  }
+  return envelope;
+}
+
+let pendingRestore = null;          // 読み込んだバックアップ（確認待ち）
+let pendingEncryptedBackup = null;  // パスフレーズ待ちの、暗号化したバックアップ
 
 /** バックアップを保存した日を、この端末の日付（日本なら日本時間）で返す。読めなければそのままの先頭10文字 */
 function backupDateText(exportedAt) {
@@ -242,24 +311,115 @@ function backupDateText(exportedAt) {
   return dateToText(date);
 }
 
-/** バックアップの文字を読んで、「置きかえますか？」の確認を出す（ファイルでも貼り付けでも共通） */
-function askRestoreFromText(text) {
+/** 取り込み用のダイアログ（バックアップでも使う）を、まだ開いていなければ開く */
+function openImportDialogIfClosed() {
+  const dialog = findOne('#importDialog');
+  if (!dialog.open) {
+    dialog.showModal();
+  }
+}
+
+/**
+ * バックアップの文字を読んで、「置きかえますか？」の確認を出す（ファイルでも貼り付けでも共通）。
+ * 暗号化したバックアップなら、先にパスフレーズを聞く（この家計簿と同じパスフレーズなら聞かない）。
+ */
+async function askRestoreFromText(text) {
+  const envelope = parseEncryptedBackupText(text);
+  if (envelope) {
+    if (canOpenBackupWithCurrentKey(envelope)) {
+      const opened = await decryptBackup(envelope, null);
+      if (opened && backupShapeOk(opened)) {
+        askRestore(opened, true);
+        return;
+      }
+    }
+    pendingEncryptedBackup = envelope;
+    showBackupPassphraseForm();
+    return;
+  }
   const backup = parseBackupText(text);
   if (!backup) {
     showToast('「まめ帳」のバックアップとして読めませんでした');
     return;
   }
+  askRestore(backup, false);
+}
+
+/** 暗号化したバックアップの、パスフレーズを入れる欄を出す */
+function showBackupPassphraseForm() {
+  findOne('#importTitle').textContent = 'バックアップのパスフレーズ';
+  findOne('#importBody').innerHTML =
+    '<p>このバックアップは、パスフレーズで暗号化されています。バックアップを保存したときのパスフレーズを入れてください。</p>' +
+    '<label class="field"><span>パスフレーズ</span>' +
+    '<input type="password" id="backupPassphrase" autocomplete="current-password"></label>' +
+    '<p class="form-error" id="backupPassphraseError" role="alert"></p>' +
+    '<div class="row-gap" style="margin-top:12px">' +
+    '<button type="button" class="btn primary" id="backupPassphraseButton" data-action="backup-passphrase-open">開く</button>' +
+    '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div>';
+  // キーボードの「開く・改行」でも開けるように
+  findOne('#backupPassphrase').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      openEncryptedBackupFromForm();
+    }
+  });
+  openImportDialogIfClosed();
+  findOne('#backupPassphrase').focus();
+}
+
+/** 「開く」: 入れたパスフレーズで、暗号化したバックアップを元に戻す */
+async function openEncryptedBackupFromForm() {
+  const envelope = pendingEncryptedBackup;
+  if (!envelope) {
+    return;
+  }
+  const passphrase = findOne('#backupPassphrase').value;
+  const errorArea = findOne('#backupPassphraseError');
+  const button = findOne('#backupPassphraseButton');
+  if (passphrase === '') {
+    errorArea.textContent = 'パスフレーズを入れてください。';
+    return;
+  }
+  button.disabled = true;
+  errorArea.textContent = '確認しています…';
+  const opened = await decryptBackup(envelope, passphrase);
+  if (pendingEncryptedBackup !== envelope) {
+    return; // 確かめている間に、閉じられた
+  }
+  button.disabled = false;
+  if (!opened) {
+    errorArea.textContent = 'パスフレーズが違います。バックアップを保存したときのパスフレーズを入れてください。';
+    return;
+  }
+  if (!backupShapeOk(opened)) {
+    errorArea.textContent = 'バックアップの中身を読めませんでした。';
+    return;
+  }
+  pendingEncryptedBackup = null;
+  askRestore(opened, true);
+}
+
+/**
+ * 読めたバックアップで「置きかえますか？」の確認を出す。
+ *   wasEncrypted … 暗号化したバックアップから戻すときは true
+ */
+function askRestore(backup, wasEncrypted) {
   pendingRestore = backup;
   let count = 0;
   for (const month of Object.keys(backup.monthly)) {
     count = count + (backup.monthly[month] || []).length;
   }
+  // 暗号化したバックアップを、ロックがオフの端末に戻すと、暗号化されないまま保存される
+  const lockNote = wasEncrypted && !lockState.enabled
+    ? '<p class="hint">この端末では暗号化ロックがオフなので、戻したデータは暗号化されずに保存されます。戻したあと、設定で暗号化ロックをオンにしてください。</p>'
+    : '';
   findOne('#importTitle').textContent = 'バックアップから戻す';
   findOne('#importBody').innerHTML =
     '<p>このバックアップ（口座 ' + backup.profile.accounts.length + '件・入出金 ' + count + '件' +
     (backup.exportedAt ? '・' + escapeHtml(backupDateText(backup.exportedAt)) + ' に保存' : '') + '）で、今のデータをすべて置きかえます。</p>' +
+    lockNote +
     confirmBoxHtml('今のデータは消えます。元に戻せません。', '置きかえる', 'restore-yes', 'close-dialog');
-  findOne('#importDialog').showModal();
+  openImportDialogIfClosed();
 }
 
 /** バックアップのファイルが選ばれたとき */
@@ -270,16 +430,15 @@ function readBackupFile(file) {
 }
 
 /** 「文字でコピー」: バックアップを画面に出して、コピーできるようにする（別の端末に貼り付けて使う） */
-function showBackupText() {
-  const backup = {
-    app: 'mamecho',
-    version: 1,
-    exportedAt: new Date().toISOString(),
-    profile: profileForExport(appState.profile),
-    monthly: appState.monthly,
-  };
+async function showBackupText() {
+  const backup = await backupForExport();
+  if (!backup) {
+    return;
+  }
   findOne('#textDialogTitle').textContent = 'バックアップの文字';
-  findOne('#textDialogHint').textContent = '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。家計簿の中身がそのまま入っているので、人には見せないでください。';
+  findOne('#textDialogHint').textContent = isEncryptedBackup(backup)
+    ? '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。パスフレーズで暗号化してあるので、戻すときにパスフレーズが要ります。'
+    : '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。家計簿の中身がそのまま入っているので、人には見せないでください（暗号化ロックをオンにすると、暗号化されます）。';
   findOne('#textDialogContent').value = backupToText(backup);
   findOne('#textDialogContent').readOnly = true;
   findOne('#textDialog').showModal();
@@ -293,7 +452,7 @@ function openPasteRestore() {
     '<textarea id="pasteBackupText" rows="8" placeholder="ここに貼り付け"></textarea>' +
     '<div class="row-gap" style="margin-top:12px"><button type="button" class="btn primary" data-action="paste-restore-read">読み込む</button>' +
     '<button type="button" class="btn ghost" data-action="close-dialog">やめる</button></div>';
-  findOne('#importDialog').showModal();
+  openImportDialogIfClosed();
 }
 
 function restoreBackupConfirmed() {

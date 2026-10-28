@@ -15,7 +15,7 @@
      守れる   … 保存先（Claudeのサーバーや、ブラウザの保存領域）にあるデータ。
                 サービスの運営側や、ほかの人が保存先をのぞいても読めません。
      守れない … ・パスフレーズを忘れたとき（だれにも元に戻せません）
-                ・バックアップやCSVとして書き出したファイル（暗号化されません）
+                ・CSVとして書き出したファイル（暗号化されません。バックアップは、ロックがオンなら暗号化します）
                 ・画面を開いてロックを解除している間に、画面をのぞかれること
                 ・AIのふり返りを使ったとき（集計した数字だけが Claude に送られます）
 
@@ -135,6 +135,62 @@ async function decryptFromStorage(data) {
   return data;
 }
 
+/*
+ * バックアップ（書き出すファイル・「文字でコピー」）の出入り口（17 から呼ばれる）
+ *
+ * 暗号化したバックアップの形:
+ *   { app: 'mamecho', version: 2, exportedAt: 保存した日時,
+ *     locked: { salt: 鍵を作るときのまぜもの, iter: 計算の回数 },
+ *     box: 暗号文（中身は { profile, monthly }） }
+ * salt と iter を入れておくので、別のスマホでも、パスフレーズから同じ鍵を作って戻せます。
+ */
+
+/**
+ * バックアップを書き出す直前に呼ぶ。ロックがオンなら、中身を暗号化した形にして返す。
+ * ロックがオフなら、そのまま返す。
+ */
+async function encryptBackupForExport(backup) {
+  if (!lockState.enabled) {
+    return backup;
+  }
+  if (!lockState.key) {
+    throw new Error('locked_no_key');
+  }
+  const box = await encryptJson({ profile: backup.profile, monthly: backup.monthly });
+  return {
+    app: 'mamecho',
+    version: 2,
+    exportedAt: backup.exportedAt,
+    locked: { salt: lockState.salt, iter: lockState.iter },
+    box: box,
+  };
+}
+
+/** 今の鍵で、そのまま開けるバックアップか（同じパスフレーズ・同じまぜものの、この家計簿のバックアップ） */
+function canOpenBackupWithCurrentKey(envelope) {
+  return Boolean(lockState.key) && lockState.salt === envelope.locked.salt && lockState.iter === envelope.locked.iter;
+}
+
+/**
+ * 暗号化したバックアップを元に戻す。戻せたら、ふつうのバックアップの形
+ * { app, version: 1, exportedAt, profile, monthly } を返す。パスフレーズがちがえば null。
+ *   passphrase … 打ったパスフレーズ（全角・半角のちがいは両方試す）。
+ *                null なら、今の鍵で試す（canOpenBackupWithCurrentKey が true のとき）。
+ */
+async function decryptBackup(envelope, passphrase) {
+  const candidates = passphrase === null ? [null] : passphraseCandidates(passphrase);
+  for (const candidate of candidates) {
+    try {
+      const key = candidate === null ? lockState.key : await deriveKey(candidate, envelope.locked.salt, envelope.locked.iter);
+      const content = await decryptJson(envelope.box, key);
+      return { app: 'mamecho', version: 1, exportedAt: envelope.exportedAt, profile: content.profile, monthly: content.monthly };
+    } catch (error) {
+      // 合わなかった。次の候補を試す
+    }
+  }
+  return null;
+}
+
 /** 保存先の 'lock' の箱の中身 */
 function currentLockDocument() {
   return { v: 1, salt: lockState.salt, iter: lockState.iter, check: lockState.check };
@@ -174,6 +230,7 @@ function enterLockedState() {
   rebuildIndexes();
   closeAllDialogsExcept('lockDialog');
   renderApp();
+  removePrivacyCover(); // 中身はもう消したので、目隠しを外してロック画面を見せる
   biometricAutoTried = false;
   openLockDialog();
 }
@@ -337,11 +394,23 @@ async function unlockWithPassphrase(passphrase, openedWithBiometric) {
   return true;
 }
 
+let isLockingNow = false; // ロックの途中か（保存が終わるのを待っている間に、重ねてロックしない・目隠しを外さない）
+
 /** 「いますぐロックする」 */
 async function lockNow() {
-  if (!lockState.enabled || appState.locked) {
+  if (!lockState.enabled || appState.locked || isLockingNow) {
     return;
   }
+  isLockingNow = true;
+  try {
+    await finishSavingAndLock();
+  } finally {
+    isLockingNow = false;
+  }
+}
+
+/** 保存しきってから、鍵を捨ててロック状態にする（lockNow から呼ぶ） */
+async function finishSavingAndLock() {
   stopIdleTimer();
   // 書き込み中・書き込み待ちのデータがあれば、全部終わるまで待つ（鍵を捨てる前に、暗号化して保存しきるため）
   // 通信がとても遅いときのために、最大60秒まで
@@ -414,12 +483,56 @@ function noteActivity() {
   }
 }
 
-/** アプリに戻ってきたとき: 最後の操作から決まった時間がたっていたら、すぐロックする */
+/** アプリに戻ってきたとき: 最後の操作から決まった時間がたっていたら、すぐロックする。ロックしたら true */
 function lockIfIdleTooLong() {
   if (lockState.enabled && lockState.key && !appState.locked && Date.now() - lastActivityAt > AUTO_LOCK_MINUTES * 60 * 1000) {
     showToast('しばらく使っていなかったため、ロックしました');
     lockNow();
+    return true;
   }
+  return false;
+}
+
+/* --- アプリから離れたとき（ホーム画面のアプリ・ブラウザ。Claude の中は 10分のまま） --- */
+
+const LOCK_AFTER_LEAVING_SECONDS = 60; // ほかのアプリへ移って、この時間がたってから戻ったらロックする
+let leftAppAt = 0; // アプリから離れた（裏に回った）時刻。0 なら離れていない
+
+/**
+ * アプリに戻ってきたとき、ロックするか。
+ *   conditions … { enabled: ロックがオンか, hasKey: 開いているか（鍵があるか）, locked: ロック中か,
+ *                  insideClaude: Claude の中か, leftAt: 離れた時刻, now: 今の時刻 }
+ */
+function shouldLockAfterLeaving(conditions) {
+  if (!conditions.enabled || !conditions.hasKey || conditions.locked || conditions.insideClaude || !conditions.leftAt) {
+    return false;
+  }
+  return conditions.now - conditions.leftAt >= LOCK_AFTER_LEAVING_SECONDS * 1000;
+}
+
+/** アプリから離れたとき（裏に回ったとき）に呼ぶ。最初に離れた時刻を覚える */
+function noteLeftApp() {
+  if (!leftAppAt) {
+    leftAppAt = Date.now();
+  }
+}
+
+/** アプリに戻ってきたとき: 1分以上離れていたらロックする。ロックしたら true */
+function lockIfAwayTooLong() {
+  const shouldLock = shouldLockAfterLeaving({
+    enabled: lockState.enabled,
+    hasKey: Boolean(lockState.key),
+    locked: appState.locked,
+    insideClaude: Boolean(window.claude),
+    leftAt: leftAppAt,
+    now: Date.now(),
+  });
+  leftAppAt = 0;
+  if (shouldLock) {
+    showToast('アプリから離れていたので、ロックしました');
+    lockNow();
+  }
+  return shouldLock;
 }
 
 
@@ -665,15 +778,19 @@ function setupLockDialog() {
     findOne('#lockForgetYes').disabled = !isDeleteWordTyped(event.target.value);
   });
 
-  // アプリを裏に回して、また開いたとき: ロック中なら、もう一度自動で Face ID を出す
+  // アプリを裏に回したとき: 目隠しをして、離れた時刻を覚える
+  // また開いたとき: 離れていた時間でロックを決めてから目隠しを外す。ロック中なら、もう一度自動で Face ID を出す
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
       biometricAutoTried = false;
+      noteLeftApp();
+      putPrivacyCover();
     } else {
-      lockIfIdleTooLong();
+      returnToApp();
       startBiometricAutomatically();
     }
   });
+  setupPrivacyCover();
 
   for (const eventName of ['pointerdown', 'keydown', 'touchstart', 'input', 'wheel', 'scroll']) {
     window.addEventListener(eventName, noteActivity, { passive: true });
@@ -1088,3 +1205,94 @@ function biometricSectionHtml() {
   return html;
 }
 
+
+/* ===========================================================
+   9. のぞき見防止（アプリを切り替える画面に、家計簿を写さない）
+   -----------------------------------------------------------
+   iPhone は、アプリを切り替える画面に、最後に見ていた画面の写真を出します。
+   アプリから離れるときに中身を隠して、そこに家計簿が写らないようにします（目隠し）。
+   ・目隠しの見た目は style.css の html.privacy-cover
+   ・Claude の中では使わない（パソコンでは、ほかの場所を押しただけで隠れてしまうため）
+   ・戻ってきたら、離れていた時間でロックするかを先に決めてから目隠しを外す
+     （ロックするときは、中身を消してロック画面ができてから外す。家計簿が一瞬も見えないように）
+   ・うまく外れないときも、画面をタップすれば外れる
+   ※ iPhone が写真を撮るタイミングによっては、隠しきれないことがあります。
+   =========================================================== */
+
+let ignoreClicksUntil = 0; // 目隠しを外したタップで、下のボタンが押されないように、この時刻まではクリックを無視する
+
+/** 目隠しを使うか（Claude の外だけ） */
+function privacyCoverEnabled() {
+  return !window.claude;
+}
+
+/** ホーム画面に置いたアプリとして開いているか */
+function isStandaloneApp() {
+  return Boolean((window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone);
+}
+
+/** 目隠しをする */
+function putPrivacyCover() {
+  if (privacyCoverEnabled()) {
+    document.documentElement.classList.add('privacy-cover');
+  }
+}
+
+/** 目隠しを外す */
+function removePrivacyCover() {
+  document.documentElement.classList.remove('privacy-cover');
+}
+
+/** 目隠しをしているか */
+function isPrivacyCovered() {
+  return document.documentElement.classList.contains('privacy-cover');
+}
+
+/**
+ * アプリに戻ってきたとき（画面が見えた・アプリが前に来た・画面を触った）。
+ * 離れていた時間でロックを決めて、ロックしないなら目隠しを外す。
+ */
+function returnToApp() {
+  if (document.visibilityState === 'hidden') {
+    return; // まだ裏にいる
+  }
+  if (isLockingNow) {
+    return; // ロックの途中。ロック画面ができたら外れる
+  }
+  if (lockIfAwayTooLong() || lockIfIdleTooLong()) {
+    return;
+  }
+  removePrivacyCover();
+}
+
+function setupPrivacyCover() {
+  if (!privacyCoverEnabled()) {
+    return;
+  }
+  // ページを閉じる・裏に回るとき（visibilitychange は setupLockDialog で受ける）
+  window.addEventListener('pagehide', putPrivacyCover);
+  window.addEventListener('pageshow', returnToApp);
+  // ホーム画面のアプリでは、アプリを切り替える画面を出しはじめたとき（裏に回る前）にも隠す
+  if (isStandaloneApp()) {
+    window.addEventListener('blur', putPrivacyCover);
+    window.addEventListener('focus', returnToApp);
+  }
+  // 目隠しが残ってしまったときも、画面を触れば外れる。
+  // そのタップは「外すだけ」にして、下にあるボタンが押されないようにする
+  window.addEventListener('pointerdown', (event) => {
+    if (!isPrivacyCovered()) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    ignoreClicksUntil = Date.now() + 800;
+    returnToApp();
+  }, true);
+  window.addEventListener('click', (event) => {
+    if (Date.now() < ignoreClicksUntil) {
+      event.preventDefault();
+      event.stopPropagation();
+      ignoreClicksUntil = 0;
+    }
+  }, true);
+}

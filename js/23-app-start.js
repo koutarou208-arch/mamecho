@@ -237,6 +237,7 @@ function resetTemporaryStates() {
   isFlippedListOpen = false;        // 逆に入った明細の一覧（14）
   manualOffsetConfirmId = '';       // 仮の支出を消す確認（12）
   isChatClearConfirmOpen = false;   // 会話を消す確認（18）
+  pendingEncryptedBackup = null;    // パスフレーズ待ちのバックアップ（17）
   settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
   settingsOpenForms.rule = false;
 }
@@ -520,6 +521,7 @@ const ACTIONS = {
   'paste-restore-read': () => askRestoreFromText(findOne('#pasteBackupText').value),
   'restore-backup': () => findOne('#restoreFile').click(),
   'restore-yes': () => restoreBackupConfirmed(),
+  'backup-passphrase-open': () => openEncryptedBackupFromForm(),
   'copy-text': () => copyTextDialogContent(),
   'undo-import': () => {
     isImportUndoConfirmOpen = true;

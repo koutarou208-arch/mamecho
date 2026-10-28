@@ -30,6 +30,67 @@
 
 
 /* ===========================================================
+   0. カード会社のデータ（02）を読む道具
+     02 はデータだけのファイルにしたので、データを読むプログラムはここに置きます。
+   =========================================================== */
+
+/**
+ * rates … [{ from, rate }]（from の古い順）
+ * dateText … 買い物をした日（"2026-09-14"）
+ * count … 分割の回数（分割以外は省略）
+ * 回数ごとの表のときは「count 以上で一番近い回数」の率を使う（なければ最大の回数）。
+ * ※間の回数は高いほうの率を使うので、費用は少し多めに出ます。
+ */
+function pickRate(rates, dateText, count) {
+  if (!rates || rates.length === 0) {
+    return 0;
+  }
+  let chosen = rates[0];
+  for (const entry of rates) {
+    if (entry.from <= dateText) {
+      chosen = entry;
+    }
+  }
+  const rate = chosen.rate;
+  if (typeof rate === 'number') {
+    return rate;
+  }
+  const keys = Object.keys(rate).map(Number).sort((a, b) => a - b);
+  for (const key of keys) {
+    if (key >= (count || keys[0])) {
+      return rate[key];
+    }
+  }
+  return rate[keys[keys.length - 1]];
+}
+
+/** 表の中の最小と最大の率（画面に「年14.7〜17.9%」と出すため） */
+function rateRangeAt(rates, dateText) {
+  if (!rates || rates.length === 0) {
+    return null;
+  }
+  let chosen = rates[0];
+  for (const entry of rates) {
+    if (entry.from <= dateText) {
+      chosen = entry;
+    }
+  }
+  const values = typeof chosen.rate === 'number' ? [chosen.rate] : Object.values(chosen.rate);
+  return { min: Math.min(...values), max: Math.max(...values) };
+}
+
+/** id からカード会社を探す（見つからなければ「その他」を返す） */
+function findCardCompany(companyId) {
+  for (const company of CARD_COMPANIES) {
+    if (company.id === companyId) {
+      return company;
+    }
+  }
+  return CARD_COMPANIES[CARD_COMPANIES.length - 1];
+}
+
+
+/* ===========================================================
    1. カードの設定を読む
    =========================================================== */
 
