@@ -416,9 +416,12 @@ main:focus { outline: none; }
 
 /* 数字を3つ並べる（収入・支出・収支） */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
-.stat { display: grid; gap: 2px; min-width: 0; }
+/* container-type … 中の数字の大きさを、この入れ物の幅（cqi）に合わせて決められるようにする */
+.stat { display: grid; gap: 2px; min-width: 0; container-type: inline-size; }
 .stat .label { font-size: 12px; color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; gap: 0 6px; min-width: 0; overflow-wrap: anywhere; }
-.stat .value { font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; overflow-wrap: anywhere; }
+/* 1億円台の金額（−¥123,456,789）でも入れ物に入るように、幅が足りないときだけ文字を小さくする
+   （min() と cqi が使えない古いブラウザは、1行目の大きさになる） */
+.stat .value { font-size: clamp(18px, 1.7vw, 24px); font-size: min(clamp(18px, 1.7vw, 24px), 10.4cqi); font-weight: 600; overflow-wrap: anywhere; }
 .stat .value.total { text-decoration: underline double; text-decoration-color: var(--rule-strong); text-underline-offset: 6px; }
 /* 押せる数字（ホームの収入・支出 → 家計簿のカテゴリ別へ） */
 .stat-link {
@@ -505,7 +508,11 @@ main:focus { outline: none; }
 .tx:last-child { border-bottom: 0; }
 .tx:hover { background: var(--surface-2); }
 .tx-main { display: grid; min-width: 0; flex: 1; }
-.tx-desc { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 名前（.tx-desc-text）だけを「…」で切り、うしろの札（.tag）は切らずに見せる。
+   札が入りきらないときは、次の行に送る（金額に重ならないように） */
+.tx-desc { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-weight: 500; white-space: nowrap; }
+.tx-desc-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.tx-desc .tag { flex: none; margin-left: 0; }
 .tx-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx-amount { font-weight: 600; text-align: right; }
 .tx-amount.income { color: var(--income-text); }
@@ -517,6 +524,9 @@ main:focus { outline: none; }
   font-size: 11px; font-weight: 500; color: var(--muted);
   vertical-align: 1px;
 }
+
+/* 途中で折り返さない文字（日付など。monthDayHtml） */
+.no-break { white-space: nowrap; }
 
 /* カテゴリの1文字マーク */
 .mark {
@@ -628,6 +638,14 @@ main:focus { outline: none; }
 .rank-bar { height: 100%; border-radius: 0 4px 4px 0; background: var(--expense); min-width: 2px; }
 .rank-bar.income { background: var(--income); }
 .rank-value { font-weight: 600; text-align: right; min-width: 6.5em; }
+/* とても小さいスマホ（幅380px以下）: 横に3つ並べると棒の場所がなくなるので、棒を名前の下の行に出す。
+   カードの請求の表は、文字を少し小さくして、日付・状態・金額を1行に入れる */
+@media (max-width: 380px) {
+  .bill-row { font-size: 13px; }
+  .rank-row { grid-template-columns: minmax(0, 1fr) auto; row-gap: 4px; }
+  .rank-row .rank-track { grid-column: 1 / -1; grid-row: 2; }
+  .rank-value { min-width: 0; }
+}
 
 
 /* -----------------------------------------------------------
@@ -1006,7 +1024,7 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
   .stat { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; column-gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule); }
   .stat:last-child { border-bottom: 0; }
   .stat .label { grid-column: 1; grid-row: 1; font-size: 13px; }
-  .stat .value { grid-column: 2; grid-row: 1; text-align: right; font-size: 20px; }
+  .stat .value { grid-column: 2; grid-row: 1; text-align: right; font-size: 20px; font-size: min(20px, 6.8cqi); }
   .stat > :not(.label):not(.value) { grid-column: 1 / -1; }
   /* カレンダーの小さいマスには、短い金額（1.4万 など）を出す */
   .cal-full { display: none; }
@@ -1129,7 +1147,9 @@ details.lock-forget > summary { color: var(--muted); font-weight: 500; } /* 目�
   .manual-bill-form { grid-template-columns: minmax(0, 1fr); }
   .lock-form { grid-template-columns: minmax(0, 1fr); }
   .field-row.three { grid-template-columns: minmax(0, 1fr); }
-  .bill-row { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(min-content, 1fr); column-gap: 8px; }
+  /* 状態の列は、いちばん長い札（「✓ 記録済み」79px）が入る幅にそろえる（札が金額の列にはみ出さないように）。
+     日付は「10月10日」の途中で切らず、金額も切らない */
+  .bill-row { grid-template-columns: minmax(min-content, 1fr) 80px minmax(min-content, max-content); column-gap: 6px; }
   .bill-row > span:nth-child(3), .bill-row > span:nth-child(4) { display: none; }
 }
 

@@ -40,7 +40,8 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 # 同じ名前の関数（function）が2つないか（あとから読んだほうが、前のほうを黙って消してしまうため）
-DUPLICATE_FUNCTIONS="$(cat js/[0-9]*.js | grep -oE '^(async )?function [A-Za-z0-9_]+' | sed 's/^async //' | sort | uniq -d)"
+#   （テストのファイルも、アプリのファイルとつなげて動かすので、いっしょに調べる）
+DUPLICATE_FUNCTIONS="$(cat js/[0-9]*.js tests/tests.js tests/patterns.js tests/finish.js | grep -oE '^(async )?function [A-Za-z0-9_]+' | sed 's/^async //' | sort | uniq -d)"
 if [ -n "$DUPLICATE_FUNCTIONS" ]; then
   echo "同じ名前の関数が2つあります（どちらかの名前を変えてください）:"
   echo "$DUPLICATE_FUNCTIONS"
@@ -66,6 +67,9 @@ for FILE in js/*.js js/vendor/*.js; do
   fi
 done
 
+# テストは3つのファイルをつなげて動かす:
+#   tests.js（1つずつの例）→ patterns.js（全パターン）→ finish.js（暗号のテストと結果の表示）
+
 # 1行目: node で動かすときの print の代役（jsc には最初から print がある）
 {
   echo "if (typeof print === 'undefined') { var print = function (text) { console.log(text); }; }"
@@ -76,7 +80,7 @@ done
   cat js/01-categories.js js/02-card-companies.js js/03-helpers.js js/04-state-and-storage.js \
       js/05-calculations.js js/06-credit-card-billing.js js/07-charts.js js/17-csv-and-backup.js \
       js/18-ai-features.js js/19-sample-data.js js/21-encryption-lock.js js/22-take-home-pay.js
-  cat tests/tests.js
+  cat tests/tests.js tests/patterns.js tests/finish.js
 } > "$BUNDLE"
 
 if command -v node >/dev/null 2>&1; then

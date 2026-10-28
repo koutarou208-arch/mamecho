@@ -221,7 +221,8 @@ function transactionRowHtml(transaction, options) {
   return '<button type="button" class="tx' + excludedClass + '" data-action="edit-transaction" data-id="' + escapeHtml(transaction.id) + '">' +
     '<span class="mark ' + markClass + '" aria-hidden="true">' + escapeHtml(markText) + '</span>' +
     '<span class="tx-main">' +
-    '<span class="tx-desc">' + escapeHtml(transaction.description || fallbackName) + tags + '</span>' +
+    // 名前が長いときは名前だけを「…」で切り、札（ボーナス・リボなど）はいつも見えるようにする
+    '<span class="tx-desc"><span class="tx-desc-text">' + escapeHtml(transaction.description || fallbackName) + '</span>' + tags + '</span>' +
     '<span class="tx-meta">' + escapeHtml(meta) + '</span>' +
     '</span>' +
     '<span class="tx-amount num ' + transaction.type + '">' + amountText + '</span>' +

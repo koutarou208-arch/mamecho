@@ -237,6 +237,19 @@ function closingDateOf(billMonth, settings) {
   return dayInMonthText(addMonths(billMonth, -settings.monthsLater), settings.closingDay);
 }
 
+/**
+ * 自分で決めた締め日・支払日が使えるか。使えなければ理由の文、使えれば ''。
+ * 当月払い（monthsLater が 0）のときは、どの月でも支払日が締め日より後になるように、
+ * 締め日は27日まで・支払日は締め日より後の日にする（2月は28日までしかないため）。
+ * 翌月・翌々月払いなら、どの組み合わせでも支払日は締め日より後になる。
+ */
+function cycleProblem(closingDay, paymentDay, monthsLater) {
+  if (monthsLater === 0 && (closingDay > 27 || paymentDay <= closingDay)) {
+    return '当月払いのときは、支払日を締め日より後の日にしてください（締め日は27日まで）。';
+  }
+  return '';
+}
+
 /** "06-15" のような月日が、ボーナス払いの期間に入っているか */
 function isInBonusSeason(monthDay, season) {
   if (season.from <= season.to) {
@@ -272,6 +285,19 @@ function bonusMonthOf(dateText, bonus) {
     return makeMonthText(payYear, season.payMonth);
   }
   return null;
+}
+
+/**
+ * 実際に使えるボーナス払いの支払月。使えない時期なら null（1回払いとして計算する）。
+ * 会社のデータの期間の終わりぎりぎりに買ったときなどに、1回払いより前の月（買う前に払う日）に
+ * なってしまうことがあるので、そのときも使えないとする。
+ */
+function usableBonusMonth(dateText, settings) {
+  const month = bonusMonthOf(dateText, settings.bonus);
+  if (!month || month < billingMonthOf(dateText, settings)) {
+    return null;
+  }
+  return month;
 }
 
 /** ボーナス2回払いの2回目（1回目のあとの、もう一方のボーナス月） */
@@ -329,6 +355,8 @@ function skipFee(amount, months, annualRate) {
    4. 請求の一覧を作る（このファイルの中心）
    =========================================================== */
 
+const MAX_REVOLVING_MONTHS = 12000; // リボの計算を続ける上限の月数（月1,000円なら1,200万円まで、1か月ずつ計算する）
+
 /** そのカードの入出金に、実際に使う支払い方法 */
 function effectivePayMethod(transaction, settings) {
   const method = transaction.payMethod || 'once';
@@ -357,8 +385,10 @@ function paymentMethodLabel(transaction) {
 /**
  * カード1枚分の請求を、月ごとにまとめて返す（古い順）。
  * records を渡すと、保存済みのデータの代わりにそれを使う（サンプル作成用）。
+ * 合計が0円の請求（買い物と同じ額の返金があった月など）は、ふつうは返さない。
+ * keepEmptyBills を true にすると、それも返す（数字の点検で、振り分けを1件ずつ確かめるため）。
  */
-function buildCardBills(account, records) {
+function buildCardBills(account, records, keepEmptyBills) {
   const settings = cardSettings(account);
   const billsByMonth = {};
 
@@ -431,10 +461,10 @@ function buildCardBills(account, records) {
       const firstHalf = Math.floor(amount / 2);
       addToBill(firstMonth, 'twice', transaction, '2回払い 1/2回目', firstHalf, 0);
       addToBill(addMonths(firstMonth, 1), 'twice', transaction, '2回払い 2/2回目', amount - firstHalf, 0);
-    } else if (method === 'bonus' && bonusMonthOf(transaction.date, settings.bonus)) {
-      addToBill(bonusMonthOf(transaction.date, settings.bonus), 'bonus', transaction, 'ボーナス一括払い', amount, 0);
-    } else if (method === 'bonus2' && bonusMonthOf(transaction.date, settings.bonus)) {
-      const month1 = bonusMonthOf(transaction.date, settings.bonus);
+    } else if (method === 'bonus' && usableBonusMonth(transaction.date, settings)) {
+      addToBill(usableBonusMonth(transaction.date, settings), 'bonus', transaction, 'ボーナス一括払い', amount, 0);
+    } else if (method === 'bonus2' && usableBonusMonth(transaction.date, settings)) {
+      const month1 = usableBonusMonth(transaction.date, settings);
       const month2 = secondBonusMonth(month1, settings.bonus);
       const totalFee = Math.floor(amount * settings.bonus2Fee / 100);
       const half = Math.floor(amount / 2);
@@ -462,17 +492,23 @@ function buildCardBills(account, records) {
 
   // --- (3) リボ払いを月ごとに計算する ---
   //   毎月: 前月から残っている元金に手数料がかかる → 決まった額の元金を払う
+  //   返し終わるまで毎月計算する（月1,000円ずつで大きな額だと、何百か月にもなる）。
+  //   数字がこわれていて終わらないときのために上限を置き、上限に来たら残りを最後の月にまとめる
+  //   （どんなときも、リボにした元金が請求から消えないように）
   const revolvingMonths = Object.keys(revolvingAdds).sort();
   if (revolvingMonths.length > 0) {
     const lastAddMonth = revolvingMonths[revolvingMonths.length - 1];
     const monthlyPrincipal = Math.max(1000, settings.revolvingMonthly);
     let balance = 0;
     let month = revolvingMonths[0];
-    for (let guard = 0; guard < 360; guard++) {
+    for (let count = 1; count <= MAX_REVOLVING_MONTHS; count++) {
       const monthlyRate = revolvingRateFor(settings, paymentDateOf(month, settings)) / 100 / 12;
       const fee = Math.round(balance * monthlyRate);
       balance = balance + (revolvingAdds[month] || 0);
-      const principal = Math.min(balance, monthlyPrincipal);
+      let principal = Math.min(balance, monthlyPrincipal);
+      if (count === MAX_REVOLVING_MONTHS && month >= lastAddMonth) {
+        principal = balance; // 上限に来たら、残りをこの月にまとめる
+      }
       balance = balance - principal;
       if (principal > 0 || fee > 0) {
         addToBill(month, 'revolving', null, 'リボ払い（残り ' + formatYen(balance) + '）', principal, fee);
@@ -504,7 +540,7 @@ function buildCardBills(account, records) {
     }
   }
 
-  const bills = Object.values(billsByMonth).filter((bill) => bill.total !== 0 || bill.paid);
+  const bills = Object.values(billsByMonth).filter((bill) => keepEmptyBills || bill.total !== 0 || bill.paid);
   bills.sort((a, b) => (a.month < b.month ? -1 : 1));
   return bills;
 }
@@ -628,11 +664,11 @@ function describePaymentPreview(account, draft) {
     return firstPayDate + 'と' + second + 'に約' + formatYen(amount / 2) + 'ずつ（手数料なし）';
   }
   if (method === 'bonus' || method === 'bonus2') {
-    const bonusMonth = bonusMonthOf(draft.date, settings.bonus);
+    const bonusMonth = usableBonusMonth(draft.date, settings);
     if (!bonusMonth) {
       return 'この日はボーナス払いの期間外です。1回払いとして計算します（' + firstPayDate + '）。';
     }
-    const bonusDate = formatMonthText(bonusMonth) + settings.paymentDay + '日';
+    const bonusDate = formatMonthDay(paymentDateOf(bonusMonth, settings));
     if (method === 'bonus') {
       return bonusDate + 'に' + formatYen(amount) + '（手数料なし）';
     }
@@ -964,7 +1000,10 @@ function cardDebtRows(summary) {
      payment-as-card-expense … カードへの支払いが、カードの買い物（支出）として入っている
      payment-as-refund       … カードへの支払いが、カードの「返金（収入）」として入っている
      minus-amount            … 金額がマイナスの記録
-   あわせて、カードごとに「これから払う金額が、何からできているか」の内訳を出します。
+     broken-record           … 形がこわれた記録（読めない日付・整数でない金額・消した口座）
+     calc-mismatch           … アプリの計算が合わない（請求の合計と内訳・使った額の振り分け・月の合計）
+   あわせて、カードごとに「これから払う金額が、何からできているか」の内訳を出し、
+   全部の記録で計算が合っているかを確かめた数（記録・請求・月）を返します。
    =========================================================== */
 
 const CARD_PAYMENT_CHECK_MIN = 10000;  // 「カードの引き落としかも」と知らせる、いちばん小さい金額
@@ -983,6 +1022,159 @@ const BILL_PART_LABELS = [
   ['opening', '登録したときの残高'],
   ['refund', '返金（マイナス）'],
 ];
+
+const RECORD_TYPES = ['expense', 'income', 'transfer', 'adjust'];
+const MAX_CHECK_PERIODS = 240; // 月の合計を確かめる、いちばん多い月数（20年分）
+
+/** 記録1件の形がこわれていないか。こわれていれば理由の文、なければ '' */
+function recordShapeProblem(transaction) {
+  if (!isValidDateText(transaction.date)) {
+    return '日付が読めない';
+  }
+  if (!Number.isInteger(transaction.amount)) {
+    return '金額が整数ではない';
+  }
+  if (!RECORD_TYPES.includes(transaction.type)) {
+    return '種類（支出・収入など）が分からない';
+  }
+  if (!accountById[transaction.account]) {
+    return '口座が見つからない（消した口座かもしれません）';
+  }
+  if (transaction.type === 'transfer' && !accountById[transaction.toAccount]) {
+    return '振替先の口座が見つからない';
+  }
+  return '';
+}
+
+/** 請求1回分の数字が合っているか（合計 = 元金 + 手数料 = 明細の合計、元金 = 欄の合計）。合わなければ理由の文 */
+function billConsistencyProblem(bill) {
+  let partsTotal = 0;
+  for (const value of Object.values(bill.parts)) {
+    partsTotal = partsTotal + value;
+  }
+  let detailsTotal = 0;
+  for (const detail of bill.details) {
+    detailsTotal = detailsTotal + detail.principal + detail.fee;
+  }
+  if (bill.total !== bill.principal + bill.fee) {
+    return '合計が「元金＋手数料」と合わない';
+  }
+  if (bill.principal !== partsTotal) {
+    return '元金が内訳の合計と合わない';
+  }
+  if (bill.total !== detailsTotal) {
+    return '合計が明細の合計と合わない';
+  }
+  return '';
+}
+
+/**
+ * カード1枚の計算を確かめる。使った額が、請求にちょうど振り分けられているか
+ * （1回払い・分割などは記録ごとに、リボはまとめて）。
+ *   skipIds … 確かめない記録の id（同じ記録が2つ入っているもの。それは「同じ記録が2つ」で知らせるので、
+ *             ここで「計算が合わない」とまちがえて知らせないように）
+ * 返す値: { problems: 合わないところの文のリスト, bills: 確かめた請求の数 }
+ */
+function cardCalculationProblems(account, skipIds) {
+  const problems = [];
+  const settings = cardSettings(account);
+  const bills = buildCardBills(account, null, true); // 合計0円の請求もふくめて確かめる
+  const allocated = new Map(); // 記録の id → 請求に振り分けられた元金の合計
+  let revolvingBilled = 0;
+  for (const bill of bills) {
+    const problem = billConsistencyProblem(bill);
+    if (problem) {
+      problems.push(account.name + ' ' + formatMonthText(bill.month) + '払い: ' + problem);
+    }
+    revolvingBilled = revolvingBilled + bill.parts.revolving;
+    for (const detail of bill.details) {
+      if (detail.transaction) {
+        allocated.set(detail.transaction.id, (allocated.get(detail.transaction.id) || 0) + detail.principal);
+      }
+    }
+  }
+  let revolvingUsed = 0;
+  for (const transaction of transactionsOfAccount(account.id)) {
+    if (transaction.account !== account.id) {
+      continue;
+    }
+    let expected = null;
+    if (transaction.manualBill) {
+      expected = manualBillAmountOf(transaction);
+    } else if (transaction.type === 'income') {
+      expected = -transaction.amount;
+    } else if (transaction.type === 'expense' && effectivePayMethod(transaction, settings) === 'revolving') {
+      revolvingUsed = revolvingUsed + transaction.amount; // リボは1件ずつではなく、まとめて確かめる
+    } else if (transaction.type === 'expense' || transaction.type === 'transfer') {
+      expected = transaction.amount;
+    }
+    if (expected !== null && !(skipIds && skipIds.has(transaction.id)) && (allocated.get(transaction.id) || 0) !== expected) {
+      problems.push(account.name + ': ' + recordLineForCheck(transaction) + ' の振り分けが合わない');
+    }
+  }
+  if (revolvingBilled !== revolvingUsed) {
+    problems.push(account.name + ': リボにした額 ' + formatYen(revolvingUsed) + ' と、請求の元金 ' + formatYen(revolvingBilled) + ' が合わない');
+  }
+  return { problems: problems, bills: bills.length };
+}
+
+/**
+ * 月ごとの合計を確かめる（カテゴリの合計 = 収入 + 支出、中項目の合計 = カテゴリの合計、全部の月の合計 = 全部の記録の合計）。
+ * skipDates … こわれた記録の日付（その月は確かめない。小数があると、足す順番で端数がずれるため）
+ * 返す値: { problems: 合わないところの文, periods: 確かめた月の数 }
+ */
+function periodCalculationProblems(records, skipDates) {
+  const problems = [];
+  const dates = records.map((record) => record.date).filter((date) => isValidDateText(date)).sort();
+  if (dates.length === 0) {
+    return { problems: problems, periods: 0 };
+  }
+  let period = periodOf(dates[0]);
+  const lastPeriod = periodOf(dates[dates.length - 1]);
+  let checked = 0;
+  let periodsTotal = 0;
+  let skippedAny = false;
+  while (period.year * 12 + period.month <= lastPeriod.year * 12 + lastPeriod.month && checked < MAX_CHECK_PERIODS) {
+    const range = periodRange(period);
+    if (skipDates.some((date) => date >= range.start && date < range.end)) {
+      skippedAny = true;
+      period = shiftPeriod(period, 1);
+      continue;
+    }
+    const summary = summarizeRange(range);
+    let categoriesTotal = 0;
+    for (const categoryId of Object.keys(summary.categories)) {
+      const bucket = summary.categories[categoryId];
+      categoriesTotal = categoriesTotal + bucket.total;
+      let subsTotal = 0;
+      for (const subName of Object.keys(bucket.subs)) {
+        subsTotal = subsTotal + bucket.subs[subName];
+      }
+      if (subsTotal !== bucket.total) {
+        problems.push(periodTitle(period) + ': 中項目の合計がカテゴリの合計と合わない');
+      }
+    }
+    if (categoriesTotal !== summary.income + summary.expense) {
+      problems.push(periodTitle(period) + ': カテゴリの合計が収入と支出の合計と合わない');
+    }
+    periodsTotal = periodsTotal + summary.income + summary.expense;
+    checked = checked + 1;
+    period = shiftPeriod(period, 1);
+  }
+  // 全部の月を確かめられたときだけ、全部の記録の合計とくらべる
+  if (!skippedAny && checked < MAX_CHECK_PERIODS) {
+    let recordsTotal = 0;
+    for (const record of records) {
+      if (isCounted(record) && isValidDateText(record.date)) {
+        recordsTotal = recordsTotal + record.amount;
+      }
+    }
+    if (recordsTotal !== periodsTotal) {
+      problems.push('全部の月の合計が、全部の記録の合計と合わない');
+    }
+  }
+  return { problems: problems, periods: checked };
+}
 
 /** 点検の結果に出す、記録1件の説明（"10/5 カード 140,000円"） */
 function recordLineForCheck(transaction) {
@@ -1050,7 +1242,8 @@ function cardBreakdown(summary) {
  * 数字の点検をする。
  *   today … 今日の日付（省略すると本当の今日。テストでは決めて渡す）
  * 返す形: { problems: [{ kind, title, explain, lines: [文], recordIds, action: { kind, id } }],
- *          cards: [{ account, total, fee, count, rows }] }
+ *          cards: [{ account, total, fee, count, rows }],
+ *          verified: { records: 確かめた記録の数, bills: 確かめた請求の数, periods: 確かめた月の数 } }
  *   recordIds   … 記録1件ずつの点検のとき、lines と同じ順の記録の id（画面で1行ずつ開けるように）。それ以外は []
  *   action.kind … 'edit'（記録を開いて直す）/ 'card'（カード画面へ。id はカードの口座の id）/ 'fix-duplicates'（同じ記録を1つにする）
  */
@@ -1059,8 +1252,26 @@ function findNumberProblems(today) {
   const problems = [];
   const cards = appState.profile ? cardAccounts() : [];
 
+  // 0. 形がこわれた記録（読めない日付・整数でない金額・消した口座）
+  const brokenRecords = allTransactions.filter((transaction) => recordShapeProblem(transaction) !== '');
+  if (brokenRecords.length > 0) {
+    problems.push({
+      kind: 'broken-record',
+      title: '形がこわれた記録があります',
+      explain: '日付・金額・口座のどれかが読めない記録です。開いて直すか、消してください。',
+      lines: brokenRecords.slice(0, 10).map((transaction) => recordLineForCheck(transaction) + '（' + recordShapeProblem(transaction) + '）')
+        .concat(brokenRecords.length > 10 ? ['ほか ' + (brokenRecords.length - 10) + '件'] : []),
+      recordIds: brokenRecords.slice(0, 10).map((transaction) => transaction.id),
+      action: { kind: 'edit', id: brokenRecords[0].id },
+    });
+  }
+  const brokenAccounts = new Set(brokenRecords.map((transaction) => transaction.account));
+  const calculationProblems = [];
+  let billsChecked = 0;
+
   // 1. 同じ記録が2つ
   const duplicates = duplicateRecordGroups(appState.monthly);
+  const duplicateIds = new Set(duplicates.map((group) => group.id));
   if (duplicates.length > 0) {
     problems.push({
       kind: 'duplicate',
@@ -1077,6 +1288,15 @@ function findNumberProblems(today) {
   for (const account of cards) {
     const summary = cardSummary(account, day);
     cardResults.push({ account: account, ...cardBreakdown(summary) });
+
+    // アプリの計算の確かめ（こわれた記録があるカードは、その記録を直してから）
+    if (!brokenAccounts.has(account.id)) {
+      const cardCheck = cardCalculationProblems(account, duplicateIds);
+      for (const problem of cardCheck.problems) {
+        calculationProblems.push(problem);
+      }
+      billsChecked = billsChecked + cardCheck.bills;
+    }
 
     // 同じ月の「仮」が2つ
     const manualByMonth = {};
@@ -1195,5 +1415,25 @@ function findNumberProblems(today) {
     });
   }
 
-  return { problems: problems, cards: cardResults };
+  // 4. 月ごとの合計の確かめ
+  const periodCheck = periodCalculationProblems(allTransactions, brokenRecords.map((transaction) => transaction.date));
+  for (const problem of periodCheck.problems) {
+    calculationProblems.push(problem);
+  }
+  if (calculationProblems.length > 0) {
+    problems.unshift({
+      kind: 'calc-mismatch',
+      title: 'アプリの計算が合わないところがあります',
+      explain: 'アプリのまちがいかもしれません。この画面のスクショを Claude に見せてください（金額や名前は隠してもかまいません）。',
+      lines: calculationProblems.slice(0, 10).concat(calculationProblems.length > 10 ? ['ほか ' + (calculationProblems.length - 10) + '件'] : []),
+      recordIds: [],
+      action: { kind: 'none', id: '' },
+    });
+  }
+
+  return {
+    problems: problems,
+    cards: cardResults,
+    verified: { records: allTransactions.length, bills: billsChecked, periods: periodCheck.periods },
+  };
 }

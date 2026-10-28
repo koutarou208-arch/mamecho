@@ -178,6 +178,10 @@ function readCardFields() {
     card.closingDay = Number(findOne('#cardClosingDay').value);
     card.paymentDay = Number(findOne('#cardPaymentDay').value);
     card.monthsLater = Number(findOne('#cardMonthsLater').value);
+    const problem = cycleProblem(card.closingDay, card.paymentDay, card.monthsLater); // 06-credit-card-billing.js
+    if (problem) {
+      return { error: problem };
+    }
   } else {
     card.cycleIndex = Number(cycleValue);
   }

@@ -1144,6 +1144,58 @@ appState.monthly = savedMonthlyForCheck;
 allTransactions = [];
 accountById = {};
 
+section('全パターンのテストで見つかったまちがい（直したもの）');
+// 1. アメックスの冬のボーナス払い: 期間の終わりぎりぎり（12/15）に買うと、12/10（買う前）に払う計算になっていた
+const amexCard = makeCard('amex');
+const amexBills = buildCardBills(amexCard, [buy('2026-12-15', 50000, { payMethod: 'bonus' })]);
+same('アメックス 12/15 のボーナス払い: 1回払い（翌月10日）として計算する', amexBills.map((item) => item.payDate + ':' + item.parts.once).join(','), '2027-01-10:50000');
+same('アメックス 9/1 のボーナス払い: ふつうに12月のボーナス月', buildCardBills(amexCard, [buy('2026-09-01', 50000, { payMethod: 'bonus' })]).map((item) => item.month + ':' + item.parts.bonus).join(','), '2026-12:50000');
+check('入力画面の見通しも同じ（期間外と出す）', describePaymentPreview(amexCard, { date: '2026-12-15', amount: 50000, payMethod: 'bonus' }).includes('期間外'));
+// 2. リボ（月1,000円）で使った額が多いと、360か月より先の元金が消えていた
+const slowRevolving = makeCard('jcb', { revolvingMonthly: 1000 });
+const slowBills = buildCardBills(slowRevolving, [buy('2026-10-01', 1000000, { payMethod: 'revolving' })]);
+same('リボ 月1,000円 × 100万円: 元金を全部足すと100万円', slowBills.reduce((total, item) => total + item.principal, 0), 1000000);
+same('リボ 月1,000円 × 100万円: 1,000回で返し終わる', slowBills.length, 1000);
+// 3. 自分で決めた締め日・支払日で、支払日が締め日より前になる組み合わせを止める
+same('当月払い: 15日締め・当月10日払いは止める', cycleProblem(15, 10, 0) !== '', true);
+same('当月払い: 28日締め・当月30日払いは止める（2月は同じ日になる）', cycleProblem(28, 30, 0) !== '', true);
+same('当月払い: 5日締め・当月27日払いは使える', cycleProblem(5, 27, 0), '');
+same('翌月払い: 月末締め・翌月1日払いは使える', cycleProblem(31, 1, 1), '');
+// 4. 「.00」が付いた16けたの金額を読んでいた
+same('金額: 16けた＋「.00」は大きすぎるので読まない', amountCellProblem('1234567890123456.00'), '金額が大きすぎる');
+same('金額: 15けた＋「.00」は読める', parseAmountCell('999999999999999.00'), 999999999999999);
+
+section('数字の点検: 全部の記録で計算を確かめる');
+const shapeAccounts = accountById;
+accountById = { bank: { id: 'bank', kind: 'bank' } };
+same('記録の形: 口座が見つからない記録', recordShapeProblem({ date: '2026-10-01', type: 'expense', amount: 100, account: 'gone' }), '口座が見つからない（消した口座かもしれません）');
+same('記録の形: ふつうの記録', recordShapeProblem({ date: '2026-10-01', type: 'expense', amount: 100, account: 'bank' }), '');
+same('記録の形: ない日付', recordShapeProblem({ date: '2026-02-30', type: 'expense', amount: 100, account: 'bank' }), '日付が読めない');
+same('記録の形: 整数でない金額', recordShapeProblem({ date: '2026-10-01', type: 'expense', amount: 1.5, account: 'bank' }), '金額が整数ではない');
+same('記録の形: 振替先がない', recordShapeProblem({ date: '2026-10-01', type: 'transfer', amount: 100, account: 'bank', toAccount: 'gone' }), '振替先の口座が見つからない');
+accountById = shapeAccounts;
+const goodBill = buildCardBills(makeCard('jcb'), [buy('2026-09-01', 3000)])[0];
+same('請求の確かめ: 正しい請求', billConsistencyProblem(goodBill), '');
+same('請求の確かめ: 合計がずれた請求を見つける', billConsistencyProblem({ ...goodBill, total: goodBill.total + 1 }), '合計が「元金＋手数料」と合わない');
+same('請求の確かめ: 内訳とずれた請求を見つける', billConsistencyProblem({ ...goodBill, parts: { ...goodBill.parts, once: 1 } }), '元金が内訳の合計と合わない');
+// 買い物と同じ額の返金で、請求が0円になった月も、振り分けを確かめられる（0円の請求をかくして、まちがいと言わない）
+const zeroCard = makeCard('jcb');
+const savedForZero = { profile: appState.profile, monthly: appState.monthly };
+appState.profile = { settings: { startDay: 1 }, accounts: [zeroCard], budgets: {}, rules: [], recurring: [], chat: [] };
+appState.monthly = {};
+placeTransaction(appState.monthly, buy('2026-09-01', 5000));
+placeTransaction(appState.monthly, { ...buy('2026-09-02', 5000), id: 'zero-refund', type: 'income' });
+rebuildIndexes();
+same('0円の請求: 計算は合っている', cardCalculationProblems(zeroCard).problems.length, 0);
+const zeroCheck = findNumberProblems('2026-10-28');
+check('0円の請求: 点検は「計算が合わない」と言わない', !zeroCheck.problems.some((problem) => problem.kind === 'calc-mismatch'));
+same('点検: 確かめた記録の数', zeroCheck.verified.records, 2);
+check('点検: 確かめた請求と月の数', zeroCheck.verified.bills >= 1 && zeroCheck.verified.periods === 1);
+appState.profile = savedForZero.profile;
+appState.monthly = savedForZero.monthly;
+allTransactions = [];
+accountById = {};
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };
@@ -1333,9 +1385,4 @@ function printResults() {
   }
 }
 
-runEncryptionTests()
-  .catch((error) => {
-    failures = failures + 1;
-    print('✗ 暗号のテストが途中で止まりました: ' + error);
-  })
-  .then(printResults);
+// 実行と結果の表示は tests/finish.js（全パターンのテスト tests/patterns.js のあとに動かすため）

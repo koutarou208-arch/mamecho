@@ -32,7 +32,9 @@
 2. **テストを先に足す**（`tests/tests.js`）。計算やデータの不具合は、失敗するテストを書いてから直す。
 3. 直す。
 4. `sh tests/run.sh` が **すべて合格**になるまで繰り返す（node か macOS の jsc で動く）。
+   計算を直したら、`tests/patterns.js`（全パターン）にも「必ず成り立つ決まり」を足す。テストの道具の名前は、アプリの関数と重ねない（run.sh が確かめる）。
 5. 画面に関わる変更は、ブラウザで実際に動かして確認する（パソコン幅・スマホ幅・ダークモード）。
+   `node tests/ui-check.js quick layout`（1分）、公開の前は `node tests/ui-check.js`（全部・15分ほど）。
 6. コミットして `git push origin main`。
 7. 公開版を更新する: Artifact ツールで URL を指定して公開（`tools/UPDATE_RULES.md` の手順 9 を参照）。
 

@@ -101,7 +101,7 @@ function cardPanelHtml(account) {
     const confirmed = today > bill.closeDate;
     // 押すと、この請求の中身を直せる（中身が1件だけならすぐ編集画面、いくつかなら下の「これからの請求」のその月を開く）
     html += '<button type="button" class="stat stat-link" data-action="open-next-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '" aria-label="次の引き落としの中身を見る・直す">' +
-      '<span class="label">次の引き落とし ' + formatMonthDay(bill.payDate) + '</span>' +
+      '<span class="label">次の引き落とし <span class="no-break">' + monthDayHtml(bill.payDate) + '</span></span>' +
       '<span class="value num">' + formatYen(bill.total) + iconSvg('chevron-right') + '</span>' +
       '<span class="small muted">' + (confirmed ? '請求確定' : formatShortDate(bill.closeDate) + 'の締めまで増えます') + (bill.fee > 0 ? ' · うち手数料 ' + formatYen(bill.fee) : '') + ' · 押すと直せます</span></button>';
   } else {
@@ -226,7 +226,7 @@ function billRowHtml(account, bill, today) {
 
   const billKey = account.id + '|' + bill.month;
   let html = '<details data-bill-key="' + escapeHtml(billKey) + '" id="bill-' + escapeHtml(account.id) + '-' + bill.month + '"' + (openBillKeys.has(billKey) ? ' open' : '') + '><summary class="bill-row">' +
-    '<span>' + formatMonthDay(bill.payDate) + '</span>' +
+    '<span>' + monthDayHtml(bill.payDate) + '</span>' +
     '<span>' + state + '</span>' +
     '<span class="num">' + formatYen(bill.principal) + '</span>' +
     '<span class="num muted">' + (bill.fee > 0 ? formatYen(bill.fee) : '—') + '</span>' +

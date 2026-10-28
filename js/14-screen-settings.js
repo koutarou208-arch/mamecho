@@ -427,6 +427,8 @@ function settingsNumberCheckCardHtml() {
   }
 
   const result = findNumberProblems();
+  html += '<p class="hint">全 ' + formatNumber(result.verified.records) + ' 件の記録と、カードの請求 ' + formatNumber(result.verified.bills) + ' 回・' +
+    formatNumber(result.verified.periods) + ' か月分の合計を確かめました。</p>';
   if (result.problems.length === 0) {
     html += '<p>' + statusChipHtml('good', '問題なし') + ' 二重に数えている記録や、合わない数字は見つかりませんでした。</p>';
   } else {

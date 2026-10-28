@@ -539,12 +539,14 @@ function amountCellProblem(value) {
   // マイナスの印・カッコ・円記号・カンマ・空白をとった残り
   const body = text.replace(/[△▲\-−+()¥\\円,\s]/g, '');
   if (/^\d+\.\d+$/.test(body)) {
-    return /^\d+\.0+$/.test(body) ? '' : '小数の金額'; // 1200.00 は 1200 として読む
-  }
-  if (!/^\d+$/.test(body)) {
+    if (!/^\d+\.0+$/.test(body)) {
+      return '小数の金額'; // 1200.00 は 1200 として読む（下で、けた数も確かめる）
+    }
+  } else if (!/^\d+$/.test(body)) {
     return '金額が読めない';
   }
-  if (body.length > 15) {
+  // 16けた以上は、コンピュータの数で正しく持てないことがあるので読まない（「.00」が付いていても）
+  if (body.split('.')[0].length > 15) {
     return '金額が大きすぎる';
   }
   return '';
