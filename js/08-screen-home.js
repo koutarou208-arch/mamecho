@@ -127,8 +127,8 @@ function homeAssetCardHtml(period) {
     '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '</span></div>' +
     '<div class="hero-number">' + sign + '<span class="yen">¥</span>' + formatNumber(Math.abs(breakdown.net)) + '</div>' +
     '<div style="margin-block: 6px 14px">' + deltaHtml + '</div>' +
+    changePanelHtml + // 「なぜ？」を押したら、そのすぐ下に開く
     assetProjectionHtml(period, isFuture, breakdown.net) +
-    changePanelHtml +
     '<div class="chart" id="assetTrendChart"></div>' +
     '</section>';
 }
