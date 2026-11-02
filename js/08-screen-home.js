@@ -77,6 +77,9 @@ function homeWelcomeHtml() {
 /* -----------------------------------------------------------
    総資産
    ----------------------------------------------------------- */
+
+let isAssetChangeOpen = false; // 総資産の「増えた・減った」の内訳を開いているか
+
 function homeAssetCardHtml(period) {
   const pointDate = pointInTimeOf(period);
   const breakdown = assetBreakdownOn(pointDate);
@@ -87,8 +90,9 @@ function homeAssetCardHtml(period) {
     whenText = '今日時点';
   }
 
-  // ひとつ前の月の最後の日（グラフの1つ前の点）から、どれだけ増えた（減った）か
+  // ひとつ前の月の最後の日（グラフの1つ前の点）から、どれだけ増えた（減った）か。押すと、なぜかの内訳が開く
   let deltaHtml = '<span class="delta flat">前月との比較はまだできません</span>';
+  let changePanelHtml = '';
   if (history.length >= 2) {
     const previousPoint = history[history.length - 2];
     const previous = previousPoint.amount;
@@ -104,7 +108,12 @@ function homeAssetCardHtml(period) {
     } else {
       deltaHtml = '<span class="delta flat">±¥0</span>';
     }
-    deltaHtml += ' <span class="delta-note">' + assetChangeBaseText(previousPoint) + '</span>';
+    deltaHtml = '<button type="button" class="delta-button" data-action="toggle-asset-change" aria-expanded="' + (isAssetChangeOpen ? 'true' : 'false') + '">' +
+      deltaHtml + ' <span class="delta-note">' + assetChangeBaseText(previousPoint) + '</span>' +
+      '<span class="delta-why">' + (isAssetChangeOpen ? 'とじる' : 'なぜ？') + iconSvg(isAssetChangeOpen ? 'up' : 'down') + '</span></button>';
+    if (isAssetChangeOpen) {
+      changePanelHtml = assetChangePanelHtml(previousPoint.dateText, pointDate, period);
+    }
   }
 
   const sign = breakdown.net < 0 ? '−' : '';
@@ -112,8 +121,61 @@ function homeAssetCardHtml(period) {
     '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '</span></div>' +
     '<div class="hero-number">' + sign + '<span class="yen">¥</span>' + formatNumber(Math.abs(breakdown.net)) + '</div>' +
     '<div style="margin-block: 6px 14px">' + deltaHtml + '</div>' +
+    changePanelHtml +
     '<div class="chart" id="assetTrendChart"></div>' +
     '</section>';
+}
+
+/**
+ * 総資産の「増えた・減った」の内訳（05 の assetChangeBreakdown）。
+ * 種類ごと（収入・支出・計算対象外・残高修正・新しい口座）、口座ごと、大きく動いた記録を出す。
+ * 今月を見ているときは、今日より先の日付の記録（まだ総資産に入っていない分）も知らせる。
+ */
+function assetChangePanelHtml(fromDate, toDate, period) {
+  const change = assetChangeBreakdown(fromDate, toDate);
+  const toText = isCurrentPeriod(period) ? '今日（' + formatShortDate(toDate) + '）' : formatShortDate(toDate);
+  let html = '<div class="asset-change">';
+  html += '<p class="asset-change-title">' + formatShortDate(fromDate) + ' → ' + toText + ' の増減 <strong class="num">' + formatYen(change.total, { showPlus: true }) + '</strong></p>';
+  if (change.parts.length === 0) {
+    html += '<p class="small muted">この間に、総資産を動かす記録はありません。</p>';
+  }
+  for (const part of change.parts) {
+    html += '<div class="sub-row"><span>' + part.label + (part.count > 0 ? '（' + part.count + '件）' : '') + '</span>' +
+      '<span class="num">' + formatYen(part.amount, { showPlus: true }) + '</span></div>';
+  }
+  if (change.accounts.length > 0) {
+    html += '<p class="asset-change-head">口座ごと</p>';
+    for (const item of change.accounts) {
+      html += '<div class="sub-row"><span>' + escapeHtml(item.account.name) + '</span><span class="num">' + formatYen(item.amount, { showPlus: true }) + '</span></div>';
+    }
+  }
+  if (change.records.length > 0) {
+    html += '<p class="asset-change-head">大きく動いた記録（押すと直せます）</p>';
+    for (const item of change.records) {
+      const transaction = item.transaction;
+      html += '<button type="button" class="sub-row sub-link" data-action="edit-transaction" data-id="' + escapeHtml(transaction.id) + '">' +
+        '<span>' + formatShortDate(transaction.date) + ' ' + escapeHtml(transaction.description || '（内容なし）') + '</span>' +
+        '<span class="num">' + formatYen(item.amount, { showPlus: true }) + iconSvg('chevron-right') + '</span></button>';
+    }
+  }
+  // カードの引き落としを「支出」で入れたらしい記録があれば、二重に減って見えることを知らせる（06 の点検と同じ見分け方）
+  const cardWords = cardPaymentWords();
+  const paymentLike = change.records.filter((item) => looksLikeCardPaymentFromBank(item.transaction, cardWords));
+  if (paymentLike.length > 0) {
+    html += '<div class="confirm-box" style="margin-top:10px"><p>「' + escapeHtml(paymentLike[0].transaction.description || '（内容なし）') + '」のように、' +
+      'カードの引き落としを「支出」で入れた記録があるかもしれません。カードで買ったもの（明細や「仮」）と両方を数えると、総資産が実際より少なく見えます。</p>' +
+      '<div class="row-gap"><button type="button" class="btn small" data-action="go-number-check">数字の点検で確かめる</button></div></div>';
+  }
+  if (isCurrentPeriod(period)) {
+    const future = futureCountedTotals(periodRange(period), todayText());
+    if (future.count > 0) {
+      html += '<p class="hint" style="margin-top:10px">今月の記録のうち、今日より先の日付のもの（' + future.count + '件: 収入 ' + formatYen(future.income) +
+        '・支出 ' + formatYen(future.expense) + '）は、その日になると総資産に入ります。今月の「収支」には、もう入っています。</p>';
+    }
+  }
+  html += '<p class="hint" style="margin-top:6px">振替（カードの引き落とし・口座のあいだの移動）は、お金が口座のあいだを動くだけなので、総資産は変わりません。</p>';
+  html += '</div>';
+  return html;
 }
 
 

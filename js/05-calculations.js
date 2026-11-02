@@ -348,6 +348,122 @@ function assetHistory(endPeriod, count) {
   return points;
 }
 
+// 総資産の増減の内訳の、分け方と名前（画面に出す順）
+const ASSET_CHANGE_PARTS = [
+  ['income', '収入'],
+  ['otherExpense', '支出（銀行・現金など）'],
+  ['cardExpense', '支出（カード払い）'],
+  ['manualBill', 'カードの仮の支出（月の支払い金額）'],
+  ['excluded', '計算対象外にした入出金'],
+  ['adjust', '残高修正・評価額の更新'],
+  ['newAccount', '新しく登録した口座の最初の残高'],
+  ['transfer', '振替（相手の口座が見つからない分）'],
+];
+
+/** 記録1件が、総資産の増減の内訳のどこに入るか（account … その記録で残高が動く口座） */
+function assetChangePartOf(transaction, account) {
+  if (transaction.type === 'transfer') {
+    return 'transfer';
+  }
+  if (transaction.type === 'adjust') {
+    return 'adjust';
+  }
+  if (transaction.include === false) {
+    return 'excluded';
+  }
+  if (transaction.manualBill) {
+    return 'manualBill';
+  }
+  if (transaction.type === 'income') {
+    return 'income';
+  }
+  const kind = ACCOUNT_KINDS[account.kind] || ACCOUNT_KINDS.cash;
+  return kind.isDebt ? 'cardExpense' : 'otherExpense';
+}
+
+/**
+ * 総資産が fromDate（の終わり）から toDate（の終わり）までに、なぜ増えた・減ったか。
+ * 口座ごとに「toDate の残高 − fromDate の残高」を出し、その間の記録を種類ごとに分ける。
+ * その間に新しく登録した口座は、最初の残高（カードなら借りている額）も増減に入る。
+ * 返す形: {
+ *   total    … 増えた額（減ったらマイナス）。総資産の差と同じ
+ *   parts    … [{ key, label, amount, count }]（0円でないものだけ。足すと total）
+ *   accounts … [{ account, amount }]（増減があった口座。動きの大きい順。足すと total）
+ *   records  … [{ transaction, amount }]（総資産を動かした記録。動きの大きい順に10件まで。振替は入らない）
+ * }
+ */
+function assetChangeBreakdown(fromDate, toDate) {
+  const sums = {};
+  const recordIds = {};
+  const effectByRecord = new Map();
+  const accountChanges = [];
+  let total = 0;
+  for (const account of appState.profile.accounts) {
+    const list = transactionsOfAccount(account.id);
+    const change = balanceOn(account, toDate, list) - balanceOn(account, fromDate, list);
+    let recordsEffect = 0;
+    for (const transaction of list) {
+      if (transaction.date <= fromDate || transaction.date > toDate) {
+        continue;
+      }
+      const effect = transactionEffect(transaction, account.id);
+      if (effect === 0) {
+        continue;
+      }
+      const key = assetChangePartOf(transaction, account);
+      sums[key] = (sums[key] || 0) + effect;
+      recordIds[key] = recordIds[key] || new Set();
+      recordIds[key].add(transaction.id);
+      effectByRecord.set(transaction, (effectByRecord.get(transaction) || 0) + effect);
+      recordsEffect = recordsEffect + effect;
+    }
+    // 残りは、この間に登録した口座の最初の残高（前からある口座なら0になる）
+    const startBalance = change - recordsEffect;
+    if (startBalance !== 0) {
+      sums.newAccount = (sums.newAccount || 0) + startBalance;
+    }
+    if (change !== 0) {
+      accountChanges.push({ account: account, amount: change });
+    }
+    total = total + change;
+  }
+  const parts = [];
+  for (const [key, label] of ASSET_CHANGE_PARTS) {
+    if (sums[key]) {
+      parts.push({ key: key, label: label, amount: sums[key], count: recordIds[key] ? recordIds[key].size : 0 });
+    }
+  }
+  accountChanges.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  const records = [];
+  for (const [transaction, amount] of effectByRecord) {
+    if (amount !== 0) {
+      records.push({ transaction: transaction, amount: amount });
+    }
+  }
+  records.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  return { total: total, parts: parts, accounts: accountChanges, records: records.slice(0, 10) };
+}
+
+/**
+ * 期間の中で、今日より先の日付の記録の合計（収支には入るが、「今日時点」の総資産にはまだ入らない）。
+ * 返す形: { income, expense, count }
+ */
+function futureCountedTotals(range, today) {
+  const totals = { income: 0, expense: 0, count: 0 };
+  for (const transaction of allTransactions) {
+    if (transaction.date <= today || transaction.date < range.start || transaction.date >= range.end || !isCounted(transaction)) {
+      continue;
+    }
+    if (transaction.type === 'income') {
+      totals.income = totals.income + transaction.amount;
+    } else {
+      totals.expense = totals.expense + transaction.amount;
+    }
+    totals.count = totals.count + 1;
+  }
+  return totals;
+}
+
 
 /* ===========================================================
    4. 収入と支出の集計

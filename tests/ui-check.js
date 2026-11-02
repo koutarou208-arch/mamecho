@@ -9,7 +9,7 @@
    （Claude の作業環境には入っています）。sh tests/run.sh とは別に、画面を変えたときに動かします。
 
    試すもの（全部の組み合わせ）:
-     幅 11とおり（320〜1440px）× 明るい画面・暗い画面 × データ2とおり（サンプル・たくさん入れた家計簿）
+     幅 11とおり（320〜1440px）× 明るい画面・暗い画面 × データ3とおり（サンプル・たくさん入れた家計簿・使いはじめ）
        × 全部の画面（ホーム・入出金・家計簿・予算・カード・口座・手取り・設定と、その中の切りかえ）
        × ダイアログ（入出金の入力・編集、口座・カードの設定、通帳、CSV取り込み、ロック、Claude 用のまとめ）
    確かめること:
@@ -28,7 +28,7 @@ const ROOT = path.resolve(__dirname, '..');
 const QUICK = process.argv[2] === 'quick';
 const WIDTHS = QUICK ? [320, 393, 1280] : [320, 360, 375, 390, 393, 414, 430, 768, 1024, 1280, 1440];
 const THEMES = QUICK ? ['light'] : ['light', 'dark'];
-const DATA_SETS = ['sample', 'rich'];
+const DATA_SETS = ['sample', 'rich', 'small']; // サンプル・たくさん入れた家計簿・使いはじめ（銀行1つだけ）
 const MONKEY_WIDTHS = process.argv.includes('layout') ? [] : [393, 1280]; // 全部のボタンを押してみる幅
 
 // 押すと、ファイルを選ぶ画面・ダウンロード・Face ID・ページの読み直しなどになり、自動では試せないボタン
@@ -232,6 +232,20 @@ async function buildRichLedgerInPage() {
   renderApp();
 }
 
+/** 使いはじめの家計簿をつくる（銀行の口座1つと、記録が少しだけ。資産が1種類だけ＝100%になる場合など） */
+async function buildSmallLedgerInPage() {
+  await startOwnLedger();
+  const today = todayText();
+  appState.profile.accounts = [{ id: 'ui-only-bank', name: '銀行', kind: 'bank', opening: 50000, openDate: addDays(today, -40) }];
+  rebuildIndexes();
+  putManyTransactions([
+    { id: 'ui-s1', date: addDays(today, -35), type: 'income', amount: 200000, account: 'ui-only-bank', category: 'salary', sub: '給与', description: '給与', memo: '', include: true, createdAt: 1 },
+    { id: 'ui-s2', date: addDays(today, -1), type: 'expense', amount: 1200, account: 'ui-only-bank', category: 'food', sub: '外食', description: 'ランチ', memo: '', include: true, createdAt: 2 },
+  ]);
+  saveProfile();
+  renderApp();
+}
+
 /** 画面を開く（"report:income" のように、画面の中の切りかえもふくむ） */
 function openScreenInPage(target) {
   document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
@@ -248,6 +262,10 @@ function openScreenInPage(target) {
   }
   if (mode === 'check') {
     isNumberCheckOpen = true;
+    renderApp();
+  }
+  if (mode === 'change') {
+    isAssetChangeOpen = true; // 総資産の「増えた・減った」の内訳を開く
     renderApp();
   }
   document.querySelectorAll('#screen details').forEach((details) => {
@@ -312,7 +330,7 @@ async function main() {
   const { chromium } = loadPlaywright();
   const browser = await launchBrowser(chromium);
   const problems = [];
-  const screens = ['home', 'transactions', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
+  const screens = ['home', 'home:change', 'transactions', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
   const dialogs = ['入出金（新しく）', '入出金（編集）', '口座（新しく）', 'カード（新しく）', 'カード（設定）', '通帳', 'CSV取り込み', 'ロック', 'Claude 用のまとめ'];
   let checkedViews = 0;
   let pressedButtons = 0;
@@ -321,7 +339,8 @@ async function main() {
   for (const width of WIDTHS) {
     for (const theme of THEMES) {
       for (const dataSet of DATA_SETS) {
-        const label = '[' + width + 'px・' + (theme === 'dark' ? '暗い' : '明るい') + '・' + (dataSet === 'rich' ? 'たくさん' : 'サンプル') + ']';
+        const dataName = { sample: 'サンプル', rich: 'たくさん', small: '使いはじめ' }[dataSet];
+        const label = '[' + width + 'px・' + (theme === 'dark' ? '暗い' : '明るい') + '・' + dataName + ']';
         const isPhone = width < 600;
         const context = await browser.newContext({ viewport: { width: width, height: isPhone ? 844 : 900 }, isMobile: isPhone, hasTouch: isPhone, colorScheme: theme });
         const page = await context.newPage();
@@ -336,6 +355,9 @@ async function main() {
         await page.waitForTimeout(700);
         if (dataSet === 'rich') {
           await page.evaluate(buildRichLedgerInPage);
+          await page.waitForTimeout(300);
+        } else if (dataSet === 'small') {
+          await page.evaluate(buildSmallLedgerInPage);
           await page.waitForTimeout(300);
         }
         for (const target of screens) {
@@ -387,4 +409,4 @@ async function main() {
 if (require.main === module) {
   main();
 }
-module.exports = { startServer, loadPlaywright, launchBrowser, findOverflowInPage, buildRichLedgerInPage, openScreenInPage, openDialogInPage };
+module.exports = { startServer, loadPlaywright, launchBrowser, findOverflowInPage, buildRichLedgerInPage, buildSmallLedgerInPage, openScreenInPage, openDialogInPage };

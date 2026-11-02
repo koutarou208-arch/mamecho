@@ -1199,6 +1199,22 @@ function looksLikeCardPaymentFromBank(transaction, cardWords) {
   return false;
 }
 
+/**
+ * 「カードの引き落としらしい」と見分けるための言葉: 「カード」と、登録しているカードの名前・会社名。
+ * （1文字の名前は、ほかの言葉にまざりやすいので使わない）
+ */
+function cardPaymentWords() {
+  const words = ['カード'];
+  for (const account of appState.profile ? cardAccounts() : []) {
+    for (const word of [normalizeText(account.name), normalizeText(cardSettings(account).company.name)]) {
+      if (word.length >= 2) {
+        words.push(word);
+      }
+    }
+  }
+  return words;
+}
+
 /** カードの記録のうち、カードへの支払いらしい内容か（「引き落とし」「支払」「返済」など。内容が「カード」だけのものも） */
 function looksLikePaymentText(description) {
   const text = normalizeText(description);
@@ -1363,15 +1379,7 @@ function findNumberProblems(today) {
   }
 
   // 3. 記録1件ずつの点検（カードへの支払いの入れ方・マイナスの金額）
-  // 「カード」と、登録しているカードの名前・会社名（1文字の名前は、ほかの言葉にまざりやすいので使わない）
-  const cardWords = ['カード'];
-  for (const account of cards) {
-    for (const word of [normalizeText(account.name), normalizeText(cardSettings(account).company.name)]) {
-      if (word.length >= 2) {
-        cardWords.push(word);
-      }
-    }
-  }
+  const cardWords = cardPaymentWords();
   const recordChecks = [
     {
       kind: 'payment-as-bank-expense',

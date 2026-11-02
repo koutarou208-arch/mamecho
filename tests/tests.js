@@ -1205,6 +1205,55 @@ section('総資産の「前とくらべて」の書き方');
 same('総資産: くらべる相手の日付を書く（今月なら先月末）', assetChangeBaseText({ dateText: '2026-10-31' }), '10/31時点から');
 same('総資産: 過去の月を見ているときも、前の月の最後の日', assetChangeBaseText({ dateText: '2026-09-30' }), '9/30時点から');
 
+section('総資産の増減の内訳（なぜ増えた・減ったか）');
+const changeBank = { id: 'cb-bank', name: 'テスト銀行', kind: 'bank', opening: 200000, openDate: '2026-10-01' };
+const changeCard = { id: 'cb-card', name: 'テストカード', kind: 'card', opening: 0, openDate: '2026-10-01', card: { company: 'jcb', cycleIndex: 0 } };
+const changeNewCard = { id: 'cb-new', name: '新しいカード', kind: 'card', opening: -138000, openDate: '2026-11-01', card: { company: 'smbc', cycleIndex: 0 } };
+const savedForChange = { profile: appState.profile, monthly: appState.monthly };
+appState.profile = { settings: { startDay: 1 }, accounts: [changeBank, changeCard, changeNewCard], budgets: {}, rules: [], recurring: [], chat: [] };
+appState.monthly = {};
+const changeRecords = [
+  { id: 'c1', date: '2026-10-25', type: 'income', amount: 300000, account: 'cb-bank', category: 'salary', sub: '給与', description: '給与', include: true, createdAt: 1 },
+  { id: 'c2', date: '2026-11-01', type: 'expense', amount: 159000, account: 'cb-bank', category: 'housing', sub: '家賃・地代', description: '家賃', include: true, createdAt: 2 },
+  { id: 'c3', date: '2026-11-01', type: 'expense', amount: 3000, account: 'cb-card', category: 'food', sub: '外食', description: 'テストショウテン', include: true, createdAt: 3 },
+  { id: 'c4', date: '2026-11-02', type: 'income', amount: 21000, account: 'cb-bank', category: 'extra', sub: '臨時収入', description: '臨時', include: true, createdAt: 4 },
+  { id: 'c5', date: '2026-11-02', type: 'expense', amount: 5000, account: 'cb-bank', category: 'other', sub: '雑費', description: '対象外', include: false, createdAt: 5 },
+  { id: 'c6', date: '2026-11-02', type: 'adjust', amount: -1000, account: 'cb-bank', description: '残高修正', include: true, createdAt: 6 },
+  { id: 'c7', date: '2026-11-02', type: 'transfer', amount: 10000, account: 'cb-bank', toAccount: 'cb-card', description: '引き落とし', include: true, createdAt: 7 },
+  { ...manualBillRecord(changeCard, '2026-12', 50000, null), id: 'c8' },
+  { id: 'c9', date: '2026-11-25', type: 'income', amount: 346000, account: 'cb-bank', category: 'salary', sub: '給与', description: '給与', include: true, createdAt: 9 },
+  { id: 'c10', date: '2026-11-01', type: 'expense', amount: 999, account: 'cb-gone', category: 'other', sub: '雑費', description: '消した口座', include: true, createdAt: 10 },
+];
+for (const record of changeRecords) {
+  placeTransaction(appState.monthly, record);
+}
+rebuildIndexes();
+const change = assetChangeBreakdown('2026-10-31', '2026-11-02');
+const changePart = (key) => (change.parts.find((part) => part.key === key) || { amount: 0 }).amount;
+same('増減: 合計（10/31 → 11/2）', change.total, -285000);
+same('増減: 総資産の差と同じ', change.total, assetBreakdownOn('2026-11-02').net - assetBreakdownOn('2026-10-31').net);
+same('増減の内訳: 収入', changePart('income'), 21000);
+same('増減の内訳: 支出（銀行・現金など）', changePart('otherExpense'), -159000);
+same('増減の内訳: 支出（カード払い）', changePart('cardExpense'), -3000);
+same('増減の内訳: 計算対象外にした入出金', changePart('excluded'), -5000);
+same('増減の内訳: 残高修正', changePart('adjust'), -1000);
+same('増減の内訳: 新しく登録した口座の最初の残高（借りている額）', changePart('newAccount'), -138000);
+check('増減の内訳: 振替は総資産を変えないので出さない', !change.parts.some((part) => part.key === 'transfer'));
+check('増減の内訳: 先の日付の記録（11/15 の仮・11/25 の給料）は入らない', changePart('manualBill') === 0 && changePart('income') === 21000);
+same('増減の内訳: 内訳を足すと合計', change.parts.reduce((total, part) => total + part.amount, 0), change.total);
+same('増減の内訳: 口座ごと（大きい順）', change.accounts.map((item) => item.account.id + ':' + item.amount).join(','), 'cb-bank:-154000,cb-new:-138000,cb-card:7000');
+same('増減の内訳: 口座ごとを足すと合計', change.accounts.reduce((total, item) => total + item.amount, 0), change.total);
+same('増減の内訳: 大きく動いた記録（振替はのぞく・大きい順）', change.records.map((item) => item.transaction.id + ':' + item.amount).join(','), 'c2:-159000,c4:21000,c5:-5000,c3:-3000,c6:-1000');
+same('増減の内訳: カードの仮の支出は、締め日に入る', (assetChangeBreakdown('2026-11-14', '2026-11-15').parts.find((part) => part.key === 'manualBill') || {}).amount, -50000);
+const future = futureCountedTotals(periodRange({ year: 2026, month: 11 }), '2026-11-02');
+same('今日より先の日付の記録: 収入（11/25 の給料）', future.income, 346000);
+same('今日より先の日付の記録: 支出（11/15 の仮）', future.expense, 50000);
+same('今日より先の日付の記録: 件数', future.count, 2);
+appState.profile = savedForChange.profile;
+appState.monthly = savedForChange.monthly;
+allTransactions = [];
+accountById = {};
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };

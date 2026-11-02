@@ -240,6 +240,7 @@ function resetTemporaryStates() {
   pendingEncryptedBackup = null;    // パスフレーズ待ちのバックアップ（17）
   isNumberCheckOpen = false;        // 数字の点検の結果（14）
   isDuplicateFixConfirmOpen = false; // 同じ記録を1つにする確認（14）
+  isAssetChangeOpen = false;        // 総資産の増減の内訳（08）
   settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
   settingsOpenForms.rule = false;
 }
@@ -536,6 +537,11 @@ const ACTIONS = {
     renderApp();
   },
   'go-number-check': () => goToNumberCheck(),
+  // 総資産の「増えた・減った」の内訳を開く・閉じる（08）
+  'toggle-asset-change': () => {
+    isAssetChangeOpen = !isAssetChangeOpen;
+    renderApp();
+  },
   'go-card': (button) => goToCardPanel(button.dataset.id),
   'fix-duplicates': () => {
     isDuplicateFixConfirmOpen = true;

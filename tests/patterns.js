@@ -518,6 +518,7 @@ function runLedgerPatternTests() {
   const categories = startRule('家計簿: 月ごとに カテゴリの合計 = 収入 + 支出、中項目の合計 = カテゴリの合計');
   const drill = startRule('家計簿: 中項目を開いたときの明細を足すと、中項目の金額');
   const balances = startRule('家計簿: 残高は、前の日の残高 + その日の入出金（どの口座・どの日でも）');
+  const assetChange = startRule('家計簿: 総資産の増減の内訳を足すと、総資産の差（種類ごとでも口座ごとでも。どの期間でも）');
   const noFalseAlarm = startRule('家計簿: ふつうの記録だけなら、数字の点検はまちがいを知らせない');
   const faults = startRule('家計簿: わざとまちがいを入れると、数字の点検が必ず見つける');
   const summary = startRule('家計簿: Claude 用のまとめに、口座の名前・メモが入らず、カードの合計が合う');
@@ -646,6 +647,19 @@ function runLedgerPatternTests() {
       }
     }
 
+    // 総資産の増減の内訳: 種類ごとに足しても、口座ごとに足しても、総資産の差と同じ
+    for (let count = 0; count < 3; count++) {
+      const fromDate = addDays('2025-12-01', random.int(0, 800));
+      const toDate = addDays(fromDate, random.int(1, 120));
+      const result = assetChangeBreakdown(fromDate, toDate);
+      const partsTotal = result.parts.reduce((total, part) => total + part.amount, 0);
+      const accountsTotal = result.accounts.reduce((total, item) => total + item.amount, 0);
+      const netDifference = assetBreakdownOn(toDate).net - assetBreakdownOn(fromDate).net;
+      recordRule(assetChange, result.total === netDifference && partsTotal === netDifference && accountsTotal === netDifference &&
+        result.parts.every((part) => Number.isInteger(part.amount) && part.amount !== 0),
+        () => label + ' ' + fromDate + '→' + toDate + ' 差 ' + netDifference + ' / 内訳 ' + partsTotal + ' / 口座 ' + accountsTotal);
+    }
+
     // 数字の点検: ふつうの記録だけなら、まちがいを知らせない
     const result = findNumberProblems(today);
     const falseAlarms = result.problems.filter((problem) =>
@@ -732,7 +746,7 @@ function runLedgerPatternTests() {
       }
     }
   }
-  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
+  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, assetChange, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
     finishRule(rule);
   }
   restoreGlobalsForTest(saved);

@@ -413,6 +413,14 @@ main:focus { outline: none; }
 .delta.down { color: var(--over-text); }
 .delta.flat { color: var(--muted); }
 .delta-note { font-size: 12px; color: var(--muted); font-weight: 400; }
+/* 総資産の「増えた・減った」は押すと内訳が開く（08 の assetChangePanelHtml） */
+.delta-button { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
+.delta-why { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--accent); }
+.delta-why .icon { width: 14px; height: 14px; }
+.asset-change { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; display: grid; gap: 2px; }
+.asset-change-title { font-size: 13px; margin-bottom: 4px; }
+.asset-change-head { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 10px; }
+.asset-change .sub-link { display: flex; justify-content: space-between; gap: 8px; }
 
 /* 数字を3つ並べる（収入・支出・収支） */
 .stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -619,7 +627,7 @@ main:focus { outline: none; }
   border-bottom: 1px dotted var(--rule);
 }
 .legend-rows li:last-child { border-bottom: 0; }
-.legend-rows .pct { width: 3.5em; text-align: right; color: var(--muted); font-size: 12px; }
+.legend-rows .pct { width: 4.2em; text-align: right; color: var(--muted); font-size: 12px; } /* 「100.0%」が入る幅 */
 
 /* ランキングの横棒（支出の内訳） */
 .rank { display: grid; gap: 2px; }
