@@ -1202,8 +1202,17 @@ same('長い日付: 「11月10日(火)」の形で、曜日の前だけで折り
 
 section('総資産の「前とくらべて」の書き方');
 // くらべる相手は「前の月の最後の日」なので、その日付をそのまま書く（「前月の同じ時点」ではない）
-same('総資産: くらべる相手の日付を書く（今月なら先月末）', assetChangeBaseText({ dateText: '2026-10-31' }), '10/31時点から');
-same('総資産: 過去の月を見ているときも、前の月の最後の日', assetChangeBaseText({ dateText: '2026-09-30' }), '9/30時点から');
+same('総資産: くらべる相手の日付を書く（今月なら先月末）', assetChangeBaseText({ dateText: '2026-10-31' }, '2026-11-02'), '10/31時点から');
+same('総資産: 過去の月を見ているときも、前の月の最後の日', assetChangeBaseText({ dateText: '2026-09-30' }, '2026-11-02'), '9/30時点から');
+same('総資産: 先の月の見込みは、今日とくらべる', assetChangeBaseText({ dateText: '2026-11-02' }, '2026-11-02'), '今日（11/2）から');
+// くらべる相手は、見ている日より前の、いちばん新しいグラフの点
+const assetPoints = [{ dateText: '2026-09-30' }, { dateText: '2026-10-31' }, { dateText: '2026-11-02' }];
+same('くらべる相手: 今月（今日の点）を見ているときは先月末', previousAssetPoint(assetPoints, '2026-11-02').dateText, '2026-10-31');
+same('くらべる相手: 先の月（5/31の見込み）を見ているときは今日', previousAssetPoint(assetPoints, '2027-05-31').dateText, '2026-11-02');
+same('くらべる相手: 過去の月（10/31）を見ているときは、その前の月末', previousAssetPoint(assetPoints.slice(0, 2), '2026-10-31').dateText, '2026-09-30');
+same('くらべる相手: 前の点がなければ null', previousAssetPoint([{ dateText: '2026-10-31' }], '2026-10-31'), null);
+check('先の月かどうか: 来月は先の月', isFuturePeriod({ year: 2026, month: 12 }, '2026-11-02'));
+check('先の月かどうか: 今月は先の月ではない', !isFuturePeriod({ year: 2026, month: 11 }, '2026-11-02'));
 
 section('総資産の増減の内訳（なぜ増えた・減ったか）');
 const changeBank = { id: 'cb-bank', name: 'テスト銀行', kind: 'bank', opening: 200000, openDate: '2026-10-01' };

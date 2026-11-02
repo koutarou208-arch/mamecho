@@ -85,20 +85,26 @@ function homeAssetCardHtml(period) {
   const breakdown = assetBreakdownOn(pointDate);
   const history = assetHistory(period, 12);
 
+  const today = todayText();
+  const isFuture = isFuturePeriod(period, today);
   let whenText = formatShortDate(pointDate) + '時点';
   if (isCurrentPeriod(period)) {
     whenText = '今日時点';
+  } else if (isFuture) {
+    whenText = formatShortDate(pointDate) + '時点（見込み）'; // 入れてある予定だけで計算した数字
   }
 
-  // ひとつ前の月の最後の日（グラフの1つ前の点）から、どれだけ増えた（減った）か。押すと、なぜかの内訳が開く
+  // くらべる相手（今月なら先月末、過去の月ならその前の月末、先の月なら今日）から、どれだけ増えた（減った）か。
+  // 押すと、なぜかの内訳が開く
   let deltaHtml = '<span class="delta flat">前月との比較はまだできません</span>';
   let changePanelHtml = '';
-  if (history.length >= 2) {
-    const previousPoint = history[history.length - 2];
+  const previousPoint = previousAssetPoint(history, pointDate);
+  if (previousPoint) {
     const previous = previousPoint.amount;
     const difference = breakdown.net - previous;
     let rate = '';
-    if (previous > 0) {
+    // 先の月の見込みは、今日とくらべた%を出さない（今日の残高が少ないと「+4000%」のような、役に立たない数字になるため）
+    if (previous > 0 && !isFuture) {
       rate = '（' + (difference >= 0 ? '+' : '−') + Math.abs((difference / previous) * 100).toFixed(1) + '%）';
     }
     if (difference > 0) {
@@ -109,7 +115,7 @@ function homeAssetCardHtml(period) {
       deltaHtml = '<span class="delta flat">±¥0</span>';
     }
     deltaHtml = '<button type="button" class="delta-button" data-action="toggle-asset-change" aria-expanded="' + (isAssetChangeOpen ? 'true' : 'false') + '">' +
-      deltaHtml + ' <span class="delta-note">' + assetChangeBaseText(previousPoint) + '</span>' +
+      deltaHtml + ' <span class="delta-note">' + assetChangeBaseText(previousPoint, today) + '</span>' +
       '<span class="delta-why">' + (isAssetChangeOpen ? 'とじる' : 'なぜ？') + iconSvg(isAssetChangeOpen ? 'up' : 'down') + '</span></button>';
     if (isAssetChangeOpen) {
       changePanelHtml = assetChangePanelHtml(previousPoint.dateText, pointDate, period);
@@ -133,9 +139,21 @@ function homeAssetCardHtml(period) {
  */
 function assetChangePanelHtml(fromDate, toDate, period) {
   const change = assetChangeBreakdown(fromDate, toDate);
-  const toText = isCurrentPeriod(period) ? '今日（' + formatShortDate(toDate) + '）' : formatShortDate(toDate);
+  const today = todayText();
+  const isFuture = isFuturePeriod(period, today);
+  const fromText = fromDate === today ? '今日（' + formatShortDate(fromDate) + '）' : formatShortDate(fromDate);
+  let toText = formatShortDate(toDate);
+  if (isCurrentPeriod(period)) {
+    toText = '今日（' + formatShortDate(toDate) + '）';
+  } else if (isFuture) {
+    toText = formatShortDate(toDate) + '（見込み）';
+  }
   let html = '<div class="asset-change">';
-  html += '<p class="asset-change-title">' + formatShortDate(fromDate) + ' → ' + toText + ' の増減 <strong class="num">' + formatYen(change.total, { showPlus: true }) + '</strong></p>';
+  html += '<p class="asset-change-title">' + fromText + ' → ' + toText + ' の増減 <strong class="num">' + formatYen(change.total, { showPlus: true }) + '</strong></p>';
+  if (isFuture) {
+    html += '<p class="hint" style="margin-bottom:6px">先の月の総資産は、今日までに入れてある予定（給料・家賃・カードの「仮」など）だけで計算した見込みです。' +
+      'まだ入れていない支出（現金や銀行から払う生活費、カードの新しい買い物など）があると、そのぶん少なくなります。</p>';
+  }
   if (change.parts.length === 0) {
     html += '<p class="small muted">この間に、総資産を動かす記録はありません。</p>';
   }

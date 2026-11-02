@@ -297,12 +297,35 @@ function assetBreakdownOn(dateText) {
 }
 
 /**
- * 総資産の「○○から増えた・減った」の、くらべる相手の書き方（例: "10/31時点から"）。
- * くらべる相手は、ひとつ前の月のグラフの点（その月の最後の日）。今月なら「先月末から今日まで」の増減になる。
- *   previousPoint … assetHistory の1つ前の点（{ dateText }）
+ * 総資産の「○○から増えた・減った」の、くらべる相手の書き方。
+ *   previousPoint … くらべる相手のグラフの点（{ dateText }。previousAssetPoint で選ぶ）
+ *   today        … 今日の日付
+ * 例: 今月なら "10/31時点から"（先月末から今日まで）。先の月の見込みなら "今日（11/2）から"。
  */
-function assetChangeBaseText(previousPoint) {
+function assetChangeBaseText(previousPoint, today) {
+  if (previousPoint.dateText === today) {
+    return '今日（' + formatShortDate(today) + '）から';
+  }
   return formatShortDate(previousPoint.dateText) + '時点から';
+}
+
+/**
+ * 総資産をくらべる相手: グラフの点のうち、見ている日（pointDate）より前の、いちばん新しい点。なければ null。
+ *   今月を見ているとき → 先月末 / 過去の月 → その前の月末 / 先の月の見込み → 今日
+ */
+function previousAssetPoint(history, pointDate) {
+  let found = null;
+  for (const point of history) {
+    if (point.dateText < pointDate) {
+      found = point;
+    }
+  }
+  return found;
+}
+
+/** 先の月（始まりの日が今日より後）か。先の月の総資産は、入れてある予定だけで計算した見込みになる */
+function isFuturePeriod(period, today) {
+  return periodRange(period).start > today;
 }
 
 /**
