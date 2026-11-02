@@ -168,13 +168,12 @@ function assetChangePanelHtml(fromDate, toDate, period) {
     }
   }
   if (change.records.length > 0) {
-    html += '<p class="asset-change-head">大きく動いた記録（押すと直せます）</p>';
+    // 入出金の一覧と同じ形で出す（内容が空でも、カテゴリ・中項目・口座で何のお金か分かるように。09 の transactionRowHtml）
+    html += '<p class="asset-change-head">大きく動いた記録（押すと開いて直せます）</p><div class="tx-list">';
     for (const item of change.records) {
-      const transaction = item.transaction;
-      html += '<button type="button" class="sub-row sub-link" data-action="edit-transaction" data-id="' + escapeHtml(transaction.id) + '">' +
-        '<span>' + formatShortDate(transaction.date) + ' ' + escapeHtml(transaction.description || '（内容なし）') + '</span>' +
-        '<span class="num">' + formatYen(item.amount, { showPlus: true }) + iconSvg('chevron-right') + '</span></button>';
+      html += transactionRowHtml(item.transaction, { showDate: true });
     }
+    html += '</div>';
   }
   // カードの引き落としを「支出」で入れたらしい記録があれば、二重に減って見えることを知らせる（06 の点検と同じ見分け方）
   const cardWords = cardPaymentWords();

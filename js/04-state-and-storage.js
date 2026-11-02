@@ -625,6 +625,27 @@ function cleanMonthlyData(monthly) {
   return cleaned;
 }
 
+/**
+ * 番号（id）のない記録に、新しい番号を付ける（monthly を直接変える）。
+ * 番号がないと、一覧や「なぜ？」で押しても記録が開かず、直せないため。番号を付けた月のリストを返す。
+ */
+function assignMissingIds(monthly) {
+  const changedMonths = [];
+  for (const month of Object.keys(monthly)) {
+    let changed = false;
+    for (const transaction of monthly[month]) {
+      if (typeof transaction.id !== 'string' || transaction.id === '') {
+        transaction.id = makeId() + month.replace('-', '') + Math.random().toString(36).slice(2, 6);
+        changed = true;
+      }
+    }
+    if (changed) {
+      changedMonths.push(month);
+    }
+  }
+  return changedMonths;
+}
+
 /** 読み込みが終わったら呼ぶ（期間を決めて画面を描く） */
 function finishLoading() {
   appState.monthly = cleanMonthlyData(appState.monthly);
@@ -632,6 +653,11 @@ function finishLoading() {
     appState.period = periodOf(todayText());
   }
   const upgradedMonths = upgradeAllManualBills(); // 古い形の「月の支払い金額の手入力」を、支出の形に直す
+  for (const month of assignMissingIds(appState.monthly)) { // 番号のない記録に番号を付ける（押して開けるように）
+    if (!upgradedMonths.includes(month)) {
+      upgradedMonths.push(month);
+    }
+  }
   rebuildIndexes();
   // 自動の書き込み（直した形の保存・固定費の記録）は、本当のデータが届いてから。
   // 端末に残っていた古い情報のまま書き込むと、別の端末で入れた新しいデータを上書きしてしまうため

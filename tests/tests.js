@@ -1214,6 +1214,15 @@ same('くらべる相手: 前の点がなければ null', previousAssetPoint([{ 
 check('先の月かどうか: 来月は先の月', isFuturePeriod({ year: 2026, month: 12 }, '2026-11-02'));
 check('先の月かどうか: 今月は先の月ではない', !isFuturePeriod({ year: 2026, month: 11 }, '2026-11-02'));
 
+section('番号（id）のない記録に番号を付ける（押しても開かない記録をなくす）');
+const noIdMonthly = { '2026-11': [{ date: '2026-11-01', type: 'expense', amount: 138000 }, { id: '', date: '2026-11-02', type: 'expense', amount: 1 }, { id: 'keep', date: '2026-11-03', type: 'expense', amount: 2 }] };
+const noIdChanged = assignMissingIds(noIdMonthly);
+same('番号を付けた月', noIdChanged.join(','), '2026-11');
+check('番号のない記録に、番号が付く', noIdMonthly['2026-11'].every((item) => typeof item.id === 'string' && item.id !== ''));
+same('もとからある番号は変えない', noIdMonthly['2026-11'][2].id, 'keep');
+check('付けた番号は重ならない', noIdMonthly['2026-11'][0].id !== noIdMonthly['2026-11'][1].id);
+same('全部に番号があれば、何もしない', assignMissingIds(noIdMonthly).length, 0);
+
 section('総資産の増減の内訳（なぜ増えた・減ったか）');
 const changeBank = { id: 'cb-bank', name: 'テスト銀行', kind: 'bank', opening: 200000, openDate: '2026-10-01' };
 const changeCard = { id: 'cb-card', name: 'テストカード', kind: 'card', opening: 0, openDate: '2026-10-01', card: { company: 'jcb', cycleIndex: 0 } };
