@@ -226,7 +226,7 @@ function billRowHtml(account, bill, today) {
 
   const billKey = account.id + '|' + bill.month;
   let html = '<details data-bill-key="' + escapeHtml(billKey) + '" id="bill-' + escapeHtml(account.id) + '-' + bill.month + '"' + (openBillKeys.has(billKey) ? ' open' : '') + '><summary class="bill-row">' +
-    '<span>' + monthDayHtml(bill.payDate) + '</span>' +
+    '<span>' + shortMonthDayHtml(bill.payDate) + '</span>' + // 表の列はせまいので「11/10(火)」の形
     '<span>' + state + '</span>' +
     '<span class="num">' + formatYen(bill.principal) + '</span>' +
     '<span class="num muted">' + (bill.fee > 0 ? formatYen(bill.fee) : '—') + '</span>' +

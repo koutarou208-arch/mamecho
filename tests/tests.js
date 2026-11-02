@@ -1196,6 +1196,15 @@ appState.monthly = savedForZero.monthly;
 allTransactions = [];
 accountById = {};
 
+section('日付の短い書き方（表のせまい列）');
+same('短い日付: 「11/10(火)」の形で、曜日の前だけで折り返す', shortMonthDayHtml('2026-11-10'), '<span class="no-break">11/10</span><wbr><span class="no-break">(火)</span>');
+same('長い日付: 「11月10日(火)」の形で、曜日の前だけで折り返す', monthDayHtml('2026-11-10'), '<span class="no-break">11月10日</span><wbr><span class="no-break">(火)</span>');
+
+section('総資産の「前とくらべて」の書き方');
+// くらべる相手は「前の月の最後の日」なので、その日付をそのまま書く（「前月の同じ時点」ではない）
+same('総資産: くらべる相手の日付を書く（今月なら先月末）', assetChangeBaseText({ dateText: '2026-10-31' }), '10/31時点から');
+same('総資産: 過去の月を見ているときも、前の月の最後の日', assetChangeBaseText({ dateText: '2026-09-30' }), '9/30時点から');
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };

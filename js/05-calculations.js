@@ -297,6 +297,15 @@ function assetBreakdownOn(dateText) {
 }
 
 /**
+ * 総資産の「○○から増えた・減った」の、くらべる相手の書き方（例: "10/31時点から"）。
+ * くらべる相手は、ひとつ前の月のグラフの点（その月の最後の日）。今月なら「先月末から今日まで」の増減になる。
+ *   previousPoint … assetHistory の1つ前の点（{ dateText }）
+ */
+function assetChangeBaseText(previousPoint) {
+  return formatShortDate(previousPoint.dateText) + '時点から';
+}
+
+/**
  * 純資産の移り変わり（グラフ用）。endPeriod から count か月さかのぼる。
  * 返す形: [{ period, dateText, amount }, ...]（古い順）
  */

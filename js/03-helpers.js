@@ -397,6 +397,12 @@ function monthDayHtml(text) {
   return '<span class="no-break">' + label.slice(0, position) + '</span><wbr><span class="no-break">' + label.slice(position) + '</span>';
 }
 
+/** "2026-09-14" → 「9/14(月)」の HTML（表のせまい列用）。折り返すときは、曜日の前だけで折り返す */
+function shortMonthDayHtml(text) {
+  const weekday = WEEKDAY_NAMES[textToDate(text).getDay()];
+  return '<span class="no-break">' + formatShortDate(text) + '</span><wbr><span class="no-break">(' + weekday + ')</span>';
+}
+
 /** "2026-09-14" → "9/14" */
 function formatShortDate(text) {
   const date = textToDate(text);

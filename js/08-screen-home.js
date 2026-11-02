@@ -87,10 +87,11 @@ function homeAssetCardHtml(period) {
     whenText = '今日時点';
   }
 
-  // 前の月の時点からどれだけ増えた（減った）か
+  // ひとつ前の月の最後の日（グラフの1つ前の点）から、どれだけ増えた（減った）か
   let deltaHtml = '<span class="delta flat">前月との比較はまだできません</span>';
   if (history.length >= 2) {
-    const previous = history[history.length - 2].amount;
+    const previousPoint = history[history.length - 2];
+    const previous = previousPoint.amount;
     const difference = breakdown.net - previous;
     let rate = '';
     if (previous > 0) {
@@ -103,7 +104,7 @@ function homeAssetCardHtml(period) {
     } else {
       deltaHtml = '<span class="delta flat">±¥0</span>';
     }
-    deltaHtml += ' <span class="delta-note">前月の同じ時点から</span>';
+    deltaHtml += ' <span class="delta-note">' + assetChangeBaseText(previousPoint) + '</span>';
   }
 
   const sign = breakdown.net < 0 ? '−' : '';
