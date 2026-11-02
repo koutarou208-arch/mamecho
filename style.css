@@ -417,6 +417,9 @@ main:focus { outline: none; }
 .delta-button { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; padding: 4px 0; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; }
 .delta-why { display: inline-flex; align-items: center; gap: 2px; font-size: 12px; font-weight: 600; color: var(--accent); }
 .delta-why .icon { width: 14px; height: 14px; }
+/* 総資産の見込みの行（今の月は月末の見込み、終わった月は見込みと実際のずれ。08 の assetProjectionHtml） */
+.projection-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; margin: -6px 0 12px; font-size: 13px; color: var(--ink-2); }
+.projection-note { margin: -8px 0 12px; }
 .asset-change { border: 1px solid var(--rule); border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; display: grid; gap: 2px; }
 .asset-change-title { font-size: 13px; margin-bottom: 4px; }
 .asset-change-head { font-size: 12px; font-weight: 600; color: var(--muted); margin-top: 10px; }

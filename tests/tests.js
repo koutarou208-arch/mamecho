@@ -1272,6 +1272,72 @@ appState.monthly = savedForChange.monthly;
 allTransactions = [];
 accountById = {};
 
+section('見込みと実際のずれ（月末の総資産の見込みをおぼえておく）');
+const projectionMemo = {};
+same('見込みをおぼえる: その月のはじめての見込みは記録する', rememberMonthProjection(projectionMemo, '2026-11', { made: '2026-11-02', at: 1000, endDate: '2026-11-30', amount: 273558 }), true);
+same('見込みをおぼえる: 同じ月の2回目は記録しない（月のはじめの見込みをのこす）', rememberMonthProjection(projectionMemo, '2026-11', { made: '2026-11-10', at: 2000, endDate: '2026-11-30', amount: 1 }), false);
+same('見込みをおぼえる: のこっているのは最初の見込み', projectionMemo['2026-11'].amount, 273558);
+same('見込みをおぼえる: 「1か月の始まりの日」を変えて月の最後の日が変わったら、おぼえ直す', rememberMonthProjection(projectionMemo, '2026-11', { made: '2026-11-12', at: 3000, endDate: '2026-11-24', amount: 250000 }), true);
+same('見込みをおぼえる: おぼえ直した見込み', projectionMemo['2026-11'].endDate + ' ' + projectionMemo['2026-11'].amount, '2026-11-24 250000');
+for (let count = 0; count < 30; count++) {
+  rememberMonthProjection(projectionMemo, addMonths('2024-01', count), { made: addMonths('2024-01', count) + '-01', at: count, endDate: addMonths('2024-01', count) + '-28', amount: count });
+}
+same('見込みをおぼえる: 24か月分までのこす', Object.keys(projectionMemo).length, 24);
+check('見込みをおぼえる: 古い月から捨てる（新しい月はのこる）', !projectionMemo['2024-01'] && Boolean(projectionMemo['2026-11']));
+
+const projectionBank = { id: 'pj-bank', name: '銀行', kind: 'bank', opening: 176375, openDate: '2026-09-01' };
+const projectionCard = { id: 'pj-card', name: 'カード', kind: 'card', opening: 0, openDate: '2026-09-01', card: { company: 'jcb', cycleIndex: 0 } };
+const savedForProjection = { profile: appState.profile, monthly: appState.monthly, isSample: appState.isSample, locked: appState.locked };
+appState.isSample = false;
+appState.locked = false;
+appState.profile = { settings: { startDay: 1 }, accounts: [projectionBank, projectionCard], budgets: {}, rules: [], recurring: [], chat: [] };
+appState.monthly = {};
+for (const record of [
+  { id: 'pj1', date: '2026-11-01', type: 'expense', amount: 138000, account: 'pj-bank', category: 'housing', sub: '家賃・地代', description: '', include: true, createdAt: 500 },
+  { id: 'pj2', date: '2026-11-25', type: 'income', amount: 346000, account: 'pj-bank', category: 'salary', sub: '給与', description: '給与', include: true, createdAt: 600 },
+  { id: 'pj3', date: '2026-11-15', type: 'expense', amount: 110817, account: 'pj-card', category: 'other', sub: 'カード引き落とし（仮）', description: '仮', include: true, createdAt: 700 },
+]) {
+  placeTransaction(appState.monthly, record);
+}
+rebuildIndexes();
+same('月末の見込み: 先の日付の記録もふくめて、月の最後の日の総資産', monthEndProjection({ year: 2026, month: 11 }).amount, 176375 - 138000 + 346000 - 110817);
+same('月末の見込み: 月の最後の日', monthEndProjection({ year: 2026, month: 11 }).endDate, '2026-11-30');
+same('見込みを記録する: 今の月の見込みを記録する', recordMonthProjection('2026-11-02', 1000), true);
+same('見込みを記録する: おぼえた金額', appState.profile.projections['2026-11'].amount, 273558);
+same('見込みを記録する: おぼえた日', appState.profile.projections['2026-11'].made, '2026-11-02');
+same('見込みを記録する: おぼえた月の最後の日', appState.profile.projections['2026-11'].endDate, '2026-11-30');
+same('見込みを記録する: 同じ月はもう記録しない', recordMonthProjection('2026-11-20', 2000), false);
+// 見込みのあとにふえた記録（ずれの理由）
+for (const record of [
+  { id: 'pj4', date: '2026-11-10', type: 'expense', amount: 5000, account: 'pj-bank', category: 'food', sub: '食料品', description: 'スーパー', include: true, createdAt: 1500 },
+  { id: 'pj5', date: '2026-11-20', type: 'income', amount: 2000, account: 'pj-bank', category: 'extra', sub: '臨時収入', description: '臨時', include: true, createdAt: 1600 },
+  { id: 'pj6', date: '2026-11-21', type: 'transfer', amount: 9000, account: 'pj-bank', toAccount: 'pj-card', description: '振替', include: true, createdAt: 1700 },
+  { id: 'pj7', date: '2026-12-01', type: 'expense', amount: 138000, account: 'pj-bank', category: 'housing', sub: '家賃・地代', description: '', include: true, createdAt: 1800 },
+  { id: 'pj8', date: '2026-10-20', type: 'expense', amount: 1000, account: 'pj-bank', category: 'food', sub: '外食', description: '前の月', include: true, createdAt: 1900 },
+  { id: 'pj9', date: '2026-08-15', type: 'expense', amount: 7000, account: 'pj-bank', category: 'food', sub: '外食', description: '基準日より前', include: true, createdAt: 2000 },
+]) {
+  placeTransaction(appState.monthly, record);
+}
+rebuildIndexes();
+const addedAfter = recordsAddedAfter('2026-11-30', 1000);
+same('見込みのあとにふえた記録: 月の最後の日までの分・前の月の分も数える・振替と基準日より前は数えない（件数）', addedAfter.count, 3);
+same('見込みのあとにふえた記録: 総資産への合計', addedAfter.total, -4000);
+same('ずれ = 実際 − 見込み = 見込みのあとにふえた記録の合計', monthEndProjection({ year: 2026, month: 11 }).amount - appState.profile.projections['2026-11'].amount, addedAfter.total);
+same('ずれの理由: ずれがない', projectionGapReasonText(0, { count: 0, total: 0 }), '見込みどおりでした。');
+same('ずれの理由: ふえた記録だけ', projectionGapReasonText(-4000, addedAfter), 'ずれは、見込みのあとにふえた記録 3件（−¥4,000）のぶんです。');
+same('ずれの理由: ふえた記録と、ほかの変更', projectionGapReasonText(-6000, addedAfter), 'ずれは、見込みのあとにふえた記録 3件（−¥4,000）と、記録や口座の変更（−¥2,000）のぶんです。');
+same('ずれの理由: ふえた記録がない', projectionGapReasonText(1500, { count: 0, total: 0 }), 'ずれは、見込みのあとの記録や口座の変更（直す・消すなど）のぶんです。');
+same('文の中の金額をひとまとまりにする（−・+ もいっしょ。ほかの文字は escapeHtml を通す）', textWithWholeAmountsHtml('<b>3件（−¥5,000）と（+¥2,000）'),
+  '&lt;b&gt;3件（<span class="no-break">−¥5,000</span>）と（<span class="no-break">+¥2,000</span>）');
+appState.profile.accounts = [];
+check('見込みを記録する: 口座がまだなければ記録しない', recordMonthProjection('2026-12-01', 3000) === false);
+appState.profile = savedForProjection.profile;
+appState.monthly = savedForProjection.monthly;
+appState.isSample = savedForProjection.isSample;
+appState.locked = savedForProjection.locked;
+allTransactions = [];
+accountById = {};
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };

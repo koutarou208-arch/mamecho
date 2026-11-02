@@ -519,6 +519,7 @@ function runLedgerPatternTests() {
   const drill = startRule('家計簿: 中項目を開いたときの明細を足すと、中項目の金額');
   const balances = startRule('家計簿: 残高は、前の日の残高 + その日の入出金（どの口座・どの日でも）');
   const assetChange = startRule('家計簿: 総資産の増減の内訳を足すと、総資産の差（種類ごとでも口座ごとでも。どの期間でも）');
+  const projectionGap = startRule('家計簿: 見込みと実際のずれ = 見込みのあとにふえた記録の合計（どの月・どの日付の記録でも）');
   const noFalseAlarm = startRule('家計簿: ふつうの記録だけなら、数字の点検はまちがいを知らせない');
   const faults = startRule('家計簿: わざとまちがいを入れると、数字の点検が必ず見つける');
   const summary = startRule('家計簿: Claude 用のまとめに、口座の名前・メモが入らず、カードの合計が合う');
@@ -660,6 +661,31 @@ function runLedgerPatternTests() {
         () => label + ' ' + fromDate + '→' + toDate + ' 差 ' + netDifference + ' / 内訳 ' + partsTotal + ' / 口座 ' + accountsTotal);
     }
 
+    // 見込みと実際のずれ: 月末の見込みをおぼえたあとに記録を足すと、ずれはちょうど足した記録の合計になる
+    // 足す記録の日付は、その月の中・前の月・口座の基準日（2026-01-01）より前・次の月と、いろいろにする
+    // （月は基準日より後で試す。月末が基準日より前だと、口座の歴史がさかのぼって計算されるため。画面では「記録や口座の変更」に入る）
+    const projectionPeriod = periodOf(addDays('2026-01-15', random.int(0, 700)));
+    const projectionRange = periodRange(projectionPeriod);
+    const projectionBefore = monthEndProjection(projectionPeriod).amount;
+    const snapshotAt = 1e13; // 乱数の家計簿の記録（createdAt は小さい数）より、あとの時刻
+    const laterRecords = [];
+    const laterCount = random.int(0, 5);
+    for (let number = 0; number < laterCount; number++) {
+      laterRecords.push({
+        id: 'later' + index + '-' + number,
+        date: addDays(projectionRange.start, random.int(-120, daysBetween(projectionRange.start, projectionRange.end) + 40)),
+        type: random.pick(['expense', 'income', 'transfer', 'adjust']), amount: random.int(1, 50000) * (random.chance(0.1) ? -1 : 1),
+        account: random.pick(ledger.accounts).id, toAccount: 'L-cash', category: 'other', sub: '', description: 'あとから',
+        include: random.chance(0.9), createdAt: snapshotAt + 1 + number,
+      });
+    }
+    installLedgerForTest({ ...ledger, records: ledger.records.concat(laterRecords) });
+    const projectionAfter = monthEndProjection(projectionPeriod).amount;
+    const addedLater = recordsAddedAfter(projectionRange.last, snapshotAt);
+    recordRule(projectionGap, projectionAfter - projectionBefore === addedLater.total,
+      () => label + ' ' + projectionRange.start + '〜 ずれ ' + (projectionAfter - projectionBefore) + ' / あとから入れた記録 ' + addedLater.total);
+    installLedgerForTest(ledger);
+
     // 数字の点検: ふつうの記録だけなら、まちがいを知らせない
     const result = findNumberProblems(today);
     const falseAlarms = result.problems.filter((problem) =>
@@ -746,7 +772,7 @@ function runLedgerPatternTests() {
       }
     }
   }
-  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, assetChange, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
+  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, assetChange, projectionGap, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
     finishRule(rule);
   }
   restoreGlobalsForTest(saved);

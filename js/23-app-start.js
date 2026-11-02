@@ -283,6 +283,9 @@ function catchUpWithToday() {
     appState.period = periodOf(today);
   }
   applyRecurringRules(); // 04-state-and-storage.js
+  if (recordMonthProjection(today, Date.now())) { // 月が変わったら、その月の見込みをおぼえる（05）
+    saveProfile();
+  }
   renderApp();
 }
 

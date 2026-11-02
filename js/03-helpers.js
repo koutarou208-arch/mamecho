@@ -403,6 +403,14 @@ function shortMonthDayHtml(text) {
   return '<span class="no-break">' + formatShortDate(text) + '</span><wbr><span class="no-break">(' + weekday + ')</span>';
 }
 
+/**
+ * 文を HTML にする（escapeHtml を通す）。文の中の金額（「−¥5,000」など）は、
+ * せまい画面で折り返すときに「−」と「¥5,000」のように途中で切れないよう、ひとまとまりにする。
+ */
+function textWithWholeAmountsHtml(text) {
+  return escapeHtml(text).replace(/[+−]?¥[0-9,]+/g, (amount) => '<span class="no-break">' + amount + '</span>');
+}
+
 /** "2026-09-14" → "9/14" */
 function formatShortDate(text) {
   const date = textToDate(text);

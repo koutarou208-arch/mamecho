@@ -467,6 +467,109 @@ function assetChangeBreakdown(fromDate, toDate) {
   return { total: total, parts: parts, accounts: accountChanges, records: records.slice(0, 10) };
 }
 
+/* --- 見込みと実際のずれ（月末の総資産の見込みをおぼえておく） --- */
+
+const PROJECTION_MONTHS_KEPT = 24; // 見込みをおぼえておく月数
+
+/**
+ * ある月の「月末の総資産の見込み」をおぼえる（projections を直接変える）。記録したら true。
+ * その月ではじめての見込みだけを記録する（月のはじめの見込みと、月末の実際をくらべるため）。
+ * ただし、設定の「1か月の始まりの日」を変えて月の最後の日が変わったときは、おぼえ直す。
+ * 古い月から捨てて、PROJECTION_MONTHS_KEPT か月分だけのこす。
+ *   projection … { made: 計算した日, at: 計算した時刻（ミリ秒）, endDate: 月の最後の日, amount: 月末の総資産の見込み }
+ */
+function rememberMonthProjection(projections, monthKey, projection) {
+  const remembered = projections[monthKey];
+  if (remembered && remembered.endDate === projection.endDate) {
+    return false;
+  }
+  projections[monthKey] = projection;
+  const keys = Object.keys(projections).sort();
+  while (keys.length > PROJECTION_MONTHS_KEPT) {
+    delete projections[keys.shift()];
+  }
+  return true;
+}
+
+/** 期間の「最後の日の総資産」。先の日付の記録もふくむので、今の月なら月末の見込みになる。返す形: { endDate, amount } */
+function monthEndProjection(period) {
+  const endDate = periodRange(period).last;
+  return { endDate: endDate, amount: assetBreakdownOn(endDate).net };
+}
+
+/** 期間を "2026-11" の形の名前にする（見込みをおぼえるときの名前） */
+function periodKey(period) {
+  return period.year + '-' + pad2(period.month);
+}
+
+/**
+ * 今の月の「月末の総資産の見込み」を、まだおぼえていなければおぼえる（アプリを開いたとき・日付が変わったとき）。
+ * サンプル表示中・ロック中・口座や記録がまだないときは記録しない。おぼえたら true（保存は呼ぶ側でする）。
+ *   today … 今日の日付  now … 今の時刻（ミリ秒。あとで「見込みのあとに入れた記録」を見分けるため）
+ */
+function recordMonthProjection(today, now) {
+  if (!appState.profile || appState.isSample || appState.locked || appState.profile.accounts.length === 0 || allTransactions.length === 0) {
+    return false;
+  }
+  const period = periodOf(today);
+  const projection = monthEndProjection(period);
+  appState.profile.projections = appState.profile.projections || {};
+  return rememberMonthProjection(appState.profile.projections, periodKey(period), {
+    made: today,
+    at: now,
+    endDate: projection.endDate,
+    amount: projection.amount,
+  });
+}
+
+/**
+ * 見込みを計算したあと（at より後）にふえた記録が、lastDate の総資産をいくら動かしたか。
+ * lastDate までの日付の記録だけを数える（前の月の記録をあとから入れても、月末の総資産は変わるため）。
+ * 自動で入る記録（固定費・カードの引き落とし）もふくむ。入れたあとで直した・消した分は入らない。
+ * 返す形: { count: 件数（総資産を動かしたものだけ。振替は入らない）, total: 総資産への合計 }
+ */
+function recordsAddedAfter(lastDate, at) {
+  const effectByRecord = new Map();
+  for (const account of appState.profile.accounts) {
+    for (const transaction of transactionsOfAccount(account.id)) {
+      if (!(Number(transaction.createdAt) > at) || transaction.date > lastDate) {
+        continue;
+      }
+      if (transaction.date < account.openDate) {
+        continue; // 基準日より前の記録は「最初の残高にふくまれている」とみなすので、総資産は動かない
+      }
+      effectByRecord.set(transaction, (effectByRecord.get(transaction) || 0) + transactionEffect(transaction, account.id));
+    }
+  }
+  let count = 0;
+  let total = 0;
+  for (const effect of effectByRecord.values()) {
+    if (effect !== 0) {
+      count = count + 1;
+      total = total + effect;
+    }
+  }
+  return { count: count, total: total };
+}
+
+/**
+ * 見込みと実際のずれの理由の文（ホームの総資産。08 の assetProjectionHtml）。
+ *   gap … 実際 − 見込み   added … recordsAddedAfter の結果（見込みのあとにふえた記録）
+ */
+function projectionGapReasonText(gap, added) {
+  if (gap === 0) {
+    return '見込みどおりでした。';
+  }
+  if (added.count === 0) {
+    return 'ずれは、見込みのあとの記録や口座の変更（直す・消すなど）のぶんです。';
+  }
+  const addedText = '見込みのあとにふえた記録 ' + added.count + '件（' + formatYen(added.total, { showPlus: true }) + '）';
+  if (added.total === gap) {
+    return 'ずれは、' + addedText + 'のぶんです。';
+  }
+  return 'ずれは、' + addedText + 'と、記録や口座の変更（' + formatYen(gap - added.total, { showPlus: true }) + '）のぶんです。';
+}
+
 /**
  * 期間の中で、今日より先の日付の記録の合計（収支には入るが、「今日時点」の総資産にはまだ入らない）。
  * 返す形: { income, expense, count }

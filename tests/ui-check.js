@@ -250,6 +250,15 @@ async function buildSmallLedgerInPage() {
 function openScreenInPage(target) {
   document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
   const [name, mode] = target.split(':');
+  appState.period = periodOf(todayText()); // ふだんは今月を見る（前の画面で月を動かしていても戻す）
+  if (mode === 'past') {
+    // 先月を見る。月のはじめに見込みをおぼえていたことにして、「見込み → 実際 ずれ」と理由の行を出す（いちばん長い文になるように）
+    const previous = shiftPeriod(appState.period, -1);
+    const range = periodRange(previous);
+    appState.profile.projections = appState.profile.projections || {};
+    appState.profile.projections[periodKey(previous)] = { made: range.start, at: 0, endDate: range.last, amount: assetBreakdownOn(range.last).net - 12345678 };
+    appState.period = previous;
+  }
   if (name === 'report') {
     appState.reportType = mode === 'income' ? 'income' : 'expense';
   }
@@ -330,7 +339,7 @@ async function main() {
   const { chromium } = loadPlaywright();
   const browser = await launchBrowser(chromium);
   const problems = [];
-  const screens = ['home', 'home:change', 'transactions', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
+  const screens = ['home', 'home:change', 'home:past', 'transactions', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
   const dialogs = ['入出金（新しく）', '入出金（編集）', '口座（新しく）', 'カード（新しく）', 'カード（設定）', '通帳', 'CSV取り込み', 'ロック', 'Claude 用のまとめ'];
   let checkedViews = 0;
   let pressedButtons = 0;

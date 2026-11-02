@@ -127,9 +127,48 @@ function homeAssetCardHtml(period) {
     '<div class="card-head"><h2>総資産</h2><span class="sub">' + whenText + '</span></div>' +
     '<div class="hero-number">' + sign + '<span class="yen">¥</span>' + formatNumber(Math.abs(breakdown.net)) + '</div>' +
     '<div style="margin-block: 6px 14px">' + deltaHtml + '</div>' +
+    assetProjectionHtml(period, isFuture, breakdown.net) +
     changePanelHtml +
     '<div class="chart" id="assetTrendChart"></div>' +
     '</section>';
+}
+
+/**
+ * 総資産の見込みの行（05 の monthEndProjection・recordsAddedAfter と、おぼえた見込み profile.projections）。
+ *   今の月     … 「月末（11/30）の見込み ¥273,558」。おぼえた見込みから動いていれば、その差も出す
+ *   終わった月 … 「見込み（11/2に計算）¥273,558 → 実際 ¥268,000 ずれ −¥5,558」と、ずれの理由
+ *   先の月     … 出さない（数字そのものが見込みのため）
+ *   actual … 見ている月の最後の日の総資産
+ */
+function assetProjectionHtml(period, isFuture, actual) {
+  if (isFuture) {
+    return '';
+  }
+  const lastDate = periodRange(period).last;
+  let memo = (appState.profile.projections || {})[periodKey(period)];
+  if (memo && memo.endDate !== lastDate) {
+    memo = null; // 「1か月の始まりの日」を変える前の見込みは、月の最後の日がちがうので、くらべない
+  }
+  if (isCurrentPeriod(period)) {
+    const projection = monthEndProjection(period);
+    // 折り返すときは、ことばと金額が別の行に分かれないように、まとまりごとに span でくくる
+    let html = '<p class="projection-line"><span>月末（' + formatShortDate(projection.endDate) + '）の見込み <strong class="num no-break">' + formatYen(projection.amount) + '</strong></span>';
+    if (memo && memo.amount !== projection.amount) {
+      html += ' <span class="muted">（' + formatShortDate(memo.made) + 'の見込みから <span class="no-break">' + formatYen(projection.amount - memo.amount, { showPlus: true }) + '</span>）</span>';
+    }
+    return html + '</p>';
+  }
+  if (!memo) {
+    return ''; // この機能を使いはじめる前の月は、見込みをおぼえていない
+  }
+  const gap = actual - memo.amount;
+  const gapClass = gap > 0 ? 'up' : (gap < 0 ? 'down' : 'flat');
+  let html = '<p class="projection-line">' +
+    '<span>見込み（' + formatShortDate(memo.made) + 'に計算）<span class="no-break">' + formatYen(memo.amount) + '</span></span> ' +
+    '<span class="no-break">→ 実際 <strong class="num">' + formatYen(actual) + '</strong></span> ' +
+    '<span class="delta ' + gapClass + '">ずれ ' + (gap === 0 ? '±¥0' : formatYen(gap, { showPlus: true })) + '</span></p>';
+  const added = gap === 0 ? { count: 0, total: 0 } : recordsAddedAfter(lastDate, memo.at);
+  return html + '<p class="hint projection-note">' + textWithWholeAmountsHtml(projectionGapReasonText(gap, added)) + '</p>';
 }
 
 /**

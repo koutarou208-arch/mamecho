@@ -80,6 +80,7 @@ function createEmptyProfile() {
     rules: [],            // 自分で覚えさせた自動分類ルール
     recurring: [],        // 毎月自動で記録する固定費（家賃など）
     chat: [],             // 「Claude と話す」の会話（18-ai-features.js。最大30件）
+    projections: {},      // 月末の総資産の見込み（月ごと。05 の recordMonthProjection。月が終わったら実際とくらべる）
   };
 }
 
@@ -101,6 +102,7 @@ function normalizeProfile(raw) {
     rules: Array.isArray(profile.rules) ? profile.rules : [],
     recurring: Array.isArray(profile.recurring) ? profile.recurring : [],
     chat: Array.isArray(profile.chat) ? profile.chat : [],
+    projections: profile.projections && typeof profile.projections === 'object' && !Array.isArray(profile.projections) ? profile.projections : {},
   };
 }
 
@@ -669,6 +671,10 @@ function finishLoading() {
   renderApp();
   if (canWriteAutomatically) {
     applyRecurringRules(); // 指定日が来ている固定費を、自動で記録する
+    // 今の月の「月末の総資産の見込み」を、まだなければおぼえる（月が終わったら実際とくらべる。05）
+    if (recordMonthProjection(todayText(), Date.now())) {
+      saveProfile();
+    }
   }
 }
 
