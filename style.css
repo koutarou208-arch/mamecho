@@ -460,7 +460,7 @@ main:focus { outline: none; }
 /* 説明の「？」ボタンと、押すと出る説明（03 の tipButtonHtml・tipTextHtml）。説明はふだん隠しておき、文字を減らす */
 .tip-button {
   display: inline-grid; place-items: center; flex: none; align-self: center;
-  width: 28px; height: 28px; margin: -6px -4px; padding: 0;
+  width: 28px; height: 28px; margin: -6px 0; padding: 0; /* 横の負の余白は付けない（行のはしで、枠の外にはみ出すため） */
   border: 0; background: none; color: var(--muted); cursor: pointer;
   vertical-align: middle;
 }
