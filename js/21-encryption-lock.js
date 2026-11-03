@@ -17,7 +17,7 @@
      守れない … ・パスフレーズを忘れたとき（だれにも元に戻せません）
                 ・CSVとして書き出したファイル（暗号化されません。バックアップは、ロックがオンなら暗号化します）
                 ・画面を開いてロックを解除している間に、画面をのぞかれること
-                ・AIのふり返りを使ったとき（集計した数字だけが Claude に送られます）
+                ・「Claude と話す」を使ったとき（集計した数字と、聞かれたときはお店ごとの合計を Claude に渡します）
 
    ■ 暗号化がオフのとき
      Claude のアーティファクトとして開いた場合、データは「あなた専用の保存場所」に入り、
@@ -719,22 +719,33 @@ function wipeEncryptedData() {
    7. 設定画面の「セキュリティ」カード
    =========================================================== */
 
+/**
+ * 「？」の中に入れる、暗号化ロックのくわしい説明（守れるもの・守れないもの）。
+ * 画面には短い1行だけ出して、ここはふだん隠しておく（文字を減らすため）。
+ */
+function lockDetailText() {
+  return 'パスフレーズで家計簿のデータを暗号化します。オンにすると、保存先にあるデータは暗号文になり、パスフレーズを知っている人しか読めません' +
+    '（サービスの運営側やページの作者にも読めません）。開くたびにパスフレーズ（または Face ID）が必要で、' + AUTO_LOCK_MINUTES + '分操作しないとき、' +
+    'ホーム画面のアプリではほかのアプリに移って' + Math.round(LOCK_AFTER_LEAVING_SECONDS / 60) + '分たったときにも、自動でロックします。' +
+    'バックアップ（保存・文字でコピー）はロックがオンなら暗号化されますが、CSV の書き出しは暗号化されません。' +
+    '「Claude と話す」では、集計した数字と、聞かれたときはお店ごとの合計を Claude に渡します（メモ・口座の名前は渡しません）。';
+}
+
 function lockCardHtml() {
   let html = '<section class="card span-12">';
-  html += '<div class="card-head"><h2>セキュリティ</h2><span class="sub">暗号化ロック</span></div>';
-
-  html += '<p class="small">パスフレーズで家計簿のデータを暗号化します。オンにすると、保存先にあるデータは暗号文になり、<strong>パスフレーズを知っている人しか読めません</strong>' +
-    '（サービスの運営側やページの作者にも読めません）。開くたびにパスフレーズが必要になり、' + AUTO_LOCK_MINUTES + '分操作しないと自動でロックします。</p>';
+  html += '<div class="card-head"><h2>セキュリティ</h2>' + tipButtonHtml('tip-lock') + '<span class="sub">暗号化ロック</span>' +
+    tipTextHtml('tip-lock', lockDetailText()) + '</div>';
 
   if (!lockState.enabled) {
+    html += '<p class="small">オンにすると、<strong>パスフレーズを知っている人しか読めなく</strong>なります</p>';
     const status = biometricStatusHere();
     if (status === 'not-registered') {
-      html += '<p class="hint" style="margin-top:6px">オンにすると、続けて Face ID も登録できます（この端末で、開くときに Face ID が出ます）。</p>';
+      html += '<p class="hint" style="margin-top:4px">続けて Face ID も登録できます</p>';
     } else if (status === 'claude') {
-      html += '<p class="hint" style="margin-top:6px">' + BIOMETRIC_STATUS_HINTS.claude + '</p>';
+      html += '<p class="hint" style="margin-top:4px">' + BIOMETRIC_STATUS_HINTS.claude + '</p>';
     }
     html += '<div class="lock-form">' +
-      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上。' + RECOMMENDED_PASSPHRASE_LENGTH + '文字以上・単語を4つつなげるのがおすすめ）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
+      '<label class="field"><span>パスフレーズ（' + MIN_PASSPHRASE_LENGTH + '文字以上。単語を4つつなげるのがおすすめ）</span><input type="password" id="lockNewPassphrase" autocomplete="new-password"></label>' +
       '<label class="field"><span>もう一度</span><input type="password" id="lockNewPassphrase2" autocomplete="new-password"></label>' +
       '<button type="button" class="btn primary" id="lockEnableButton" data-action="enable-lock">暗号化ロックをオンにする</button></div>';
     html += '<p class="form-error" id="lockSetupError" role="alert"></p>';
@@ -752,14 +763,8 @@ function lockCardHtml() {
     html += biometricSectionHtml();
   }
 
-  html += '<ul class="plain-list" style="margin-top:14px">' +
-    '<li><span class="grow"><span style="white-space:normal"><strong>パスフレーズを忘れると、だれにもデータを元に戻せません。</strong></span>' +
-    '<span class="small muted" style="white-space:normal">忘れても復元する方法はありません。紙などに控えておくことをおすすめします。</span></span></li>' +
-    '<li><span class="grow"><span style="white-space:normal">書き出したCSVやバックアップのファイルは、暗号化されません。</span>' +
-    '<span class="small muted" style="white-space:normal">ファイルの保管場所に気をつけてください。</span></span></li>' +
-    '<li><span class="grow"><span style="white-space:normal">「AIのふり返り」を使ったときは、集計した数字だけが Claude に送られます。</span>' +
-    '<span class="small muted" style="white-space:normal">お店の名前やメモは送りません。使いたくなければ、ボタンを押さなければ送られません。</span></span></li>' +
-    '</ul>';
+  // いちばん大事な注意だけは、いつも見えるようにしておく（ほかの注意は「？」の中）
+  html += '<p class="small" style="margin-top:14px"><strong>パスフレーズを忘れると、だれにも元に戻せません。</strong><span class="muted">紙などに控えておいてください。</span></p>';
   html += '</section>';
   return html;
 }

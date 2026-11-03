@@ -67,9 +67,9 @@ function homeWelcomeHtml() {
   return '<section class="card span-12 home-welcome">' +
     '<div class="card-head"><h2>はじめに</h2></div>' +
     '<ol class="welcome-steps">' +
-    '<li><strong>口座を登録する</strong><span>財布・銀行・カードなどと、今の残高を入れます。</span><button class="btn small" data-action="go" data-screen="accounts">口座へ</button></li>' +
-    '<li><strong>入出金を記録する</strong><span>「記録する」（スマホは右下の＋）から。CSVでまとめて取り込むこともできます。</span><button class="btn small" data-action="open-import">CSVを取り込む</button></li>' +
-    '<li><strong>予算を決める</strong><span>カテゴリごとに月の上限を決めると、使いすぎが分かります。</span><button class="btn small" data-action="go" data-screen="budget">予算へ</button></li>' +
+    '<li><strong>口座を登録する</strong><span>財布・銀行・カードと、今の残高</span><button class="btn small" data-action="go" data-screen="accounts">口座へ</button></li>' +
+    '<li><strong>入出金を記録する</strong><span>＋ボタンから（CSVでまとめても）</span><button class="btn small" data-action="open-import">CSVを取り込む</button></li>' +
+    '<li><strong>予算を決める</strong><span>使いすぎが分かります</span><button class="btn small" data-action="go" data-screen="budget">予算へ</button></li>' +
     '</ol></section>';
 }
 
@@ -188,10 +188,12 @@ function assetChangePanelHtml(fromDate, toDate, period) {
     toText = formatShortDate(toDate) + '（見込み）';
   }
   let html = '<div class="asset-change">';
-  html += '<p class="asset-change-title">' + fromText + ' → ' + toText + ' の増減 <strong class="num">' + formatYen(change.total, { showPlus: true }) + '</strong></p>';
+  // 見出しの「？」: 振替（カードの引き落とし・口座のあいだの移動）は総資産を変えないこと
+  html += '<p class="asset-change-title">' + fromText + ' → ' + toText + ' の増減 <strong class="num">' + formatYen(change.total, { showPlus: true }) + '</strong>' +
+    tipButtonHtml('tip-asset-transfer') + '</p>' +
+    tipTextHtml('tip-asset-transfer', '振替（カードの引き落とし・口座のあいだの移動）は、お金が口座のあいだを動くだけなので、総資産は変わりません。');
   if (isFuture) {
-    html += '<p class="hint" style="margin-bottom:6px">先の月の総資産は、今日までに入れてある予定（給料・家賃・カードの「仮」など）だけで計算した見込みです。' +
-      'まだ入れていない支出（現金や銀行から払う生活費、カードの新しい買い物など）があると、そのぶん少なくなります。</p>';
+    html += '<p class="hint" style="margin-bottom:6px">入れてある予定だけの見込みです（まだ入れていない支出のぶん、少なくなります）</p>';
   }
   if (change.parts.length === 0) {
     html += '<p class="small muted">この間に、総資産を動かす記録はありません。</p>';
@@ -208,7 +210,7 @@ function assetChangePanelHtml(fromDate, toDate, period) {
   }
   if (change.records.length > 0) {
     // 入出金の一覧と同じ形で出す（内容が空でも、カテゴリ・中項目・口座で何のお金か分かるように。09 の transactionRowHtml）
-    html += '<p class="asset-change-head">大きく動いた記録（押すと開いて直せます）</p><div class="tx-list">';
+    html += '<p class="asset-change-head">大きく動いた記録</p><div class="tx-list">';
     for (const item of change.records) {
       html += transactionRowHtml(item.transaction, { showDate: true });
     }
@@ -218,18 +220,17 @@ function assetChangePanelHtml(fromDate, toDate, period) {
   const cardWords = cardPaymentWords();
   const paymentLike = change.records.filter((item) => looksLikeCardPaymentFromBank(item.transaction, cardWords));
   if (paymentLike.length > 0) {
-    html += '<div class="confirm-box" style="margin-top:10px"><p>「' + escapeHtml(paymentLike[0].transaction.description || '（内容なし）') + '」のように、' +
-      'カードの引き落としを「支出」で入れた記録があるかもしれません。カードで買ったもの（明細や「仮」）と両方を数えると、総資産が実際より少なく見えます。</p>' +
+    html += '<div class="confirm-box" style="margin-top:10px"><p>「' + escapeHtml(paymentLike[0].transaction.description || '（内容なし）') + '」は、' +
+      'カードの引き落としを「支出」で入れたかもしれません（カードの買い物と二重に減って見えます）</p>' +
       '<div class="row-gap"><button type="button" class="btn small" data-action="go-number-check">数字の点検で確かめる</button></div></div>';
   }
   if (isCurrentPeriod(period)) {
     const future = futureCountedTotals(periodRange(period), todayText());
     if (future.count > 0) {
-      html += '<p class="hint" style="margin-top:10px">今月の記録のうち、今日より先の日付のもの（' + future.count + '件: 収入 ' + formatYen(future.income) +
-        '・支出 ' + formatYen(future.expense) + '）は、その日になると総資産に入ります。今月の「収支」には、もう入っています。</p>';
+      html += '<p class="hint" style="margin-top:10px">先の日付の記録 ' + future.count + '件（収入 ' + formatYen(future.income) +
+        '・支出 ' + formatYen(future.expense) + '）は、その日に総資産に入ります</p>';
     }
   }
-  html += '<p class="hint" style="margin-top:6px">振替（カードの引き落とし・口座のあいだの移動）は、お金が口座のあいだを動くだけなので、総資産は変わりません。</p>';
   html += '</div>';
   return html;
 }
@@ -256,7 +257,8 @@ function homeMonthCardHtml(period) {
   const isCurrent = isCurrentPeriod(period);
 
   let html = '<section class="card span-7 home-month">';
-  html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の収支</h2><span class="sub">' + periodRangeText(period) + '</span>' +
+  // 期間（11/1〜11/30）は画面の上の月の下に出ているので、ここには書かない
+  html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の収支</h2>' +
     '<span class="row-gap" style="margin-left:auto; gap:4px">' +
     '<button class="link-btn" data-action="go-chat">Claude に聞く</button>' +
     '<button class="link-btn" data-action="go" data-screen="report">家計簿を見る</button></span></div>';
@@ -300,7 +302,7 @@ function homeMonthCardHtml(period) {
       const range = periodRange(period);
       const daysLeft = daysBetween(todayText(), range.end);
       if (remaining >= 0) {
-        html += '<p class="small" style="margin-top:10px">残り' + daysLeft + '日 · 1日あたり <strong class="num">' + formatYen(Math.floor(remaining / Math.max(1, daysLeft))) + '</strong> まで使えます</p>';
+        html += '<p class="small" style="margin-top:10px">1日あたり <strong class="num">' + formatYen(Math.floor(remaining / Math.max(1, daysLeft))) + '</strong> まで<span class="muted"> · あと' + daysLeft + '日</span></p>';
       } else {
         html += '<p class="small" style="margin-top:10px">予算を <strong class="num">' + formatYen(-remaining) + '</strong> 超えています</p>';
       }
@@ -311,13 +313,7 @@ function homeMonthCardHtml(period) {
     html += '<p class="small muted">予算を決めると、使いすぎていないかがここに出ます。 <button class="link-btn" data-action="go" data-screen="budget">予算を決める</button></p>';
   }
 
-  // --- 貯金目標 ---
-  const goal = Number(appState.profile.settings.savingsGoal) || 0;
-  if (goal > 0) {
-    const left = goal - balance;
-    html += '<p class="small" style="margin-top:6px">貯金目標 ' + formatYen(goal) + ' · ' +
-      (left <= 0 ? '<span class="status-chip good">' + iconSvg('check') + '達成</span>' : 'あと <strong class="num">' + formatYen(left) + '</strong>') + '</p>';
-  }
+  // 貯金目標の「あと いくら」は、すぐ下の「株の利益の安心ライン」のカードに出ているので、ここには書かない
 
   // --- 先月の同じ時期との比較 ---
   if (isCurrent) {
@@ -329,7 +325,7 @@ function homeMonthCardHtml(period) {
     const difference = summary.spending - previousSoFar.spending;
     if (previousSoFar.spending > 0) {
       const word = difference <= 0 ? '少ない' : '多い';
-      html += '<p class="small muted" style="margin-top:6px">先月の同じ時期より支出が ' + formatYen(Math.abs(difference)) + ' ' + word + 'ペースです</p>';
+      html += '<p class="small muted" style="margin-top:6px">支出は先月の今ごろより ' + formatYen(Math.abs(difference)) + ' ' + word + '</p>';
     }
   }
 
@@ -396,8 +392,8 @@ function homeTradeSafetyCardHtml(period) {
   let html = '<section class="card span-12 safety-card' + (salaryRule.out ? ' safety-out' : '') + '">';
   html += '<div class="card-head"><h2>株の利益の安心ライン</h2>' + chip + '</div>';
   html += '<div class="row-gap" style="margin-bottom:10px">' +
-    '<button type="button" class="btn small primary" data-action="new-trade" data-kind="gain" data-icon="plus">株の利益を記録</button>' +
-    '<button type="button" class="btn small" data-action="new-trade" data-kind="loss" data-icon="plus">株の損失を記録</button></div>';
+    '<button type="button" class="btn small primary" data-action="new-trade" data-kind="gain" data-icon="plus">利益を記録</button>' +
+    '<button type="button" class="btn small" data-action="new-trade" data-kind="loss" data-icon="plus">損失を記録</button></div>';
   html += '<p class="safety-headline">' + headline + '</p>';
   html += '<p class="small muted">安心ライン: ' + lineName + '</p>';
   // ここから下（説明・メーター・数字・グラフ）は「くわしく」にたたむ。アウトのときは最初から開く
@@ -515,11 +511,11 @@ function homeSpendingCardHtml(period) {
 
 
 /* -----------------------------------------------------------
-   最近の入出金（今日までの新しいもの8件）
+   最近の入出金（今日までの新しいもの5件。ぜんぶは「すべて見る」で）
    ----------------------------------------------------------- */
 function homeRecentCardHtml() {
   const today = todayText();
-  const recent = allTransactions.filter((item) => item.date <= today).slice(0, 8);
+  const recent = allTransactions.filter((item) => item.date <= today).slice(0, 5);
   const span = cardAccounts().length > 0 ? 'span-5' : 'span-12';
   let html = '<section class="card home-recent ' + span + '">';
   html += '<div class="card-head"><h2>最近の入出金</h2><button class="link-btn" data-action="go" data-screen="transactions">すべて見る</button></div>';

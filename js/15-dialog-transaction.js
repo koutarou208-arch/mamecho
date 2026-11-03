@@ -225,7 +225,7 @@ function currentDialogType() {
 const TYPE_HINTS = {
   expense: 'お金を使ったとき（買い物・支払い）',
   income: 'お金が入ったとき（給料・おこづかい・返金）',
-  transfer: '自分の口座どうしでお金を動かしたとき（銀行から財布へ・チャージなど）。使ったお金には入りません',
+  transfer: '自分の口座どうしでお金を動かしたとき（チャージなど。支出には入りません）',
   adjust: '口座の残高が、本当の残高とずれていたときに合わせる記録です',
 };
 
@@ -239,11 +239,8 @@ function applyTypeToDialog(type) {
   const accountLabels = { expense: '支払元', income: '入金先', transfer: 'どこから（振替元）', adjust: '口座' };
   findOne('#fromAccountLabel').textContent = accountLabels[type];
 
-  if (type === 'adjust') {
-    findOne('#amountHint').textContent = '増えた分はプラス、減った分はマイナス';
-  } else {
-    findOne('#amountHint').textContent = '「1200+380」のような計算もOK';
-  }
+  // 金額の下の小さな説明は、残高修正のときだけ（ふだんは、計算式を入れたときの答えだけを出す。updateAmountHint）
+  findOne('#amountHint').textContent = type === 'adjust' ? '増えた分はプラス、減った分はマイナス' : '';
   updatePaymentFieldsVisibility();
 }
 
@@ -286,7 +283,7 @@ function updateAmountHint() {
     const value = calculateAmount(text);
     hint.textContent = Number.isNaN(value) || value === null ? '計算できません' : '= ' + formatYen(value);
   } else if (currentDialogType() !== 'adjust') {
-    hint.textContent = '「1200+380」のような計算もOK';
+    hint.textContent = ''; // 「1200+380」のような計算もできる（式を入れたときだけ答えを出す）
   }
   updatePaymentPreview();
 }

@@ -19,14 +19,16 @@ const AccountsScreen = {
 
     // --- まとめ ---
     html += '<section class="card span-12">';
-    html += '<div class="card-head"><h2>すべての口座</h2><span class="sub">今の残高</span>' +
-      '<button type="button" class="btn small primary" style="margin-left:auto" data-action="add-account" data-icon="plus">口座を追加</button></div>';
+    // 資産・負債・純資産のことばの説明は「？」の中
+    html += '<div class="card-head"><h2>すべての口座</h2>' + tipButtonHtml('tip-net-worth') + '<span class="sub">今の残高</span>' +
+      '<button type="button" class="btn small primary" style="margin-left:auto" data-action="add-account" data-icon="plus">口座を追加</button>' +
+      tipTextHtml('tip-net-worth', '資産＝持っているお金。負債＝カードの未払いやローンなど、これから払うお金。純資産＝資産から負債を引いた、本当の手持ち。') +
+      '</div>';
     html += '<div class="stats">' +
       '<div class="stat"><span class="label">資産</span><span class="value num">' + formatYen(breakdown.assets) + '</span></div>' +
       '<div class="stat"><span class="label">負債</span><span class="value num">' + formatYen(breakdown.debts) + '</span></div>' +
       '<div class="stat"><span class="label">純資産</span><span class="value num total">' + formatYen(breakdown.net) + '</span></div>' +
       '</div>' +
-      '<p class="hint" style="margin-top:8px">資産＝持っているお金。負債＝カードの未払いやローンなど、これから払うお金。純資産＝資産から負債を引いた、本当の手持ち。</p>' +
       '</section>';
 
     // --- 種類ごと ---

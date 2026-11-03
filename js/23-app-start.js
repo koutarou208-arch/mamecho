@@ -189,15 +189,16 @@ function renderBanner() {
   const showRuleAlerts = appState.screen === 'home' || appState.screen === 'cards';
   let alertsHtml = biometricOfferHtml() + (showRuleAlerts ? rulesAlertsHtml() : '');
   // 別のタブ・ウィンドウで家計簿が変わったとき（04-state-and-storage.js）: 上書きしないよう、読み込み直しをすすめる
+  // 帯は短く（1つ目の行に言いたいこと、2つ目の行に小さく補足）。くわしい説明は書かない
   if (browserStore.changedElsewhere) {
-    alertsHtml = '<div class="banner"><p><strong>別のタブ（ウィンドウ）で家計簿が変わりました。</strong>こちらで入れた内容で上書きしないよう、保存を止めています。読み込み直すと最新になります。</p>' +
+    alertsHtml = '<div class="banner banner-slim"><p><strong>別のタブで家計簿が変わりました</strong><span class="small muted">上書きしないよう、保存を止めています</span></p>' +
       '<button type="button" class="btn primary small" data-action="reload-app">読み込み直す</button></div>' + alertsHtml;
   }
   if (appState.isSample) {
-    banner.innerHTML = '<div class="banner"><p><strong>サンプルの家計簿を表示しています。</strong>架空の1年分のデータです。さわってみても保存はされません。</p>' +
+    banner.innerHTML = '<div class="banner banner-slim"><p><strong>サンプル表示中</strong><span class="small muted">さわっても保存されません</span></p>' +
       '<button type="button" class="btn primary small" data-action="start-own">自分の家計簿をはじめる</button></div>' + alertsHtml;
   } else if (appState.storageMode === 'memory') {
-    banner.innerHTML = '<div class="banner"><p><strong>この環境では保存できません。</strong>ページを閉じると記録が消えます。設定からバックアップを保存できます。</p></div>' + alertsHtml;
+    banner.innerHTML = '<div class="banner banner-slim"><p><strong>この環境では保存できません</strong><span class="small muted">閉じると記録が消えます（設定からバックアップできます）</span></p></div>' + alertsHtml;
   } else {
     banner.innerHTML = alertsHtml;
   }
@@ -411,6 +412,7 @@ const ACTIONS = {
   },
   'start-own': () => startOwnLedger(),
   'reload-app': () => location.reload(),
+  'toggle-tip': (button) => toggleTip(button), // 説明の「？」（03-helpers.js）
 
   // --- 入出金 ---
   'new-trade': (button) => {

@@ -59,6 +59,34 @@ function confirmBoxHtml(message, yesLabel, yesAction, noAction, options) {
     '</div></' + tag + '>';
 }
 
+/**
+ * 説明の「？」ボタン（押したときだけ説明が出る。画面の文字を減らすため。説明は tipTextHtml で置く）。
+ *   tipId … 画面の中で重ならない名前（例: 'tip-bill-state'）。説明の文と同じ名前にする
+ * 押されたときの動きは 23-app-start.js の ACTIONS['toggle-tip']（描き直すと、また閉じる）。
+ */
+function tipButtonHtml(tipId) {
+  return '<button type="button" class="tip-button" data-action="toggle-tip" data-tip="' + escapeHtml(tipId) + '"' +
+    ' aria-expanded="false" aria-controls="' + escapeHtml(tipId) + '" aria-label="説明を見る"></button>';
+}
+
+/**
+ * 「？」で開く説明の文（はじめは隠れている）。text は escapeHtml を通して入れる。
+ * 見出しの行（.card-head など、横にならぶ所）に置くと、行のいちばん下に横いっぱいで出る（style.css の .tip-text）。
+ */
+function tipTextHtml(tipId, text) {
+  return '<p class="tip-text" id="' + escapeHtml(tipId) + '" hidden>' + escapeHtml(text) + '</p>';
+}
+
+/** 「？」ボタンが押されたとき: 説明を出す・しまう */
+function toggleTip(button) {
+  const tip = document.getElementById(button.dataset.tip);
+  if (!tip) {
+    return;
+  }
+  tip.hidden = !tip.hidden;
+  button.setAttribute('aria-expanded', tip.hidden ? 'false' : 'true');
+}
+
 /** だれとも重ならない番号（ID）を作る。入出金や口座に1つずつ付ける */
 function makeId() {
   const timePart = Date.now().toString(36);

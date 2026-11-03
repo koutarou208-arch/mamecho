@@ -280,6 +280,10 @@ function openScreenInPage(target) {
   document.querySelectorAll('#screen details').forEach((details) => {
     details.open = true;
   });
+  // 「？」の説明も全部開いて、開いたときにはみ出さないかを確かめる
+  document.querySelectorAll('#screen .tip-text, #banner .tip-text').forEach((tip) => {
+    tip.hidden = false;
+  });
 }
 
 /** ダイアログを開く */

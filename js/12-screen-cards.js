@@ -37,10 +37,11 @@ const CardsScreen = {
     }
     // カードは何枚でも登録できる（1枚ごとに締め日・支払日・支払い方法を持つ）
     if (cards.length > 0) {
+      // 1行にまとめる: 次の引き落としの合計（2枚以上のとき）・数字の点検・カードを追加
       html += '<div class="span-12 row-gap" style="justify-content:space-between; align-items:center">' +
-        '<span class="small muted">' + cards.length + '枚のカード' + (cards.length > 1 ? ' · 次の引き落とし合計 ' + formatYen(nextBillsTotal(cards)) : '') + '</span>' +
-        '<button type="button" class="btn small primary" data-action="add-account" data-kind="card" data-icon="plus">カードを追加</button></div>' +
-        '<p class="span-12 small muted">金額が多すぎる・少なすぎると思ったら <button type="button" class="link-btn" data-action="go-number-check">数字の点検</button></p>';
+        '<span class="small muted">' + (cards.length > 1 ? '次の引き落とし合計 <strong class="num">' + formatYen(nextBillsTotal(cards)) + '</strong>' : '') + '</span>' +
+        '<span class="row-gap" style="gap:4px"><button type="button" class="link-btn" data-action="go-number-check">数字の点検</button>' +
+        '<button type="button" class="btn small primary" data-action="add-account" data-kind="card" data-icon="plus">カードを追加</button></span></div>';
     }
     for (const card of cards) {
       html += cardPanelHtml(card);
@@ -103,18 +104,19 @@ function cardPanelHtml(account) {
     html += '<button type="button" class="stat stat-link" data-action="open-next-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '" aria-label="次の引き落としの中身を見る・直す">' +
       '<span class="label">次の引き落とし <span class="no-break">' + monthDayHtml(bill.payDate) + '</span></span>' +
       '<span class="value num">' + formatYen(bill.total) + iconSvg('chevron-right') + '</span>' +
-      '<span class="small muted">' + (confirmed ? '請求確定' : formatShortDate(bill.closeDate) + 'の締めまで増えます') + (bill.fee > 0 ? ' · うち手数料 ' + formatYen(bill.fee) : '') + ' · 押すと直せます</span></button>';
+      '<span class="small muted">' + (confirmed ? '確定' : formatShortDate(bill.closeDate) + 'の締めまで増えます') + (bill.fee > 0 ? ' · 手数料 ' + formatYen(bill.fee) : '') + '</span></button>';
   } else {
     html += '<div class="stat"><span class="label">次の引き落とし</span><span class="value num">¥0</span><span class="small muted">予定はありません</span></div>';
   }
 
   if (summary.payFromAccount) {
-    const chip = summary.nextBill ? (summary.isShort ? statusChipHtml('over', '残高不足') : statusChipHtml('good', '足りています')) : '';
+    // 足りているときは何も書かない。足りないときだけ札を出す
+    const chip = summary.nextBill && summary.isShort ? '<span class="small">' + statusChipHtml('over', '残高不足') + '</span>' : '';
     html += '<div class="stat"><span class="label">引き落とし口座: ' + escapeHtml(summary.payFromAccount.name) + '</span>' +
-      '<span class="value num">' + formatYen(summary.payFromBalance) + '</span><span class="small">' + chip + '</span></div>';
+      '<span class="value num">' + formatYen(summary.payFromBalance) + '</span>' + chip + '</div>';
   } else {
     html += '<div class="stat"><span class="label">引き落とし口座</span><span class="value" style="font-size:14px">未設定</span>' +
-      '<button type="button" class="link-btn" style="padding-left:0; text-align:left" data-action="edit-account" data-id="' + escapeHtml(account.id) + '">設定すると残高不足をお知らせします</button></div>';
+      '<button type="button" class="link-btn" style="padding-left:0; text-align:left" data-action="edit-account" data-id="' + escapeHtml(account.id) + '">設定する（残高不足を知らせます）</button></div>';
   }
 
   if (summary.available !== null) {
@@ -129,7 +131,7 @@ function cardPanelHtml(account) {
   // --- 支払日を過ぎたのに記録されていない請求 ---
   if (summary.overdueBills.length > 0) {
     html += '<div class="confirm-box" style="margin-top:14px; border-color:var(--warn); background:color-mix(in oklab, var(--warn) 10%, var(--surface))">' +
-      '<p>' + statusChipHtml('warn', '未記録') + ' 支払日を過ぎた請求が' + summary.overdueBills.length + '件あります。引き落とされていたら「記録する」を押してください。</p><div class="row-gap">';
+      '<p>' + statusChipHtml('warn', '未記録') + ' 支払日を過ぎた請求が' + summary.overdueBills.length + '件（引き落とされていたら記録してください）</p><div class="row-gap">';
     for (const bill of summary.overdueBills.slice(-3)) {
       html += '<button type="button" class="btn small" data-action="record-bill" data-id="' + escapeHtml(account.id) + '" data-month="' + bill.month + '">' +
         formatMonthDay(bill.payDate) + ' ' + formatYen(bill.total) + ' を記録する</button>';
@@ -139,46 +141,62 @@ function cardPanelHtml(account) {
 
   // --- 残高の内訳（分割・リボ・ボーナス・スキップ） ---
   const remaining = summary.remaining;
+  // 1行に「残り 分割 ¥… · リボ ¥…」の形でまとめる（ことばをくり返さない）
   if (remaining.installment + remaining.revolving + remaining.bonus + remaining.skip + remaining.manual > 0) {
-    html += '<div class="remaining-row">';
+    html += '<div class="remaining-row"><span class="muted">払い方ごとの残り</span>';
     if (remaining.installment > 0) {
-      html += '<span>分割払いの残り <strong class="num">' + formatYen(remaining.installment) + '</strong></span>';
+      html += '<span>分割 <strong class="num">' + formatYen(remaining.installment) + '</strong></span>';
     }
     if (remaining.revolving > 0) {
-      html += '<span>リボ払いの残り <strong class="num">' + formatYen(remaining.revolving) + '</strong></span>';
+      html += '<span>リボ <strong class="num">' + formatYen(remaining.revolving) + '</strong></span>';
     }
     if (remaining.bonus > 0) {
-      html += '<span>ボーナス払いの残り <strong class="num">' + formatYen(remaining.bonus) + '</strong></span>';
+      html += '<span>ボーナス <strong class="num">' + formatYen(remaining.bonus) + '</strong></span>';
     }
     if (remaining.skip > 0) {
-      html += '<span>スキップ払いの残り <strong class="num">' + formatYen(remaining.skip) + '</strong></span>';
+      html += '<span>スキップ <strong class="num">' + formatYen(remaining.skip) + '</strong></span>';
     }
     if (remaining.manual > 0) {
-      html += '<span>手入力の支払い予定 <strong class="num">' + formatYen(remaining.manual) + '</strong></span>';
+      html += '<span>手入力 <strong class="num">' + formatYen(remaining.manual) + '</strong></span>';
     }
     html += '</div>';
   }
 
   // --- 月ごとの支払い予定のグラフ（負債がいつ・どれだけ減っていくか） ---
   html += '<hr class="divider">';
-  html += '<div class="card-head" style="margin-bottom:4px"><h2>これから払う金額（月別）</h2><span class="sub">これから払う負債の合計 ' + formatYen(summary.remaining.total) + '</span></div>';
+  html += '<div class="card-head" style="margin-bottom:4px"><h2>これから払う金額</h2><span class="sub">合計 ' + formatYen(summary.remaining.total) + '</span></div>';
   html += '<div class="legend"><span><i class="key" style="background:var(--chart-1)"></i>元金</span><span><i class="key" style="background:var(--chart-2)"></i>手数料</span></div>';
   html += '<div class="chart" data-debt-chart="' + escapeHtml(account.id) + '"></div>';
   html += manualBillFormHtml(account, settings);
 
   // --- これからの請求の一覧 ---
   html += '<hr class="divider">';
-  html += '<div class="card-head" style="margin-bottom:4px"><h2>これからの請求</h2></div>';
-  html += '<p class="hint" style="margin-bottom:6px">確定＝締め日を過ぎて金額が決まった請求。未確定＝これから使う分で、まだ増えることがある請求。</p>';
+  // 確定・未確定のことばの説明は「？」の中
+  const stateTipId = 'tip-bill-state-' + account.id;
+  html += '<div class="card-head" style="margin-bottom:4px"><h2>これからの請求</h2>' + tipButtonHtml(stateTipId) +
+    tipTextHtml(stateTipId, '確定＝締め日を過ぎて金額が決まった請求。未確定＝これから使う分で、まだ増えることがある請求。行を押すと、中身（1件ずつ）が開きます。') + '</div>';
   if (summary.upcomingBills.length === 0) {
     html += '<p class="small muted">これからの請求はありません。</p>';
   } else {
+    // 近い4回分だけ出して、そのあとは「そのあと n回分」にたたむ（グラフでも見られるので）
+    const upcoming = summary.upcomingBills.slice(0, 12);
+    const firstCount = 4;
     html += '<div class="bill-table">';
     html += '<div class="bill-row bill-head"><span>引き落とし日</span><span>状態</span><span>元金</span><span>手数料</span><span>合計</span></div>';
-    for (const bill of summary.upcomingBills.slice(0, 12)) {
+    for (const bill of upcoming.slice(0, firstCount)) {
       html += billRowHtml(account, bill, today);
     }
     html += '</div>';
+    const later = upcoming.slice(firstCount);
+    if (later.length > 0) {
+      // 中の月を開いていたら（明細を直して描き直したときなど）、たたんだ所も開いておく
+      const isLaterOpen = later.some((bill) => openBillKeys.has(account.id + '|' + bill.month));
+      html += '<details class="more"' + (isLaterOpen ? ' open' : '') + '><summary>そのあと ' + later.length + '回分</summary><div class="bill-table" style="margin-top:4px">';
+      for (const bill of later) {
+        html += billRowHtml(account, bill, today);
+      }
+      html += '</div></details>';
+    }
   }
 
   // --- 過去の請求（直近3回） ---
@@ -191,10 +209,10 @@ function cardPanelHtml(account) {
     html += '</div></details>';
   }
 
-  // --- カード会社の補足 ---
-  html += '<p class="hint" style="margin-top:12px">' + escapeHtml(settings.company.notes) +
-    '（確からしさ: ' + CONFIDENCE_LABELS[settings.company.confidence] + ' · ' + settings.company.checkedAt + ' 確認）' +
-    ' 手数料の率（いま）: ' + escapeHtml(currentRateText(settings, todayText())) + '。カードの設定から変更できます。</p>';
+  // --- カード会社の補足（長いので、ふだんはたたむ） ---
+  html += '<details class="more"><summary>手数料の率とカード会社の決まり</summary><p class="hint" style="margin-top:8px">' +
+    '手数料の率（いま）: ' + escapeHtml(currentRateText(settings, todayText())) + '。' + escapeHtml(settings.company.notes) +
+    '（確からしさ: ' + CONFIDENCE_LABELS[settings.company.confidence] + ' · ' + settings.company.checkedAt + ' 確認）カードの設定から変更できます。</p></details>';
   html += '</section>';
   return html;
 }
@@ -287,7 +305,7 @@ function openNextBill(accountId, month) {
 
 /** 支払い方法のしくみ（勉強用の説明） */
 function paymentMethodGuideHtml() {
-  let html = '<section class="card span-12"><details><summary class="card-head" style="cursor:pointer; margin:0"><h2>支払い方法のしくみ（読みもの）</h2><span class="sub">分割・リボ・スキップ払いの違い</span></summary>';
+  let html = '<section class="card span-12"><details><summary class="card-head" style="cursor:pointer; margin:0"><h2>支払い方法のしくみ</h2><span class="sub">分割・リボ・スキップの違い</span></summary>';
   html += '<ul class="plain-list" style="margin-top:8px">';
   for (const methodId of Object.keys(PAYMENT_METHODS)) {
     const method = PAYMENT_METHODS[methodId];

@@ -162,7 +162,7 @@
           <span aria-hidden="true">¥</span>
           <input id="transactionAmount" inputmode="decimal" autocomplete="off" placeholder="0">
         </div>
-        <small class="hint" id="amountHint">「1200+380」のような計算もOK</small>
+        <small class="hint" id="amountHint"></small>
       </label>
 
       <div class="field-row">
@@ -226,7 +226,7 @@
 
       <label class="check" id="includeField">
         <input type="checkbox" id="transactionInclude" checked>
-        <span>家計簿の収支に入れる（友だちの分を立て替えたときなど、自分のお金でないときはチェックを外す）</span>
+        <span>家計簿の収支に入れる <span class="hint">立て替えなど、自分のお金でないときは外す</span></span>
       </label>
 
       <p class="form-error" id="transactionError" role="alert"></p>
@@ -347,7 +347,8 @@
             <small class="hint">空欄にすると、カード会社の標準の値（目安）を使います。</small>
           </div>
         </details>
-        <p class="hint" id="cardCompanyNote"></p>
+        <!-- カード会社の決まり（長いので、押したときだけ出す。中身は 16-dialog-account.js が入れる） -->
+        <details class="more"><summary>このカード会社の決まり</summary><p class="hint" id="cardCompanyNote" style="margin-top:6px"></p></details>
       </fieldset>
 
       <small class="hint" id="accountBalanceHint">基準日の時点の残高</small>

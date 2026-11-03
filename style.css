@@ -290,6 +290,10 @@ main:focus { outline: none; }
 }
 .banner p { flex: 1 1 280px; min-width: 0; }
 .banner strong { font-weight: 600; }
+/* 短い帯（サンプル表示中など）: 1行目に言いたいこと、2行目に小さな補足。ボタンは右に */
+.banner-slim { padding: 8px 12px; gap: 8px 12px; }
+.banner-slim p { flex: 1 1 140px; display: grid; line-height: 1.45; } /* せまい画面では、ボタンが下の行に回る */
+.banner-slim .btn { flex: none; }
 
 /* スマホ用の下のタブ */
 .tabbar { display: none; }
@@ -453,6 +457,29 @@ main:focus { outline: none; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .hint { font-size: 12px; color: var(--muted); }
+/* 説明の「？」ボタンと、押すと出る説明（03 の tipButtonHtml・tipTextHtml）。説明はふだん隠しておき、文字を減らす */
+.tip-button {
+  display: inline-grid; place-items: center; flex: none; align-self: center;
+  width: 28px; height: 28px; margin: -6px -4px; padding: 0;
+  border: 0; background: none; color: var(--muted); cursor: pointer;
+  vertical-align: middle;
+}
+.tip-button::before {
+  content: "?"; display: grid; place-items: center;
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-size: 11px; font-weight: 700; line-height: 1;
+}
+.tip-button:hover { color: var(--ink-2); }
+.tip-button[aria-expanded="true"] { color: var(--accent); }
+.tip-text {
+  flex: 1 0 100%; /* 見出しの行（横にならぶ所）の中では、次の行に横いっぱいで出る */
+  margin: 6px 0 4px; padding: 8px 10px;
+  border-radius: var(--radius-small);
+  background: var(--surface-2);
+  font-size: 12px; font-weight: 400; line-height: 1.6; letter-spacing: normal;
+  color: var(--ink-2); white-space: normal; text-align: left;
+}
 .income-text { color: var(--income-text); }
 .empty-note {
   padding: 24px 8px;
@@ -523,7 +550,8 @@ main:focus { outline: none; }
    札が入りきらないときは、次の行に送る（金額に重ならないように） */
 .tx-desc { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; font-weight: 500; white-space: nowrap; }
 .tx-desc-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.tx-desc .tag { flex: none; margin-left: 0; }
+/* 札が1行分の幅より長いとき（せまい画面の「なぜ？」の中など）は、札の中で折り返す（切らない・はみ出さない） */
+.tx-desc .tag { flex: none; margin-left: 0; max-width: 100%; white-space: normal; }
 .tx-meta { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tx-amount { font-weight: 600; text-align: right; }
 .tx-amount.income { color: var(--income-text); }
@@ -864,6 +892,8 @@ input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }
 input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select { min-height: 46px; }
 .field { display: grid; gap: 6px; min-width: 0; }
 .field > span { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.field > small:empty { display: none; } /* 中身のない説明（金額の欄の下など）は、すき間もとらない */
+.field > span .hint, .check .hint { font-weight: 400; } /* 見出しのとなりの小さな補足 */
 .field-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .check { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); cursor: pointer; }
 .amount-input { position: relative; }
@@ -1122,6 +1152,8 @@ dialog::backdrop { background: rgba(8, 18, 13, 0.45); }
 /* 制度変更のお知らせ */
 .banner.notice { border-style: solid; border-color: var(--warn); background: color-mix(in oklab, var(--warn) 12%, var(--surface)); align-items: flex-start; }
 .banner.notice .notice-body { flex: 1 1 280px; min-width: 0; display: grid; gap: 8px; }
+.notice-item > summary { cursor: pointer; list-style-position: outside; margin-left: 14px; }
+.notice-item > p { margin: 6px 0 0 14px; }
 .banner.notice .notice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .banner.notice a { color: var(--accent); font-weight: 600; }
 .banner + .banner { margin-top: -4px; }

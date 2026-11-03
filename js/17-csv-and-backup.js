@@ -215,9 +215,9 @@ async function backupForExport() {
 /** 設定画面に出す、バックアップの安全の説明 */
 function backupSafetyText() {
   if (lockState.enabled) {
-    return 'バックアップ（保存・文字でコピー）は、パスフレーズで暗号化します。戻すときにパスフレーズが要ります。CSV の書き出しは暗号化されません。';
+    return 'バックアップはパスフレーズで暗号化します（CSV の書き出しは暗号化されません）';
   }
-  return '暗号化ロックがオフなので、バックアップは暗号化されません。人に見られない場所に保存してください。';
+  return 'ロックがオフなので、バックアップは暗号化されません（人に見られない場所に保存してください）';
 }
 
 /** 暗号化したバックアップか */
@@ -437,8 +437,8 @@ async function showBackupText() {
   }
   findOne('#textDialogTitle').textContent = 'バックアップの文字';
   findOne('#textDialogHint').textContent = isEncryptedBackup(backup)
-    ? '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。パスフレーズで暗号化してあるので、戻すときにパスフレーズが要ります。'
-    : '「コピーする」を押して、別のスマホやアプリ版の「貼り付けて戻す」に貼り付けます。家計簿の中身がそのまま入っているので、人には見せないでください（暗号化ロックをオンにすると、暗号化されます）。';
+    ? 'コピーして、別のスマホやアプリ版の「貼り付けて戻す」に貼ります（暗号化ずみ。戻すときにパスフレーズが要ります）'
+    : 'コピーして、別のスマホやアプリ版の「貼り付けて戻す」に貼ります。家計簿の中身がそのまま入っているので、人には見せないでください';
   findOne('#textDialogContent').value = backupToText(backup);
   findOne('#textDialogContent').readOnly = true;
   findOne('#textDialog').showModal();
@@ -637,9 +637,9 @@ function renderImport() {
   const body = findOne('#importBody');
   if (importState.step === 'choose') {
     body.innerHTML =
-      '<p>銀行やカード会社のサイトからダウンロードした明細のCSVファイルを選んでください。</p>' +
+      '<p>銀行やカード会社のサイトで保存した、明細のCSVを選んでください</p>' +
       '<label class="field"><span>CSVファイル</span><input type="file" id="importFile" accept=".csv,.txt,text/csv"></label>' +
-      '<p class="hint">文字コード（Shift_JIS / UTF-8）は自動で判定します。マネーフォワード ME の「入出金履歴」CSVは、カテゴリや金融機関まで自動で読み取ります。</p>';
+      '<p class="hint">マネーフォワード ME の「入出金履歴」CSV も、そのまま読めます</p>';
     findOne('#importFile').addEventListener('change', (event) => {
       const file = event.target.files[0];
       if (file) {

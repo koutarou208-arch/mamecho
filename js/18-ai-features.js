@@ -478,7 +478,7 @@ function claudeSummaryText(period, today) {
 /** 「Claude 用のまとめをコピー」: まとめの文を表示して、コピーできるようにする（貼る前に中身を見て、消したいところは消せる） */
 function openClaudeSummary() {
   findOne('#textDialogTitle').textContent = 'Claude 用のまとめ';
-  findOne('#textDialogHint').textContent = '「コピーする」を押して、Claude のアプリに貼り付けると、この数字をもとに相談できます。見せたくないところは、ここで消してからコピーしてください。メモ・口座の名前は入っていません。';
+  findOne('#textDialogHint').textContent = 'コピーして Claude のアプリに貼ると相談できます。見せたくないところは、ここで消せます（メモ・口座の名前は入っていません）';
   const area = findOne('#textDialogContent');
   area.readOnly = false; // まとめは、貼る前に消したり直したりできる
   area.value = claudeSummaryText(appState.period);
@@ -558,17 +558,21 @@ function chatTools() {
 /** 家計簿画面に出す「Claude と話す」のカード */
 function aiChatCardHtml() {
   let html = '<section class="card span-12" id="aiChatCard">';
-  html += '<div class="card-head"><h2>Claude と話す</h2><span class="sub">家計簿の数字をもとに、ふつうの言葉で答えます</span></div>';
 
   // Claude 版でないとき（ホーム画面のアプリ・ブラウザ）: アプリからは Claude に送れない（送るには有料の鍵が要る）ので、
-  // まとめの文をコピーして、利用者が自分で Claude のアプリに貼る
+  // まとめの文をコピーして、利用者が自分で Claude のアプリに貼る。何が入るかは「？」の中
   if (!sampleFeature) {
-    html += '<p>' + periodShortTitle(appState.period) + 'の数字のまとめをコピーして、Claude のアプリに貼り付けると、ふつうの言葉で相談できます（お金はかかりません。このアプリから外へは何も送りません）。</p>';
+    html += '<div class="card-head"><h2>Claude と話す</h2>' + tipButtonHtml('tip-claude-summary') +
+      tipTextHtml('tip-claude-summary', '入るもの: 収入・支出、カテゴリと中項目、予算、直近12か月、カードの引き落とし予定、お店ごとの合計。入らないもの: メモ・口座の名前。' +
+        'コピーする前に中身を見て、消したいところは消せます。このアプリから外へは何も送りません（お金もかかりません）。') + '</div>';
+    html += '<p>' + periodShortTitle(appState.period) + 'のまとめをコピーして、Claude のアプリに貼ると相談できます</p>';
     html += '<div class="row-gap" style="margin-top:10px"><button type="button" class="btn primary" data-action="open-claude-summary">Claude 用のまとめをコピー</button></div>';
-    html += '<p class="hint" style="margin-top:8px">入るもの: 収入・支出、カテゴリと中項目、予算、直近12か月、カードの引き落とし予定、お店ごとの合計。入らないもの: メモ・口座の名前。コピーする前に中身を見て、消したいところは消せます。</p>';
     html += '</section>';
     return html;
   }
+  // Claude 版: 何を渡すかは「？」の中
+  html += '<div class="card-head"><h2>Claude と話す</h2>' + tipButtonHtml('tip-claude-chat') +
+    tipTextHtml('tip-claude-chat', 'Claude には集計した数字と、聞かれたときはお店ごとの合計を渡します（メモ・口座の名前は渡しません）。会話は家計簿と一緒に保存されます。見ている人の Claude の利用枠を使います。') + '</div>';
 
   const messages = appState.profile.chat || [];
   const running = chatController !== null;
@@ -597,7 +601,6 @@ function aiChatCardHtml() {
       : '<button type="button" class="btn primary" data-action="chat-send">送る</button>') +
     '</div>';
 
-  html += '<p class="hint" style="margin-top:8px">Claude には集計した数字と、聞かれたときはお店ごとの合計を渡します（メモ・口座の名前は渡しません）。会話は家計簿と一緒に保存されます。見ている人の Claude の利用枠を使います。</p>';
   if (messages.length > 0 && !running) {
     if (isChatClearConfirmOpen) {
       html += confirmBoxHtml('これまでの会話をすべて消します。家計簿の記録は消えません。', '会話を消す', 'chat-clear-yes', 'chat-clear-no');

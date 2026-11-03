@@ -139,9 +139,14 @@ function reportCategoryCardHtml(period) {
   }
 
   const range = periodRange(period);
+  // この期間は ¥0（先月だけ使った）のカテゴリは、下にたたむ（並ぶと読む量がふえるだけなので）
+  const zeroRows = rows.filter((row) => row.amount === 0);
   html += '<div class="cat-table">';
   html += '<div class="cat-head"><span>大項目</span><span>' + periodShortTitle(period) + '</span><span>割合</span><span>先月との差</span><span>3か月平均</span></div>';
   for (const row of rows) {
+    if (row.amount === 0) {
+      continue;
+    }
     const share = total > 0 ? (row.amount / total) * 100 : 0;
     const isOpen = openReportCategories.has(row.category.id);
     html += '<details data-category-id="' + row.category.id + '"' + (isOpen ? ' open' : '') + '><summary class="cat-row">';
@@ -165,7 +170,16 @@ function reportCategoryCardHtml(period) {
   }
   html += '<div class="cat-row cat-total"><span>合計</span><span class="num">' + formatYen(total) + '</span><span></span><span class="num">' +
     differenceHtml(total - (type === 'income' ? previous.income : previous.expense), type) + '</span><span></span></div>';
-  html += '</div></section>';
+  html += '</div>';
+  if (zeroRows.length > 0) {
+    html += '<details class="more"><summary>' + periodShortTitle(period) + 'は ¥0 のカテゴリ（' + zeroRows.length + '）</summary><ul class="plain-list">';
+    for (const row of zeroRows) {
+      html += '<li><span class="cat-name"><span class="mark ' + (type === 'income' ? 'income' : categoryToneClass(row.category)) + '" aria-hidden="true">' + row.category.mark + '</span><span>' + row.category.name + '</span></span>' +
+        '<span class="small muted">先月 <span class="num">' + formatYen(row.previousAmount) + '</span></span></li>';
+    }
+    html += '</ul></details>';
+  }
+  html += '</section>';
   return html;
 }
 
@@ -264,27 +278,39 @@ function reportFixedCostCardHtml(period) {
   }
 
   let html = '<section class="card span-5">';
-  html += '<div class="card-head"><h2>固定費と変動費</h2></div>';
+  // どのカテゴリが固定費かは「？」の中
+  html += '<div class="card-head"><h2>固定費と変動費</h2>' + tipButtonHtml('tip-fixed-cost') +
+    tipTextHtml('tip-fixed-cost', '固定費＝住宅・水道光熱・通信・保険・税（毎月だいたい決まって出ていくお金）。変動費＝それ以外（食費・日用品など）。') + '</div>';
   html += '<div class="stats" style="grid-template-columns:repeat(2, minmax(0,1fr))">' +
-    '<div class="stat"><span class="label">固定費（住宅・光熱・通信・保険・税）</span><span class="value num">' + formatYen(fixed) + '</span><span class="small muted">支出の' + fixedShare + '%</span></div>' +
-    '<div class="stat"><span class="label">変動費（それ以外）</span><span class="value num">' + formatYen(variable) + '</span><span class="small muted">支出の' + (summary.spending > 0 ? 100 - fixedShare : 0) + '%</span></div>' +
+    '<div class="stat"><span class="label">固定費</span><span class="value num">' + formatYen(fixed) + '</span><span class="small muted">支出の' + fixedShare + '%</span></div>' +
+    '<div class="stat"><span class="label">変動費</span><span class="value num">' + formatYen(variable) + '</span><span class="small muted">支出の' + (summary.spending > 0 ? 100 - fixedShare : 0) + '%</span></div>' +
     '</div>';
   html += '<hr class="divider">';
   html += '<div class="card-head" style="margin-bottom:4px"><h2>毎月の支払い・サブスク</h2><span class="sub">月 約' + formatYen(recurringTotal) + '</span></div>';
   if (recurring.length === 0) {
-    html += '<p class="small muted">3か月以上続けて同じように出ている支払いが見つかると、ここに出ます。</p>';
+    html += '<p class="small muted">3か月続いた支払いが見つかると、ここに出ます</p>';
   } else {
+    // 多い順に5つ。のこりは「ほか n件」にたたむ
+    const shown = recurring.slice(0, 10);
     html += '<ul class="plain-list">';
-    for (const item of recurring.slice(0, 10)) {
-      const category = CATEGORY_BY_ID[item.category];
-      const alreadyRule = (appState.profile.recurring || []).some((rule) => normalizeText(rule.description) === normalizeText(item.description));
-      html += '<li><span class="grow"><span>' + escapeHtml(item.description) + '</span><span class="small muted">毎月' + item.day + '日ごろ · ' + escapeHtml(category ? category.name : '') + '</span></span><span class="num">' + formatYen(item.amount) + '</span>' +
-        (alreadyRule ? '<span class="tag">固定費に登録ずみ</span>' : '<button type="button" class="btn small ghost" data-action="recur-from-found" data-index="' + recurring.indexOf(item) + '">固定費にする</button>') + '</li>';
+    for (let index = 0; index < shown.length; index++) {
+      if (index === 5) {
+        html += '</ul><details class="more"><summary>ほか ' + (shown.length - 5) + '件</summary><ul class="plain-list">';
+      }
+      html += recurringFoundRowHtml(shown[index], recurring.indexOf(shown[index]));
     }
-    html += '</ul>';
+    html += '</ul>' + (shown.length > 5 ? '</details>' : '');
   }
   html += '</section>';
   return html;
+}
+
+/** 見つかった「毎月の支払い」1行（固定費に登録していなければ「固定費にする」ボタン） */
+function recurringFoundRowHtml(item, index) {
+  const category = CATEGORY_BY_ID[item.category];
+  const alreadyRule = (appState.profile.recurring || []).some((rule) => normalizeText(rule.description) === normalizeText(item.description));
+  return '<li><span class="grow"><span>' + escapeHtml(item.description) + '</span><span class="small muted">毎月' + item.day + '日ごろ · ' + escapeHtml(category ? category.name : '') + '</span></span><span class="num">' + formatYen(item.amount) + '</span>' +
+    (alreadyRule ? '<span class="tag">登録ずみ</span>' : '<button type="button" class="btn small ghost" data-action="recur-from-found" data-index="' + index + '">固定費にする</button>') + '</li>';
 }
 
 

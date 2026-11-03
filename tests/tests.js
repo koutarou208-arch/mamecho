@@ -1338,6 +1338,18 @@ appState.locked = savedForProjection.locked;
 allTransactions = [];
 accountById = {};
 
+section('説明の「？」（押したときだけ説明を出す）');
+const tipButtonForTest = tipButtonHtml('tip-test');
+const tipTextForTest = tipTextHtml('tip-test', '<b>確定</b>＝締め日を過ぎた請求');
+check('「？」ボタン: 押すと開く説明の名前（aria-controls）が、説明の id と同じ', tipButtonForTest.includes('aria-controls="tip-test"') && tipTextForTest.includes('id="tip-test"'));
+check('「？」ボタン: はじめは閉じている（aria-expanded="false"）・説明は隠れている（hidden）', tipButtonForTest.includes('aria-expanded="false"') && tipTextForTest.includes(' hidden>'));
+check('「？」ボタン: 読み上げ用の名前がある（ボタンの中は記号だけのため）', tipButtonForTest.includes('aria-label="説明を見る"'));
+check('説明の文: 文字は escapeHtml を通す（< がタグにならない）', tipTextForTest.includes('&lt;b&gt;確定&lt;/b&gt;') && !tipTextForTest.includes('<b>'));
+check('説明の名前: 名前の中の記号も escapeHtml を通す', tipButtonHtml('a"b').includes('data-tip="a&quot;b"'));
+check('暗号化ロックの説明: いまの決まり（バックアップはロックがオンなら暗号化・CSVはされない・Claude に渡すもの）を書く',
+  lockDetailText().includes('ロックがオンなら暗号化') && lockDetailText().includes('CSV の書き出しは暗号化されません') && lockDetailText().includes('お店ごとの合計'));
+check('暗号化ロックの説明: 離れたらロックする時間は、本当の設定の数字から書く', lockDetailText().includes(AUTO_LOCK_MINUTES + '分') && lockDetailText().includes(Math.round(LOCK_AFTER_LEAVING_SECONDS / 60) + '分'));
+
 section('Claude と話す: Claude に渡すデータ');
 const aiCard = { id: 'card1', name: 'ヒミツのカード', kind: 'card', opening: 0, openDate: '2026-01-01', card: { company: 'jcb', cycleIndex: 0 } };
 const aiBank = { id: 'bank1', name: 'ヒミツ銀行', kind: 'bank', opening: 0, openDate: '2026-01-01' };

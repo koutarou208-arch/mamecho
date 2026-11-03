@@ -137,11 +137,11 @@ function settingsRecurringCardHtml() {
   const isEditing = recurringFormState !== null && recurringFormState.index !== null;
 
   let html = '<section class="card span-12" id="recurringCard">';
-  html += '<div class="card-head"><h2>固定費（毎月自動で記録）</h2><span class="sub">家賃・サブスクなど</span></div>';
+  html += '<div class="card-head"><h2>固定費（毎月自動で記録）</h2></div>';
 
   // 登録ずみの一覧
   if (list.length === 0) {
-    html += '<p class="hint">まだありません。下から登録すると、毎月の指定日に自動で記録されます。</p>';
+    html += '<p class="hint">家賃・サブスクなどを登録すると、毎月その日に自動で記録します</p>';
   } else {
     html += '<ul class="plain-list">';
     for (let index = 0; index < list.length; index++) {
@@ -164,8 +164,8 @@ function settingsRecurringCardHtml() {
   for (let day = 1; day <= 31; day++) {
     dayOptions += '<option value="' + day + '">' + (day === 31 ? '月末' : day + '日') + '</option>';
   }
-  // 入力欄は「＋ 固定費を追加する」を押したときだけ開く（直しているとき・書きかけ・まだ1つもないときは、はじめから開く）
-  const isFormOpen = isEditing || recurringFormState !== null || list.length === 0 || settingsOpenForms.recurring;
+  // 入力欄は「＋ 固定費を追加する」を押したときだけ開く（直しているとき・書きかけのときは、はじめから開く）
+  const isFormOpen = isEditing || recurringFormState !== null || settingsOpenForms.recurring;
   html += '<details class="more form-box" data-form-box="recurring"' + (isFormOpen ? ' open' : '') + '><summary>' + (isEditing ? '固定費を直す' : '＋ 固定費を追加する') + '</summary>';
   html += '<div class="recurring-form">' +
     '<label class="field"><span>名前</span><input id="recurringName" autocomplete="off" placeholder="例: 家賃"></label>' +
@@ -334,7 +334,7 @@ function settingsPeriodCardHtml() {
     '<div class="card-head"><h2>集計期間</h2></div>' +
     '<div class="setting"><label for="startDaySelect"><strong>1か月の始まりの日</strong><br><span class="hint">給料日が25日なら「25日」に</span></label>' +
     '<select id="startDaySelect">' + options + '</select></div>' +
-    '<p class="small muted" style="margin-top:12px">今の期間: ' + periodTitle(period) + '（' + periodRangeText(period) + '）</p>' +
+    '<p class="small muted" style="margin-top:12px">今の期間: ' + periodRangeText(period) + '</p>' +
     '</section>';
 }
 
@@ -418,11 +418,12 @@ let isNumberCheckOpen = false;          // 点検の結果を出しているか
 let isDuplicateFixConfirmOpen = false;  // 「同じ記録を1つにする」の確認を出しているか
 
 function settingsNumberCheckCardHtml() {
+  // いつ押すか・外へ送らないことは「？」の中
   let html = '<section class="card span-12" id="numberCheckCard">' +
-    '<div class="card-head"><h2>数字の点検</h2><span class="sub">二重に数えていないか・数字が合っているか</span></div>';
+    '<div class="card-head"><h2>数字の点検</h2>' + tipButtonHtml('tip-number-check') + '<span class="sub">二重に数えていないか・数字が合っているか</span>' +
+    tipTextHtml('tip-number-check', 'カードの請求が多すぎる・少なすぎるなど、数字がおかしいと思ったときに押してください。この端末の中だけで調べて、外へは何も送りません。') + '</div>';
   if (!isNumberCheckOpen) {
-    html += '<p class="hint">カードの請求が多すぎる・少なすぎるなど、数字がおかしいと思ったときに押してください。この端末の中だけで調べて、外へは何も送りません。</p>' +
-      '<div class="row-gap" style="margin-top:10px"><button type="button" class="btn primary" data-action="run-number-check">点検する</button></div>';
+    html += '<div class="row-gap"><button type="button" class="btn primary" data-action="run-number-check">点検する</button></div>';
     return html + '</section>';
   }
 
@@ -515,11 +516,12 @@ function settingsRulesCardHtml() {
   const isEditingRule = rulePosition(editingRuleKey) !== -1;
   const deletingIndex = rulePosition(deletingRuleKey);
   let html = '<section class="card span-12">';
-  html += '<div class="card-head"><h2>自動分類ルール</h2><span class="sub">キーワード → カテゴリ</span></div>';
+  // しくみの説明は「？」の中
+  html += '<div class="card-head"><h2>自動分類ルール</h2>' + tipButtonHtml('tip-rules') + '<span class="sub">キーワード → カテゴリ</span>' +
+    tipTextHtml('tip-rules', 'お店の名前（キーワード）が入った記録を、決めたカテゴリに自動で分けます。記録するときにカテゴリを直すと、ここに自動で増えます。') + '</div>';
 
   // 追加フォーム（「＋ ルールを自分で追加する」を押したときだけ開く。直しているとき・書きかけのときは、はじめから開く）
   const isRuleFormOpen = isEditingRule || ruleFormDraft !== null || settingsOpenForms.rule;
-  html += '<p class="hint">お店の名前（キーワード）が入った記録を、決めたカテゴリに自動で分けます。記録するときにカテゴリを直すと、ここに自動で増えます。</p>';
   html += '<details class="more form-box" data-form-box="rule"' + (isRuleFormOpen ? ' open' : '') + '><summary>' + (isEditingRule ? 'ルールを直す' : '＋ ルールを自分で追加する') + '</summary>';
   html += '<div class="rule-form">' +
     '<label class="field"><span>キーワード（お店の名前など）</span><input id="ruleKeyword" autocomplete="off" placeholder="例: まるみや"></label>' +
@@ -531,10 +533,9 @@ function settingsRulesCardHtml() {
     (isEditingRule ? '<button type="button" class="btn ghost" data-action="cancel-rule-edit">やめる</button>' : '') +
     '</div></div></details>';
 
-  html += '<p class="small muted" style="margin-block:14px 6px">あなたのルール（' + rules.length + '件）</p>';
-  if (rules.length === 0) {
-    html += '<p class="hint">まだありません。</p>';
-  } else {
+  // 自分のルールがまだないときは、見出しも出さない
+  if (rules.length > 0) {
+    html += '<p class="small muted" style="margin-block:14px 6px">あなたのルール（' + rules.length + '件）</p>';
     html += '<ul class="plain-list">';
     for (let index = 0; index < rules.length; index++) {
       const rule = rules[index];
@@ -634,27 +635,28 @@ function deleteRuleConfirmed() {
    保存先とデータの全削除
    ----------------------------------------------------------- */
 function settingsStorageCardHtml() {
-  let explanation = '';
+  // どこに保存しているかは見出しの横（describeSaveStatus）。くわしいこと（共有したとき・消えるとき）は「？」の中
+  let detail = '';
   if (appState.isSample) {
-    explanation = '今はサンプルを表示しています。変更は保存されません。';
+    detail = '';
   } else if (appState.storageMode === 'cloud') {
-    explanation = 'あなたのClaudeアカウントに保存しています。このページを共有しても、他の人にはあなたのデータは見えません（その人自身のデータが表示されます）。';
+    detail = 'あなたの Claude アカウントに保存しています。このページを共有しても、他の人にはあなたのデータは見えません（その人自身のデータが表示されます）。';
   } else if (appState.storageMode === 'browser') {
-    explanation = 'このブラウザの中に保存しています。別の端末やブラウザとは共有されません。ブラウザの履歴やサイトデータを消すと、記録も消えます。ときどきバックアップを保存してください。';
+    detail = 'この端末のブラウザの中に保存しています。別の端末やブラウザとは共有されません。ブラウザの履歴やサイトデータを消すと、記録も消えます。ときどきバックアップを保存してください。';
   } else {
-    explanation = 'この環境では保存できません。ページを閉じると記録は消えます。';
+    detail = 'ページを閉じると記録が消えます。設定のバックアップで保存できます。';
   }
 
   let html = '<section class="card span-12">';
-  html += '<div class="card-head"><h2>保存先</h2><span class="sub">' + escapeHtml(describeSaveStatus()) + '</span></div>';
-  html += '<p class="small">' + explanation + '</p>';
+  html += '<div class="card-head"><h2>保存先</h2>' + (detail ? tipButtonHtml('tip-storage') : '') + '<span class="sub">' + escapeHtml(describeSaveStatus()) + '</span>' +
+    (detail ? tipTextHtml('tip-storage', detail) : '') + '</div>';
 
   if (appState.isSample) {
-    html += '<div class="row-gap" style="margin-top:12px"><button type="button" class="btn primary" data-action="start-own">自分の家計簿をはじめる</button></div>';
+    html += '<div class="row-gap"><button type="button" class="btn primary" data-action="start-own">自分の家計簿をはじめる</button></div>';
   } else if (!isWipeConfirmOpen) {
-    html += '<div class="row-gap" style="margin-top:12px"><button type="button" class="btn ghost danger-text" data-action="wipe">すべてのデータを削除</button></div>';
+    html += '<div class="row-gap"><button type="button" class="btn ghost danger-text" data-action="wipe">すべてのデータを削除</button></div>';
   } else {
-    html += '<div class="confirm-box" style="margin-top:12px"><p>口座・入出金・予算・ルールをすべて削除します。元に戻せません。先にバックアップを保存することをおすすめします。</p>' +
+    html += '<div class="confirm-box"><p>口座・入出金・予算・ルールをすべて削除します。元に戻せません。先にバックアップを保存することをおすすめします。</p>' +
       '<label class="field"><span>まちがえて消さないように、「削除」と入力してください</span><input id="wipeConfirmWord" autocomplete="off" autocapitalize="off" spellcheck="false"></label>' +
       '<div class="row-gap"><button type="button" class="btn danger" data-action="wipe-yes" id="wipeYesButton" disabled>すべて削除する</button>' +
       '<button type="button" class="btn ghost" data-action="wipe-no">やめる</button></div></div>';

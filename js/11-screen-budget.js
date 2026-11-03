@@ -52,8 +52,13 @@ function budgetViewHtml(period) {
 
   // --- 全体のまとめ ---
   html += '<section class="card span-12">';
-  html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の予算</h2><span class="sub">' + periodRangeText(period) + ' · ' + passedDays + '日目 / ' + totalDays + '日</span>' +
-    '<button type="button" class="btn small" style="margin-left:auto" data-action="edit-budget">予算を編集</button></div>';
+  // 期間（11/1〜11/30）は画面の上に出ているので、ここは「何日目か」だけ。バーの縦線の説明は「？」の中
+  html += '<div class="card-head"><h2>' + periodShortTitle(period) + 'の予算</h2>' +
+    (budget > 0 ? tipButtonHtml('tip-budget-pace') : '') +
+    '<span class="sub">' + passedDays + '日目 / ' + totalDays + '日</span>' +
+    '<button type="button" class="btn small" style="margin-left:auto" data-action="edit-budget">予算を編集</button>' +
+    (budget > 0 ? tipTextHtml('tip-budget-pace', 'バーの黒い縦線は「今日までに使っていい金額」の目安です。バーが縦線より右に出ていたら、使うペースが速めです。') : '') +
+    '</div>';
 
   if (budget === 0) {
     html += '<p class="empty-note">まだ予算がありません。「予算を編集」から決められます。</p>';
@@ -66,10 +71,9 @@ function budgetViewHtml(period) {
   html += '<div class="stats">' +
     '<div class="stat"><span class="label">予算</span><span class="value num">' + formatYen(budget) + '</span></div>' +
     '<div class="stat"><span class="label">使った金額</span><span class="value num">' + formatYen(summary.spending) + '</span></div>' +
-    '<div class="stat"><span class="label">残り</span><span class="value num total">' + formatYen(left) + '</span></div>' +
+    '<div class="stat"><span class="label">残り ' + statusChipHtml(status) + '</span><span class="value num total">' + formatYen(left) + '</span></div>' +
     '</div>';
   html += '<div style="margin-top:14px">' + budgetMeterHtml(summary.spending, budget, elapsed, status) + '</div>';
-  html += '<p class="small muted" style="margin-top:8px">黒い縦線は「今日までに使っていい金額」の目安です。' + statusChipHtml(status) + '</p>';
   html += '</section>';
 
   // --- カテゴリごと ---
@@ -91,7 +95,8 @@ function budgetViewHtml(period) {
     html += '<div class="meter-wrap">' + budgetMeterHtml(spent, limit, elapsed, categoryStatus) +
       '<div class="budget-figures"><span class="num">' + formatYen(spent) + ' / ' + formatYen(limit) + '</span>' +
       '<span class="num">' + (remain >= 0 ? '残り ' + formatYen(remain) : formatYen(-remain) + ' 超過') + '</span></div></div>';
-    html += statusChipHtml(categoryStatus);
+    // 「順調」は書かない（全部に出ると読む量がふえるだけ）。気をつけたいとき（注意・超過）だけ札を出す
+    html += categoryStatus === 'good' ? '' : statusChipHtml(categoryStatus);
     html += '</div>';
   }
   html += '</div>';
@@ -116,7 +121,7 @@ function budgetViewHtml(period) {
     html += '<div class="meter" style="margin-top:12px"><div class="meter-fill" style="width:' + goalPercent.toFixed(1) + '%; background:var(--accent)"></div></div>';
     html += '<p class="small" style="margin-top:10px">' + (saved >= goal ? statusChipHtml('good', '達成') : 'あと <strong class="num">' + formatYen(goal - saved) + '</strong>') + '</p>';
   } else {
-    html += '<p class="small muted">「予算を編集」から毎月の貯金目標を決められます。収入から支出を引いた残りが目標に届いたかを表示します。</p>';
+    html += '<p class="small muted">「予算を編集」から決められます（収入 − 支出が目標に届いたかを出します）</p>';
   }
   html += '</section>';
 
