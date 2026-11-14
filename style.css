@@ -625,6 +625,11 @@ main:focus { outline: none; }
 .grid-line { stroke: var(--grid); stroke-width: 1; }
 .base-line { stroke: var(--rule-strong); stroke-width: 1; }
 .cross-line { stroke: var(--ink-2); stroke-width: 1; }
+/* 家計簿の「1年で稼いだお金」の月ごとの棒（10 の reportYearEarningsCardHtml） */
+.year-bars { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; height: 84px; margin-bottom: 8px; }
+.year-bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; padding-bottom: 16px; min-width: 0; }
+.year-bar-fill { display: block; background: var(--income); border-radius: 3px 3px 0 0; }
+.year-bar-label { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 10px; font-size: 12px; color: var(--ink-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 

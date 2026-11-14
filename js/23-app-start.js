@@ -242,6 +242,7 @@ function resetTemporaryStates() {
   isNumberCheckOpen = false;        // 数字の点検の結果（14）
   isDuplicateFixConfirmOpen = false; // 同じ記録を1つにする確認（14）
   isAssetChangeOpen = false;        // 総資産の増減の内訳（08）
+  earningsYear = null;              // 家計簿の「1年で稼いだお金」で見ている年（10）
   settingsOpenForms.recurring = false; // 設定の「＋ 追加する」（14）
   settingsOpenForms.rule = false;
 }
@@ -472,6 +473,7 @@ const ACTIONS = {
   'show-breakdown': (button) => showCategoryBreakdown(button.dataset.value),
   'open-next-bill': (button) => openNextBill(button.dataset.id, button.dataset.month),
   'open-sub': (button) => openSubTransactions(button.dataset.category, button.dataset.sub),
+  'earnings-year': (button) => moveEarningsYear(Number(button.dataset.step)), // 10-screen-report.js
   'report-type': (button) => {
     appState.reportType = button.dataset.value;
     renderApp();

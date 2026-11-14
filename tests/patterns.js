@@ -519,6 +519,7 @@ function runLedgerPatternTests() {
   const drill = startRule('家計簿: 中項目を開いたときの明細を足すと、中項目の金額');
   const balances = startRule('家計簿: 残高は、前の日の残高 + その日の入出金（どの口座・どの日でも）');
   const assetChange = startRule('家計簿: 総資産の増減の内訳を足すと、総資産の差（種類ごとでも口座ごとでも。どの期間でも）');
+  const yearRule = startRule('家計簿: 1年で稼いだお金 = 月ごとの合計 = 内訳の合計 ＋ 投資の損益、予定は今日より先の分（どの年・どの日でも）');
   const projectionGap = startRule('家計簿: 見込みと実際のずれ = 見込みのあとにふえた記録の合計（どの月・どの日付の記録でも）');
   const noFalseAlarm = startRule('家計簿: ふつうの記録だけなら、数字の点検はまちがいを知らせない');
   const faults = startRule('家計簿: わざとまちがいを入れると、数字の点検が必ず見つける');
@@ -661,6 +662,18 @@ function runLedgerPatternTests() {
         () => label + ' ' + fromDate + '→' + toDate + ' 差 ' + netDifference + ' / 内訳 ' + partsTotal + ' / 口座 ' + accountsTotal);
     }
 
+    // 1年で稼いだお金: 月ごとに足しても、内訳を足しても同じ。今日まで ＋ 予定 ＝ その年の全部
+    const earningsYearForTest = 2025 + random.int(0, 2);
+    const earningsToday = addDays('2026-01-01', random.int(-30, 700));
+    const yearResult = yearEarnings(earningsYearForTest, earningsToday);
+    const monthsTotal = yearResult.months.reduce((sum, amount) => sum + amount, 0);
+    const categoriesTotal = yearResult.categories.reduce((sum, item) => sum + item.total, 0);
+    const wholeYear = summarizeRange({ start: earningsYearForTest + '-01-01', end: (earningsYearForTest + 1) + '-01-01' });
+    recordRule(yearRule, monthsTotal === yearResult.earned && categoriesTotal + yearResult.tradeNet === yearResult.earned &&
+      yearResult.earned + yearResult.planned.earned === wholeYear.income - wholeYear.tradeLoss &&
+      yearResult.saved === yearResult.earned - yearResult.spending && (yearResult.isCurrent || yearResult.planned.count === 0),
+      () => label + ' ' + earningsYearForTest + '年 今日 ' + earningsToday + ' 稼いだ ' + yearResult.earned + ' / 月 ' + monthsTotal + ' / 内訳 ' + categoriesTotal + ' / 予定 ' + yearResult.planned.earned + ' / 1年 ' + (wholeYear.income - wholeYear.tradeLoss));
+
     // 見込みと実際のずれ: 月末の見込みをおぼえたあとに記録を足すと、ずれはちょうど足した記録の合計になる
     // 足す記録の日付は、その月の中・前の月・口座の基準日（2026-01-01）より前・次の月と、いろいろにする
     // （月は基準日より後で試す。月末が基準日より前だと、口座の歴史がさかのぼって計算されるため。画面では「記録や口座の変更」に入る）
@@ -772,7 +785,7 @@ function runLedgerPatternTests() {
       }
     }
   }
-  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, assetChange, projectionGap, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
+  for (const rule of [billMath, conserve, partition, breakdown, aiBills, periods, categories, drill, balances, assetChange, yearRule, projectionGap, noFalseAlarm, faults, summary, backup, csv, csvTwice]) {
     finishRule(rule);
   }
   restoreGlobalsForTest(saved);

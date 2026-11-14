@@ -23,6 +23,7 @@ const ReportScreen = {
     const period = appState.period;
     let html = '<div class="grid">';
     html += reportFlowCardHtml(period);
+    html += reportYearEarningsCardHtml(period);
     html += reportCategoryCardHtml(period);
     html += reportFixedCostCardHtml(period);
     html += reportCalendarCardHtml(period, 'span-12');
@@ -91,6 +92,77 @@ function reportFlowCardHtml(period) {
     html += '<tr><td>' + periodTitle(row.period) + '</td><td class="num">' + formatYen(row.income) + '</td><td class="num">' + formatYen(row.expense) + '</td><td class="num">' + formatYen(row.income - row.expense, { showPlus: true }) + '</td></tr>';
   }
   html += '</tbody></table></div></details>';
+  html += '</section>';
+  return html;
+}
+
+
+/* -----------------------------------------------------------
+   1年で稼いだお金（1月〜12月。計算は 05 の yearEarnings）
+   ----------------------------------------------------------- */
+
+// 見ている年（null なら、見ている月の年）。「‹ ›」で前の年・次の年へ。画面を移ると戻す（23 の resetTemporaryStates）
+let earningsYear = null;
+
+/** 「‹ ›」を押したとき: 前の年・次の年へ（今年より先には行かない） */
+function moveEarningsYear(step) {
+  const thisYear = Number(todayText().slice(0, 4));
+  const shown = earningsYear || appState.period.year;
+  earningsYear = Math.min(thisYear, shown + step);
+  renderApp();
+}
+
+function reportYearEarningsCardHtml(period) {
+  const today = todayText();
+  const thisYear = Number(today.slice(0, 4));
+  const year = Math.min(thisYear, earningsYear || period.year);
+  const result = yearEarnings(year, today);
+
+  let html = '<section class="card span-12" id="yearEarningsCard">';
+  html += '<div class="card-head"><h2>' + year + '年に稼いだお金</h2>' + tipButtonHtml('tip-year-earnings') +
+    '<span class="row-gap" style="margin-left:auto; gap:2px">' +
+    '<button type="button" class="icon-btn" data-action="earnings-year" data-step="-1" aria-label="前の年">' + iconSvg('chevron-left') + '</button>' +
+    '<button type="button" class="icon-btn" data-action="earnings-year" data-step="1" aria-label="次の年"' + (year >= thisYear ? ' disabled' : '') + '>' + iconSvg('chevron-right') + '</button></span>' +
+    tipTextHtml('tip-year-earnings', '1月1日〜12月31日に入った収入の合計です（投資は、利益から損失を引いた分）。口座に入った金額（手取り）なので、源泉徴収票の額面とはちがいます。「計算対象外」にした記録は入りません。') +
+    '</div>';
+
+  html += '<div class="hero-number">' + (result.earned < 0 ? '−' : '') + '<span class="yen">¥</span>' + formatNumber(Math.abs(result.earned)) + '</div>';
+  let note = result.isCurrent ? '1/1〜今日（' + formatShortDate(today) + '）' : '1/1〜12/31';
+  if (result.planned.count > 0) {
+    note += ' · 先の予定 ' + result.planned.count + '件を入れると <span class="num no-break">' + formatYen(result.earned + result.planned.earned) + '</span>';
+  }
+  html += '<p class="small muted" style="margin:4px 0 12px">' + note + '</p>';
+
+  if (result.earned === 0 && result.categories.length === 0) {
+    html += '<p class="empty-note">この年の収入の記録はまだありません。</p></section>';
+    return html;
+  }
+
+  // 月ごとの棒（いちばん多い月を高さいっぱいに）
+  const largest = Math.max(1, ...result.months);
+  html += '<div class="year-bars" role="img" aria-label="月ごとの稼いだお金">';
+  for (let index = 0; index < 12; index++) {
+    const amount = result.months[index];
+    const height = amount > 0 ? Math.max(3, Math.round((amount / largest) * 100)) : 0;
+    html += '<span class="year-bar" title="' + (index + 1) + '月 ' + formatYen(amount) + '"><span class="year-bar-fill" style="height:' + height + '%"></span>' +
+      '<span class="year-bar-label">' + (index + 1) + '</span></span>';
+  }
+  html += '</div>';
+
+  // 内訳
+  html += '<ul class="plain-list">';
+  for (const item of result.categories) {
+    const bonusText = item.id === 'salary' && result.bonus > 0 ? '<span class="small muted">うち賞与 ' + formatYen(result.bonus) + '</span>' : '';
+    html += '<li><span class="grow"><span>' + escapeHtml(item.name) + '</span>' + bonusText + '</span><span class="num">' + formatYen(item.total) + '</span></li>';
+  }
+  if (result.tradeNet !== 0) {
+    html += '<li><span class="grow"><span>投資の損益</span></span><span class="num">' + formatYen(result.tradeNet, { showPlus: true }) + '</span></li>';
+  }
+  html += '</ul>';
+  html += '<div class="stats" style="margin-top:8px">' +
+    '<div class="stat"><span class="label">生活費（支出）</span><span class="value num">' + formatYen(result.spending) + '</span></div>' +
+    '<div class="stat"><span class="label">残ったお金</span><span class="value num total">' + formatYen(result.saved, { showPlus: true }) + '</span></div>' +
+    '</div>';
   html += '</section>';
   return html;
 }

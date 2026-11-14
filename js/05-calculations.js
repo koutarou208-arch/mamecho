@@ -675,6 +675,79 @@ function summarizePeriod(period) {
   return summarizeRange(periodRange(period));
 }
 
+/**
+ * 1年（1月1日〜12月31日。税金や源泉徴収票と同じ区切り）でいくら稼いだか。家計簿の「1年の収入」（10）で使う。
+ *   year  … 2026 のような年
+ *   today … 今日の日付。今年なら今日までの記録で数え、今日より先の日付の記録（給料・賞与の予定など）は「予定」に分ける
+ * 稼いだお金 ＝ 投資以外の収入 ＋ 投資の損益（利益 − 損失）。計算対象外にした記録は入れない。
+ * 返す形: {
+ *   year, isCurrent（今年か）, earned（稼いだお金）, income（投資以外の収入）, salary, bonus（給与のうち賞与）, tradeNet,
+ *   spending（生活費の支出）, saved（稼いだお金 − 生活費＝残ったお金）,
+ *   categories: [{ id, name, total }]（投資以外の収入。多い順）, months: [1月〜12月の稼いだお金],
+ *   planned: { earned, count }（今日より先の日付の分。今年だけ）
+ * }
+ */
+function yearEarnings(year, today) {
+  const start = year + '-01-01';
+  const end = (year + 1) + '-01-01';
+  const isCurrent = today >= start && today < end;
+  const countedEnd = isCurrent ? addDays(today, 1) : end; // 今年は今日の分まで
+  const summary = summarizeRange({ start: start, end: countedEnd });
+  const result = {
+    year: year, isCurrent: isCurrent,
+    earned: 0, income: 0, salary: 0, bonus: 0, tradeNet: summary.tradeNet,
+    spending: summary.spending, saved: 0, categories: [], months: [],
+    planned: { earned: 0, count: 0 },
+  };
+  for (const category of INCOME_CATEGORIES) {
+    const bucket = summary.categories[category.id];
+    if (category.investment || !bucket || bucket.total === 0) {
+      continue;
+    }
+    result.income = result.income + bucket.total;
+    result.categories.push({ id: category.id, name: category.name, total: bucket.total });
+  }
+  // INCOME_CATEGORIES にないカテゴリの収入（古いデータなど）も、取りこぼさない
+  for (const transaction of allTransactions) {
+    if (transaction.type === 'income' && isCounted(transaction) && transaction.date >= start && transaction.date < countedEnd &&
+      !INCOME_CATEGORIES.some((category) => category.id === (transaction.category || 'other'))) {
+      result.income = result.income + transaction.amount;
+      let other = result.categories.find((item) => item.id === 'unknownIncome');
+      if (!other) {
+        other = { id: 'unknownIncome', name: 'そのほかの収入', total: 0 };
+        result.categories.push(other);
+      }
+      other.total = other.total + transaction.amount;
+    }
+  }
+  result.categories.sort((a, b) => b.total - a.total);
+  if (summary.categories.salary) {
+    result.salary = summary.categories.salary.total;
+    result.bonus = summary.categories.salary.subs['賞与'] || 0;
+  }
+  result.earned = result.income + result.tradeNet;
+  result.saved = result.earned - result.spending;
+
+  for (let month = 1; month <= 12; month++) {
+    const monthStart = year + '-' + pad2(month) + '-01';
+    const monthEnd = month === 12 ? end : year + '-' + pad2(month + 1) + '-01';
+    const monthSummary = summarizeRange({ start: monthStart, end: monthEnd < countedEnd ? monthEnd : countedEnd });
+    result.months.push(monthStart >= countedEnd ? 0 : monthSummary.income - monthSummary.tradeLoss);
+  }
+
+  if (isCurrent) {
+    const future = summarizeRange({ start: countedEnd, end: end });
+    result.planned.earned = future.income - future.tradeLoss;
+    for (const transaction of allTransactions) {
+      if (transaction.date >= countedEnd && transaction.date < end && isCounted(transaction) &&
+        (transaction.type === 'income' || transaction.category === 'tradeLoss')) {
+        result.planned.count = result.planned.count + 1;
+      }
+    }
+  }
+  return result;
+}
+
 
 /* ===========================================================
    カードの利用通知メールを読み取る

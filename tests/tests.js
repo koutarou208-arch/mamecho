@@ -1272,6 +1272,42 @@ appState.monthly = savedForChange.monthly;
 allTransactions = [];
 accountById = {};
 
+section('1年で稼いだお金（1月〜12月）');
+const savedForYear = { profile: appState.profile, monthly: appState.monthly };
+appState.profile = { settings: { startDay: 25 }, accounts: [{ id: 'yr-bank', name: '銀行', kind: 'bank', opening: 0, openDate: '2025-01-01' }], budgets: {}, rules: [], recurring: [], chat: [] };
+appState.monthly = {};
+for (const record of [
+  { id: 'yr1', date: '2026-01-25', type: 'income', amount: 300000, account: 'yr-bank', category: 'salary', sub: '給与', include: true },
+  { id: 'yr2', date: '2026-06-30', type: 'income', amount: 500000, account: 'yr-bank', category: 'salary', sub: '賞与', include: true },
+  { id: 'yr3', date: '2026-03-10', type: 'income', amount: 20000, account: 'yr-bank', category: 'trade', sub: '株式の売却益', include: true },
+  { id: 'yr4', date: '2026-04-10', type: 'expense', amount: 5000, account: 'yr-bank', category: 'tradeLoss', sub: '株式の売却損', include: true },
+  { id: 'yr5', date: '2026-05-01', type: 'income', amount: 9000, account: 'yr-bank', category: 'dividend', sub: '配当', include: true },
+  { id: 'yr6', date: '2026-05-02', type: 'income', amount: 7000, account: 'yr-bank', category: 'salary', sub: '給与', include: false },
+  { id: 'yr7', date: '2026-02-01', type: 'expense', amount: 100000, account: 'yr-bank', category: 'food', sub: '食料品', include: true },
+  { id: 'yr8', date: '2026-12-10', type: 'income', amount: 600000, account: 'yr-bank', category: 'salary', sub: '賞与', include: true },
+  { id: 'yr9', date: '2025-12-31', type: 'income', amount: 111, account: 'yr-bank', category: 'salary', sub: '給与', include: true },
+  { id: 'yr10', date: '2026-02-03', type: 'transfer', amount: 40000, account: 'yr-bank', toAccount: 'yr-bank', include: true },
+]) {
+  placeTransaction(appState.monthly, record);
+}
+rebuildIndexes();
+const year2026 = yearEarnings(2026, '2026-11-14');
+same('1年: 稼いだお金 = 給与 + 賞与 + 配当 + 投資の損益（計算対象外・振替・前の年・今日より先はのぞく）', year2026.earned, 300000 + 500000 + 9000 + 20000 - 5000);
+same('1年: 給与（賞与ふくむ）とうち賞与', year2026.salary + ' / ' + year2026.bonus, '800000 / 500000');
+same('1年: 投資の損益', year2026.tradeNet, 15000);
+same('1年: 内訳は多い順（投資はのぞく）', year2026.categories.map((item) => item.id + ':' + item.total).join(','), 'salary:800000,dividend:9000');
+same('1年: 残ったお金 = 稼いだお金 − 生活費', year2026.saved, 824000 - 100000);
+same('1年: 月ごと（1月・3月・6月）', [year2026.months[0], year2026.months[2], year2026.months[5]].join(','), '300000,20000,500000');
+same('1年: 月ごとを足すと稼いだお金', year2026.months.reduce((sum, amount) => sum + amount, 0), year2026.earned);
+same('1年: 今日より先の予定（12月の賞与）', year2026.planned.count + '件 ' + year2026.planned.earned, '1件 600000');
+same('1年: 「1か月の始まりの日」が25日でも、1月1日〜12月31日で数える', yearEarnings(2025, '2026-11-14').earned, 111);
+same('1年: 終わった年は予定なし・全部数える', yearEarnings(2025, '2026-11-14').isCurrent + ' ' + yearEarnings(2025, '2026-11-14').planned.count, 'false 0');
+same('1年: 記録のない年は0', yearEarnings(2024, '2026-11-14').earned, 0);
+appState.profile = savedForYear.profile;
+appState.monthly = savedForYear.monthly;
+allTransactions = [];
+accountById = {};
+
 section('見込みと実際のずれ（月末の総資産の見込みをおぼえておく）');
 const projectionMemo = {};
 same('見込みをおぼえる: その月のはじめての見込みは記録する', rememberMonthProjection(projectionMemo, '2026-11', { made: '2026-11-02', at: 1000, endDate: '2026-11-30', amount: 273558 }), true);
