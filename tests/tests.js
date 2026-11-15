@@ -1303,6 +1303,8 @@ same('1年: 今日より先の予定（12月の賞与）', year2026.planned.coun
 same('1年: 「1か月の始まりの日」が25日でも、1月1日〜12月31日で数える', yearEarnings(2025, '2026-11-14').earned, 111);
 same('1年: 終わった年は予定なし・全部数える', yearEarnings(2025, '2026-11-14').isCurrent + ' ' + yearEarnings(2025, '2026-11-14').planned.count, 'false 0');
 same('1年: 記録のない年は0', yearEarnings(2024, '2026-11-14').earned, 0);
+same('1年: 先の年は「見込み」（入れてある予定を全部数える）', yearEarnings(2026, '2025-06-01').isFuture + ' ' + yearEarnings(2026, '2025-06-01').earned, 'true ' + (824000 + 600000));
+same('1年: 見られるいちばん先の年は、予定の記録がある年まで', lastEarningsYear('2025-06-01') + ' ' + lastEarningsYear('2030-01-01'), '2026 2030');
 appState.profile = savedForYear.profile;
 appState.monthly = savedForYear.monthly;
 allTransactions = [];

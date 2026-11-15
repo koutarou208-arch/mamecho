@@ -104,30 +104,33 @@ function reportFlowCardHtml(period) {
 // 見ている年（null なら、見ている月の年）。「‹ ›」で前の年・次の年へ。画面を移ると戻す（23 の resetTemporaryStates）
 let earningsYear = null;
 
-/** 「‹ ›」を押したとき: 前の年・次の年へ（今年より先には行かない） */
+/** 「‹ ›」を押したとき: 前の年・次の年へ（先の年は、予定の記録が入っている年まで） */
 function moveEarningsYear(step) {
-  const thisYear = Number(todayText().slice(0, 4));
-  const shown = earningsYear || appState.period.year;
-  earningsYear = Math.min(thisYear, shown + step);
+  const lastYear = lastEarningsYear(todayText());
+  const shown = Math.min(lastYear, earningsYear || appState.period.year);
+  earningsYear = Math.min(lastYear, shown + step);
   renderApp();
 }
 
 function reportYearEarningsCardHtml(period) {
   const today = todayText();
-  const thisYear = Number(today.slice(0, 4));
-  const year = Math.min(thisYear, earningsYear || period.year);
+  const lastYear = lastEarningsYear(today); // 先の年は、予定の記録が入っている年まで見られる
+  const year = Math.min(lastYear, earningsYear || period.year);
   const result = yearEarnings(year, today);
 
   let html = '<section class="card span-12" id="yearEarningsCard">';
-  html += '<div class="card-head"><h2>' + year + '年に稼いだお金</h2>' + tipButtonHtml('tip-year-earnings') +
+  html += '<div class="card-head"><h2>' + year + '年に稼' + (result.isFuture ? 'ぐ見込み' : 'いだお金') + '</h2>' + tipButtonHtml('tip-year-earnings') +
     '<span class="row-gap" style="margin-left:auto; gap:2px">' +
     '<button type="button" class="icon-btn" data-action="earnings-year" data-step="-1" aria-label="前の年">' + iconSvg('chevron-left') + '</button>' +
-    '<button type="button" class="icon-btn" data-action="earnings-year" data-step="1" aria-label="次の年"' + (year >= thisYear ? ' disabled' : '') + '>' + iconSvg('chevron-right') + '</button></span>' +
+    '<button type="button" class="icon-btn" data-action="earnings-year" data-step="1" aria-label="次の年"' + (year >= lastYear ? ' disabled' : '') + '>' + iconSvg('chevron-right') + '</button></span>' +
     tipTextHtml('tip-year-earnings', '1月1日〜12月31日に入った収入の合計です（投資は、利益から損失を引いた分）。口座に入った金額（手取り）なので、源泉徴収票の額面とはちがいます。「計算対象外」にした記録は入りません。') +
     '</div>';
 
   html += '<div class="hero-number">' + (result.earned < 0 ? '−' : '') + '<span class="yen">¥</span>' + formatNumber(Math.abs(result.earned)) + '</div>';
   let note = result.isCurrent ? '1/1〜今日（' + formatShortDate(today) + '）' : '1/1〜12/31';
+  if (result.isFuture) {
+    note = '入れてある予定だけの見込みです';
+  }
   if (result.planned.count > 0) {
     note += ' · 先の予定 ' + result.planned.count + '件を入れると <span class="num no-break">' + formatYen(result.earned + result.planned.earned) + '</span>';
   }

@@ -670,6 +670,17 @@ function transactionsInSub(range, categoryId, subName) {
   return found;
 }
 
+/** 「1年で稼いだお金」で見られる、いちばん先の年（今年か、先の日付の記録があればその年） */
+function lastEarningsYear(today) {
+  let last = Number(today.slice(0, 4));
+  for (const transaction of allTransactions) {
+    if (isCounted(transaction)) {
+      last = Math.max(last, Number(transaction.date.slice(0, 4)));
+    }
+  }
+  return last;
+}
+
 /** 期間の収支をまとめて計算（よく使うので近道を用意） */
 function summarizePeriod(period) {
   return summarizeRange(periodRange(period));
@@ -694,7 +705,7 @@ function yearEarnings(year, today) {
   const countedEnd = isCurrent ? addDays(today, 1) : end; // 今年は今日の分まで
   const summary = summarizeRange({ start: start, end: countedEnd });
   const result = {
-    year: year, isCurrent: isCurrent,
+    year: year, isCurrent: isCurrent, isFuture: today < start, // isFuture … 来年より先（入れてある予定だけの見込み）
     earned: 0, income: 0, salary: 0, bonus: 0, tradeNet: summary.tradeNet,
     spending: summary.spending, saved: 0, categories: [], months: [],
     planned: { earned: 0, count: 0 },
