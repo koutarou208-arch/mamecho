@@ -886,7 +886,7 @@ function applyRecurringRules() {
   }
   afterDataChange([...changedMonths], true);
   if (newTransactions.length > 0) {
-    showToast('固定費を ' + newTransactions.length + '件 記録しました');
+    showToast('毎月の記録を ' + newTransactions.length + '件 入れました');
   }
 }
 

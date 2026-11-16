@@ -40,7 +40,13 @@ function openTransactionDialog(transaction, preset) {
   }
   const options = preset || {};
   transactionDialog.openCount += 1;
-  transactionDialog.editing = transaction;
+  // 「コピー」から開いたとき: もとの記録の中身を入れておくが、新しい記録として保存する（transaction は中身のもと、editing は null）
+  const isCopy = Boolean(!transaction && options.copyFrom);
+  const editing = transaction;
+  if (isCopy) {
+    transaction = options.copyFrom;
+  }
+  transactionDialog.editing = editing;
   transactionDialog.categoryTouched = Boolean(transaction);
   transactionDialog.categoryChanged = false;
 
@@ -87,16 +93,18 @@ function openTransactionDialog(transaction, preset) {
   findOne('#descriptionSuggestions').innerHTML = suggestions;
 
   // 見出しとボタン
-  findOne('#transactionDialogTitle').textContent = transaction ? '入出金を編集' : '入出金を記録';
-  findOne('#transactionDeleteButton').hidden = !transaction;
-  findOne('#transactionSaveNextButton').hidden = Boolean(transaction);
+  findOne('#transactionDialogTitle').textContent = editing ? '入出金を編集' : (isCopy ? '入出金を記録（コピー）' : '入出金を記録');
+  findOne('#transactionDeleteButton').hidden = !editing;
+  // 「コピー」は、ふつうの記録（支出・収入・振替）を直しているときだけ
+  findOne('#transactionCopyButton').hidden = !editing || type === 'adjust' || isManualBill;
+  findOne('#transactionSaveNextButton').hidden = Boolean(editing);
   findOne('#transactionDeleteConfirm').hidden = true;
   findOne('#transactionError').textContent = '';
   findOne('#receiptStatus').textContent = '';
   findOne('#receiptRow').hidden = !canReadReceipts() || type === 'transfer' || type === 'adjust';
 
   // カード利用のメールから入力（新しく記録するときだけ）
-  findOne('#noticeRow').hidden = Boolean(transaction) || type === 'transfer' || type === 'adjust';
+  findOne('#noticeRow').hidden = Boolean(transaction) || type === 'transfer' || type === 'adjust'; // コピーのときも出さない
   findOne('#noticeRow').open = Boolean(options.openNotice);
   findOne('#noticeText').value = '';
   findOne('#noticeStatus').textContent = '';
@@ -148,6 +156,17 @@ function readNoticeText() {
 
   const accountText = account ? '（口座: ' + account.name + '）' : '（口座は選びなおしてください）';
   status.textContent = formatMonthDay(result.date) + ' ' + formatYen(result.amount) + ' を読み取りました' + accountText + '。内容を確かめて保存してください。';
+}
+
+/** 「コピー」が押されたとき: 今開いている記録と同じ中身で、新しく記録する画面にする（日付は今日。保存するまで何も増えない） */
+function copyTransactionFromDialog() {
+  const source = transactionDialog.editing;
+  if (!source) {
+    return;
+  }
+  findOne('#transactionDialog').close(); // 開いたままもう一度開くとエラーになるので、いったん閉じる
+  openTransactionDialog(null, { copyFrom: copyForNewRecord(source, todayText()) });
+  showToast('コピーしました。日付や金額を直して保存してください');
 }
 
 /** 新しく記録するときの日付: 表示中の期間に今日があれば今日、なければ期間の最初の日 */

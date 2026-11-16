@@ -708,6 +708,7 @@ function yearEarnings(year, today) {
     year: year, isCurrent: isCurrent, isFuture: today < start, // isFuture … 来年より先（入れてある予定だけの見込み）
     earned: 0, income: 0, salary: 0, bonus: 0, tradeNet: summary.tradeNet,
     spending: summary.spending, saved: 0, categories: [], months: [],
+    spendingCategories: [], // 何に使ったか（生活費。多い順。足すと spending）
     planned: { earned: 0, count: 0 },
   };
   for (const category of INCOME_CATEGORIES) {
@@ -732,6 +733,21 @@ function yearEarnings(year, today) {
     }
   }
   result.categories.sort((a, b) => b.total - a.total);
+  // 何に使ったか（投資をのぞく支出を、カテゴリごとに。summarizeRange の spending と同じ数え方。一覧にないカテゴリは「その他」の名前で出す）
+  const spentByCategory = {};
+  for (const transaction of allTransactions) {
+    const categoryId = transaction.category || 'other';
+    if (transaction.type !== 'expense' || !isCounted(transaction) || transaction.date < start || transaction.date >= countedEnd ||
+      categoryId === 'trade' || categoryId === 'tradeLoss') {
+      continue;
+    }
+    spentByCategory[categoryId] = (spentByCategory[categoryId] || 0) + transaction.amount;
+  }
+  for (const categoryId of Object.keys(spentByCategory)) {
+    const category = CATEGORY_BY_ID[categoryId];
+    result.spendingCategories.push({ id: categoryId, name: category ? category.name : 'その他', total: spentByCategory[categoryId] });
+  }
+  result.spendingCategories.sort((a, b) => b.total - a.total);
   if (summary.categories.salary) {
     result.salary = summary.categories.salary.total;
     result.bonus = summary.categories.salary.subs['賞与'] || 0;
@@ -1114,18 +1130,37 @@ function recurringDueList(rule, today) {
   return list;
 }
 
+/** 毎月の自動記録の種類（'expense' 固定費 か 'income' 給料など）。種類のない古い固定費は支出 */
+function recurringTypeOf(rule) {
+  return rule.type === 'income' ? 'income' : 'expense';
+}
+
+/**
+ * 記録をコピーして、新しく記録するときのもと（入出金のダイアログの「コピー」）。
+ * 内容・金額・カテゴリ・口座・支払い方法などはそのまま、日付は today。
+ * 番号（id）・作った時刻・固定費や取り込み・請求の月の印は引きつがない（別の新しい記録にするため）。
+ */
+function copyForNewRecord(transaction, today) {
+  const copy = { ...transaction, date: today };
+  for (const key of ['id', 'createdAt', 'recurringId', 'billMonth', 'imported', 'importId', 'manualBill', 'dateFixed', 'paidCard']) {
+    delete copy[key];
+  }
+  return copy;
+}
+
 /** 固定費から、入出金1件を作る（IDは固定費と月で決まるので、別の端末で作っても重ならない） */
 function makeRecurringTransaction(rule, month, date) {
+  const type = recurringTypeOf(rule);
   const transaction = {
     id: 'rec-' + rule.id + '-' + month,
     date: date,
-    type: 'expense',
+    type: type,
     amount: Number(rule.amount),
     account: rule.account,
     category: rule.category,
     sub: rule.sub || '',
     description: rule.description,
-    memo: '固定費（毎月自動で記録）',
+    memo: type === 'income' ? '毎月の収入（自動で記録）' : '固定費（毎月自動で記録）',
     include: true,
     createdAt: Date.now(),
     recurringId: rule.id,
@@ -1136,7 +1171,7 @@ function makeRecurringTransaction(rule, month, date) {
 /** その月に、同じ内容・同じ金額の支出がもう記録されているか（手で先に入れていた分を二重にしないため） */
 function hasSimilarTransaction(monthItems, rule, month) {
   for (const item of monthItems) {
-    if (item.type !== 'expense' || item.date.slice(0, 7) !== month) {
+    if (item.type !== recurringTypeOf(rule) || item.date.slice(0, 7) !== month) {
       continue;
     }
     if (item.amount === Number(rule.amount) && normalizeText(item.description) === normalizeText(rule.description)) {

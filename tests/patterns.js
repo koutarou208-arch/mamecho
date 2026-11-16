@@ -671,7 +671,8 @@ function runLedgerPatternTests() {
     const wholeYear = summarizeRange({ start: earningsYearForTest + '-01-01', end: (earningsYearForTest + 1) + '-01-01' });
     recordRule(yearRule, monthsTotal === yearResult.earned && categoriesTotal + yearResult.tradeNet === yearResult.earned &&
       yearResult.earned + yearResult.planned.earned === wholeYear.income - wholeYear.tradeLoss &&
-      yearResult.saved === yearResult.earned - yearResult.spending && (yearResult.isCurrent || yearResult.planned.count === 0),
+      yearResult.saved === yearResult.earned - yearResult.spending &&
+      yearResult.spendingCategories.reduce((sum, item) => sum + item.total, 0) === yearResult.spending && (yearResult.isCurrent || yearResult.planned.count === 0),
       () => label + ' ' + earningsYearForTest + '年 今日 ' + earningsToday + ' 稼いだ ' + yearResult.earned + ' / 月 ' + monthsTotal + ' / 内訳 ' + categoriesTotal + ' / 予定 ' + yearResult.planned.earned + ' / 1年 ' + (wholeYear.income - wholeYear.tradeLoss));
 
     // 見込みと実際のずれ: 月末の見込みをおぼえたあとに記録を足すと、ずれはちょうど足した記録の合計になる

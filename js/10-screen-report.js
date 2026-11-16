@@ -184,6 +184,15 @@ function reportYearEarningsCardHtml(period) {
     '<div class="stat"><span class="label">生活費（支出）</span><span class="value num">' + formatYen(result.spending) + '</span></div>' +
     '<div class="stat"><span class="label">残ったお金</span><span class="value num total">' + formatYen(result.saved, { showPlus: true }) + '</span></div>' +
     '</div>';
+  // 1年で何に使ったか（多い順。押したときだけ開く）
+  if (result.spendingCategories.length > 0) {
+    html += '<details class="more"><summary>何に使ったか（' + result.spendingCategories.length + '）</summary><ul class="plain-list">';
+    for (const item of result.spendingCategories) {
+      const share = result.spending > 0 ? Math.round((item.total / result.spending) * 100) : 0;
+      html += '<li><span class="grow"><span>' + escapeHtml(item.name) + '</span></span><span class="small muted">' + share + '%</span><span class="num">' + formatYen(item.total) + '</span></li>';
+    }
+    html += '</ul></details>';
+  }
   html += '</section>';
   return html;
 }

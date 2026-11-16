@@ -658,6 +658,18 @@ const monthItems = [{ type: 'expense', date: '2026-09-25', description: '家賃'
 check('固定費: 同じ月に同じ内容・金額の記録があれば二重にしない', hasSimilarTransaction(monthItems, rentRule, '2026-09'));
 check('固定費: 金額がちがえば別の記録', !hasSimilarTransaction([{ ...monthItems[0], amount: 5000 }], rentRule, '2026-09'));
 check('固定費: ちがう月なら別の記録', !hasSimilarTransaction(monthItems, rentRule, '2026-10'));
+// 毎月の収入（給料など）も自動で記録できる（type: 'income'）
+const salaryRule = { id: 'r9', type: 'income', description: '給与', amount: 346000, category: 'salary', sub: '給与', account: 'bank1', day: 25, startMonth: '2026-11', generatedUntil: '' };
+const salaryTx = makeRecurringTransaction(salaryRule, '2026-11', '2026-11-25');
+same('毎月の収入: 収入として記録する', salaryTx.type + ' ' + salaryTx.amount + ' ' + salaryTx.category, 'income 346000 salary');
+check('毎月の収入: メモで自動の記録だと分かる', salaryTx.memo.includes('自動'));
+check('毎月の収入: 同じ月に同じ内容・金額の「収入」があれば二重にしない', hasSimilarTransaction([{ type: 'income', date: '2026-11-25', description: '給与', amount: 346000 }], salaryRule, '2026-11'));
+check('毎月の収入: 同じ内容・金額でも「支出」なら別の記録', !hasSimilarTransaction([{ type: 'expense', date: '2026-11-25', description: '給与', amount: 346000 }], salaryRule, '2026-11'));
+same('毎月の記録: 種類のない古い固定費は支出', recurringTypeOf(rentRule) + ' ' + recurringTypeOf(salaryRule) + ' ' + recurringTypeOf({ type: 'x' }), 'expense income expense');
+// 記録のコピー
+const copied = copyForNewRecord({ id: 'c1', date: '2026-10-03', type: 'expense', amount: 1200, account: 'bank1', category: 'food', sub: '外食', description: 'ランチ', memo: 'メモ', include: true, createdAt: 5, recurringId: 'r1', billMonth: '2026-11', imported: 'x' }, '2026-11-16');
+same('コピー: 内容・金額・カテゴリ・口座はそのまま、日付は今日', [copied.description, copied.amount, copied.category, copied.sub, copied.account, copied.date].join(' '), 'ランチ 1200 food 外食 bank1 2026-11-16');
+check('コピー: 番号・作った時刻・固定費や取り込みの印は引きつがない（別の新しい記録になる）', !('id' in copied) && !('createdAt' in copied) && !('recurringId' in copied) && !('billMonth' in copied) && !('imported' in copied));
 same('固定費: 保存データに固定費の一覧がなくても空で始まる', normalizeProfile({ accounts: [] }).recurring.length, 0);
 same('固定費: 保存データの固定費はそのまま残る', normalizeProfile({ accounts: [], recurring: [rentRule] }).recurring[0].amount, 80000);
 
@@ -1298,6 +1310,7 @@ same('1年: 投資の損益', year2026.tradeNet, 15000);
 same('1年: 内訳は多い順（投資はのぞく）', year2026.categories.map((item) => item.id + ':' + item.total).join(','), 'salary:800000,dividend:9000');
 same('1年: 残ったお金 = 稼いだお金 − 生活費', year2026.saved, 824000 - 100000);
 same('1年: 月ごと（1月・3月・6月）', [year2026.months[0], year2026.months[2], year2026.months[5]].join(','), '300000,20000,500000');
+same('1年: 何に使ったか（生活費。多い順）', year2026.spendingCategories.map((item) => item.id + ':' + item.total).join(','), 'food:100000');
 same('1年: 月ごとを足すと稼いだお金', year2026.months.reduce((sum, amount) => sum + amount, 0), year2026.earned);
 same('1年: 今日より先の予定（12月の賞与）', year2026.planned.count + '件 ' + year2026.planned.earned, '1件 600000');
 same('1年: 「1か月の始まりの日」が25日でも、1月1日〜12月31日で数える', yearEarnings(2025, '2026-11-14').earned, 111);

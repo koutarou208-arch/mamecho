@@ -414,6 +414,7 @@ const ACTIONS = {
   },
   'start-own': () => startOwnLedger(),
   'reload-app': () => location.reload(),
+  'copy-transaction': () => copyTransactionFromDialog(), // 15-dialog-transaction.js
   'toggle-tip': (button) => toggleTip(button), // 説明の「？」（03-helpers.js）
 
   // --- 入出金 ---

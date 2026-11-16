@@ -137,22 +137,22 @@ function settingsRecurringCardHtml() {
   const isEditing = recurringFormState !== null && recurringFormState.index !== null;
 
   let html = '<section class="card span-12" id="recurringCard">';
-  html += '<div class="card-head"><h2>固定費（毎月自動で記録）</h2></div>';
+  html += '<div class="card-head"><h2>毎月の自動記録</h2><span class="sub">固定費・給料</span></div>';
 
   // 登録ずみの一覧
   if (list.length === 0) {
-    html += '<p class="hint">家賃・サブスクなどを登録すると、毎月その日に自動で記録します</p>';
+    html += '<p class="hint">家賃・サブスク・給料などを登録すると、毎月その日に自動で記録します</p>';
   } else {
     html += '<ul class="plain-list">';
     for (let index = 0; index < list.length; index++) {
       const rule = list[index];
       const category = CATEGORY_BY_ID[rule.category];
-      html += '<li><span class="grow"><span>' + escapeHtml(rule.description) + '</span><span class="small muted">毎月' + recurringDayText(rule.day) + ' · ' +
+      html += '<li><span class="grow"><span>' + escapeHtml(rule.description) + (recurringTypeOf(rule) === 'income' ? ' <span class="tag">収入</span>' : '') + '</span><span class="small muted">毎月' + recurringDayText(rule.day) + ' · ' +
         formatYen(rule.amount) + ' · ' + escapeHtml(category ? category.name : '') + ' · ' + escapeHtml(accountName(rule.account)) + '</span></span>' +
         '<button type="button" class="btn small ghost" data-action="edit-recurring" data-index="' + index + '">直す</button>' +
-        '<button type="button" class="icon-btn" data-action="delete-recurring" data-index="' + index + '" aria-label="この固定費を削除">' + iconSvg('close') + '</button></li>';
+        '<button type="button" class="icon-btn" data-action="delete-recurring" data-index="' + index + '" aria-label="この自動記録を削除">' + iconSvg('close') + '</button></li>';
       if (deletingRecurringIndex === index) {
-        html += confirmBoxHtml('「' + escapeHtml(rule.description) + '」の固定費を削除します。これまでに記録された分は消えません。', '削除する',
+        html += confirmBoxHtml('「' + escapeHtml(rule.description) + '」の自動記録を削除します。これまでに記録された分は消えません。', '削除する',
           'delete-recurring-yes', 'delete-recurring-no', { tag: 'li', small: true, data: 'data-index="' + index + '"' });
       }
     }
@@ -166,14 +166,15 @@ function settingsRecurringCardHtml() {
   }
   // 入力欄は「＋ 固定費を追加する」を押したときだけ開く（直しているとき・書きかけのときは、はじめから開く）
   const isFormOpen = isEditing || recurringFormState !== null || settingsOpenForms.recurring;
-  html += '<details class="more form-box" data-form-box="recurring"' + (isFormOpen ? ' open' : '') + '><summary>' + (isEditing ? '固定費を直す' : '＋ 固定費を追加する') + '</summary>';
+  html += '<details class="more form-box" data-form-box="recurring"' + (isFormOpen ? ' open' : '') + '><summary>' + (isEditing ? '自動記録を直す' : '＋ 固定費・給料を追加する') + '</summary>';
   html += '<div class="recurring-form">' +
+    '<label class="field"><span>種類</span><select id="recurringType"><option value="expense">支出（家賃・サブスクなど）</option><option value="income">収入（給料など）</option></select></label>' +
     '<label class="field"><span>名前</span><input id="recurringName" autocomplete="off" placeholder="例: 家賃"></label>' +
     '<label class="field"><span>金額</span><div class="amount-input"><span aria-hidden="true">¥</span><input id="recurringAmount" inputmode="numeric" autocomplete="off" placeholder="80000"></div></label>' +
     '<label class="field"><span>毎月の日</span><select id="recurringDay">' + dayOptions + '</select></label>' +
     '<label class="field"><span>大項目</span><select id="recurringCategory"></select></label>' +
     '<label class="field"><span>中項目</span><select id="recurringSub"></select></label>' +
-    '<label class="field"><span>支払元の口座</span><select id="recurringAccount"></select></label>' +
+    '<label class="field"><span id="recurringAccountLabel">支払元の口座</span><select id="recurringAccount"></select></label>' +
     '<label class="field"><span>いつの月から</span><input type="month" id="recurringStart"></label>' +
     '</div>';
   html += '<p class="form-error" id="recurringError" role="alert"></p>';
@@ -194,8 +195,18 @@ function setupRecurringForm() {
   }
   const values = recurringFormState ? recurringFormState.values : {};
 
-  fillCategorySelect(categorySelect, 'expense', values.category || 'housing');
-  fillSubcategorySelect(subSelect, categorySelect.value, values.sub || '');
+  // 種類（支出・収入）で、カテゴリの選択肢と口座の見出しを入れかえる
+  const typeSelect = findOne('#recurringType');
+  typeSelect.value = values.type === 'income' ? 'income' : 'expense';
+  const applyType = (category, sub) => {
+    const isIncome = typeSelect.value === 'income';
+    fillCategorySelect(categorySelect, isIncome ? 'income' : 'expense', category || (isIncome ? 'salary' : 'housing'));
+    fillSubcategorySelect(subSelect, categorySelect.value, sub || '');
+    findOne('#recurringAccountLabel').textContent = isIncome ? '入金先の口座' : '支払元の口座';
+    findOne('#recurringName').placeholder = isIncome ? '例: 給与' : '例: 家賃';
+  };
+  applyType(values.category, values.sub);
+  typeSelect.addEventListener('change', () => applyType('', ''));
   categorySelect.addEventListener('change', () => fillSubcategorySelect(subSelect, categorySelect.value, ''));
 
   let accountHtml = '';
@@ -211,12 +222,13 @@ function setupRecurringForm() {
   findOne('#recurringStart').value = values.startMonth || todayText().slice(0, 7);
 
   // 打った内容を書きかけとして覚える（ほかのボタンで画面を描き直しても消えないように）
-  const fieldIds = ['#recurringName', '#recurringAmount', '#recurringDay', '#recurringStart', '#recurringCategory', '#recurringSub', '#recurringAccount'];
+  const fieldIds = ['#recurringType', '#recurringName', '#recurringAmount', '#recurringDay', '#recurringStart', '#recurringCategory', '#recurringSub', '#recurringAccount'];
   const remember = () => {
     const index = recurringFormState ? recurringFormState.index : null;
     recurringFormState = {
       index: index,
       values: {
+        type: typeSelect.value,
         description: findOne('#recurringName').value,
         amount: findOne('#recurringAmount').value,
         day: findOne('#recurringDay').value,
@@ -240,7 +252,7 @@ function saveRecurringFromForm() {
   const amount = calculateAmount(findOne('#recurringAmount').value);
   const startMonth = findOne('#recurringStart').value;
   if (description === '') {
-    errorArea.textContent = '名前を入れてください（例: 家賃）。';
+    errorArea.textContent = '名前を入れてください（例: 家賃・給与）。';
     return;
   }
   if (amount === null || Number.isNaN(amount) || amount <= 0) {
@@ -258,6 +270,7 @@ function saveRecurringFromForm() {
   }
 
   const fields = {
+    type: findOne('#recurringType').value === 'income' ? 'income' : 'expense',
     description: description,
     amount: amount,
     category: findOne('#recurringCategory').value,
@@ -270,10 +283,10 @@ function saveRecurringFromForm() {
   if (recurringFormState !== null && recurringFormState.index !== null && list[recurringFormState.index]) {
     // 直す: 記録ずみの月（generatedUntil）はそのまま。これからの月から新しい内容になる
     Object.assign(list[recurringFormState.index], fields);
-    showToast('固定費を更新しました');
+    showToast('自動記録を更新しました');
   } else {
     list.push({ id: makeId(), generatedUntil: '', ...fields });
-    showToast('固定費を追加しました');
+    showToast('自動記録を追加しました');
   }
   recurringFormState = null;
   settingsOpenForms.recurring = false; // 登録できたら入力欄はたたむ
