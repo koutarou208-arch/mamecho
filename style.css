@@ -534,6 +534,8 @@ main:focus { outline: none; }
   font-size: 12px; font-weight: 600; color: var(--ink-2);
 }
 .tx-day:first-child { padding-top: 0; }
+/* 検索で「ほかの月」に見つかった分の見出し（09 の otherMonthsHtml） */
+.tx-other-head { margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--rule); color: var(--ink); font-weight: 700; }
 .tx {
   display: flex; align-items: center; gap: 12px;
   width: 100%;
@@ -627,8 +629,11 @@ main:focus { outline: none; }
 .cross-line { stroke: var(--ink-2); stroke-width: 1; }
 /* 家計簿の「1年で稼いだお金」の月ごとの棒（10 の reportYearEarningsCardHtml） */
 .year-bars { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 4px; height: 84px; margin-bottom: 8px; }
-.year-bar { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: stretch; padding-bottom: 16px; min-width: 0; }
+.year-bar { position: relative; display: flex; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; flex-direction: column; justify-content: flex-end; align-items: stretch; padding-bottom: 16px; min-width: 0; }
 .year-bar-fill { display: block; background: var(--income); border-radius: 3px 3px 0 0; }
+.year-bar[aria-pressed="false"] .year-bar-fill { opacity: 0.45; } /* 月を選んでいるとき、ほかの月はうすくする */
+.year-bar[aria-pressed="true"] .year-bar-label { color: var(--ink); font-weight: 700; }
+.year-month-line { font-size: 13px; margin: 0 0 8px; min-height: 20px; }
 .year-bar-label { position: absolute; bottom: 0; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
 .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-bottom: 10px; font-size: 12px; color: var(--ink-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
@@ -1371,3 +1376,19 @@ html.privacy-cover::after {
 .check-subhead { font-size: 14px; margin: 18px 0 4px; }
 .check-breakdown { border-top: 1px solid var(--rule); padding: 10px 0 4px; }
 .check-breakdown-head { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+
+
+/* -----------------------------------------------------------
+   指で押す端末（スマホ・タブレット）: 押す所を大きくする
+   「くわしく」「口座を見る」「？」などの小さな文字のボタンは、見た目はそのままで、押せる範囲の高さを 38px 以上にする
+   ----------------------------------------------------------- */
+@media (pointer: coarse) {
+  .btn.small { min-height: 38px; }
+  .link-btn { display: inline-flex; align-items: center; min-height: 38px; }
+  details.more > summary, .notice-item > summary { padding-block: 9px; margin-top: 3px; }
+  .safety-more > summary, .card > details > summary.card-head { padding-block: 9px; }
+  .tip-button { width: 36px; height: 36px; margin: -10px 0; }
+  .sub-link { min-height: 38px; align-items: center; }
+  .delta-button { min-height: 38px; }
+  .notice-item a, .plain-list a.small { display: inline-block; padding: 8px 0 8px 12px; margin: -8px 0; } /* 横にははみ出させない */
+}

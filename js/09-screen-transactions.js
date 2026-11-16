@@ -135,8 +135,10 @@ function renderTransactionList() {
     '<span>収入 <strong class="num income-text">' + formatYen(income) + '</strong></span>' +
     '<span>支出 <strong class="num">' + formatYen(expense) + '</strong></span>';
 
+  // 検索しているときは、ほかの月で見つかった分も下に出す（月をめくって探さなくていいように）
+  const otherHtml = otherMonthsHtml(searchOtherMonths(appState.filters, periodRange(appState.period)));
   if (list.length === 0) {
-    listArea.innerHTML = '<p class="empty-note">条件に合う入出金はありません。</p>';
+    listArea.innerHTML = '<p class="empty-note">' + (otherHtml ? 'この月にはありません。' : '条件に合う入出金はありません。') + '</p>' + otherHtml;
     return;
   }
 
@@ -159,7 +161,30 @@ function renderTransactionList() {
     }
     html += transactionRowHtml(transaction, {});
   }
-  listArea.innerHTML = html;
+  listArea.innerHTML = html + otherHtml;
+}
+
+const OTHER_MONTHS_LIMIT = 100; // 「ほかの月」に出す件数のうえ限
+
+/** 検索で、ほかの月に見つかった入出金の一覧（月ごとの見出しつき。なければ空の文字） */
+function otherMonthsHtml(others) {
+  if (others.length === 0) {
+    return '';
+  }
+  let html = '<div class="tx-day tx-other-head"><span>ほかの月（' + others.length + '件）</span><span></span></div>';
+  let currentMonth = '';
+  for (const transaction of others.slice(0, OTHER_MONTHS_LIMIT)) {
+    const month = transaction.date.slice(0, 7);
+    if (month !== currentMonth) {
+      currentMonth = month;
+      html += '<div class="tx-day"><span>' + formatMonthText(month) + '</span><span></span></div>';
+    }
+    html += transactionRowHtml(transaction, { showDate: true });
+  }
+  if (others.length > OTHER_MONTHS_LIMIT) {
+    html += '<p class="hint" style="padding:8px 0">新しい ' + OTHER_MONTHS_LIMIT + '件まで出しています</p>';
+  }
+  return html;
 }
 
 

@@ -103,12 +103,21 @@ function reportFlowCardHtml(period) {
 
 // 見ている年（null なら、見ている月の年）。「‹ ›」で前の年・次の年へ。画面を移ると戻す（23 の resetTemporaryStates）
 let earningsYear = null;
+// 棒を押して選んでいる月（1〜12。選んでいなければ null）
+let earningsMonth = null;
+
+/** 月の棒を押したとき: その月の金額を出す（同じ月をもう一度押すと消す） */
+function selectEarningsMonth(month) {
+  earningsMonth = earningsMonth === month ? null : month;
+  renderApp();
+}
 
 /** 「‹ ›」を押したとき: 前の年・次の年へ（先の年は、予定の記録が入っている年まで） */
 function moveEarningsYear(step) {
   const lastYear = lastEarningsYear(todayText());
   const shown = Math.min(lastYear, earningsYear || appState.period.year);
   earningsYear = Math.min(lastYear, shown + step);
+  earningsMonth = null;
   renderApp();
 }
 
@@ -143,14 +152,23 @@ function reportYearEarningsCardHtml(period) {
 
   // 月ごとの棒（いちばん多い月を高さいっぱいに）
   const largest = Math.max(1, ...result.months);
-  html += '<div class="year-bars" role="img" aria-label="月ごとの稼いだお金">';
+  html += '<div class="year-bars" role="group" aria-label="月ごとの稼いだお金（押すと金額）">';
   for (let index = 0; index < 12; index++) {
     const amount = result.months[index];
     const height = amount > 0 ? Math.max(3, Math.round((amount / largest) * 100)) : 0;
-    html += '<span class="year-bar" title="' + (index + 1) + '月 ' + formatYen(amount) + '"><span class="year-bar-fill" style="height:' + height + '%"></span>' +
-      '<span class="year-bar-label">' + (index + 1) + '</span></span>';
+    const pressed = earningsMonth === null ? '' : ' aria-pressed="' + (earningsMonth === index + 1) + '"';
+    html += '<button type="button" class="year-bar" data-action="earnings-month" data-month="' + (index + 1) + '"' + pressed +
+      ' aria-label="' + (index + 1) + '月 ' + formatYen(amount) + '"><span class="year-bar-fill" style="height:' + height + '%"></span>' +
+      '<span class="year-bar-label">' + (index + 1) + '</span></button>';
   }
   html += '</div>';
+  // 棒を押した月の金額（押していないときは、いちばん多かった月）
+  if (earningsMonth !== null) {
+    html += '<p class="year-month-line">' + earningsMonth + '月 <strong class="num">' + formatYen(result.months[earningsMonth - 1]) + '</strong></p>';
+  } else {
+    const bestIndex = result.months.indexOf(Math.max(...result.months));
+    html += '<p class="year-month-line muted">いちばん多い月: ' + (bestIndex + 1) + '月 <span class="num">' + formatYen(result.months[bestIndex]) + '</span>（棒を押すと、その月の金額）</p>';
+  }
 
   // 内訳
   html += '<ul class="plain-list">';

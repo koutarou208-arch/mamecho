@@ -1278,6 +1278,19 @@ function filterTransactions(filters, range) {
   return results;
 }
 
+/**
+ * 検索の言葉が、見ている月のほかの月にも当たるかを調べる（入出金の画面の「ほかの月」）。
+ * 口座・カテゴリ・種類の絞り込みは、そのまま使う。検索の言葉がないとき・日付で絞り込み中は、空の一覧を返す。
+ * 返すもの: 見ている期間の外の入出金（新しい順）
+ */
+function searchOtherMonths(filters, range) {
+  if (!normalizeText(filters.search) || filters.date) {
+    return [];
+  }
+  const everything = filterTransactions(filters, { start: '0000-00-00', end: '9999-99-99' });
+  return everything.filter((transaction) => transaction.date < range.start || transaction.date >= range.end);
+}
+
 /** 入力の候補に出す「よく使う内容」（新しいものから重複なしで） */
 function recentDescriptions(limit) {
   const seen = new Set();

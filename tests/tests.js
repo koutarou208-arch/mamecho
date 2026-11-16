@@ -1303,6 +1303,16 @@ same('1年: 今日より先の予定（12月の賞与）', year2026.planned.coun
 same('1年: 「1か月の始まりの日」が25日でも、1月1日〜12月31日で数える', yearEarnings(2025, '2026-11-14').earned, 111);
 same('1年: 終わった年は予定なし・全部数える', yearEarnings(2025, '2026-11-14').isCurrent + ' ' + yearEarnings(2025, '2026-11-14').planned.count, 'false 0');
 same('1年: 記録のない年は0', yearEarnings(2024, '2026-11-14').earned, 0);
+// 検索を、ほかの月にも（yr1〜yr10 の記録で試す。内容がないので、メモに言葉を入れた記録を足す）
+placeTransaction(appState.monthly, { id: 'yr11', date: '2026-03-05', type: 'expense', amount: 800, account: 'yr-bank', category: 'food', sub: '外食', description: 'カフェ まめ', include: true });
+placeTransaction(appState.monthly, { id: 'yr12', date: '2026-11-03', type: 'expense', amount: 900, account: 'yr-bank', category: 'food', sub: '外食', description: 'カフェ まめ', include: true });
+placeTransaction(appState.monthly, { id: 'yr13', date: '2025-08-09', type: 'expense', amount: 700, account: 'yr-bank', category: 'hobby', sub: '', description: '', memo: 'まめのカフェ', include: true });
+rebuildIndexes();
+const novemberRange = { start: '2026-11-01', end: '2026-12-01' };
+same('ほかの月の検索: 見ている月の外で当たった記録（新しい順・メモも探す）', searchOtherMonths({ search: 'カフェ', account: '', category: '', type: '', date: '' }, novemberRange).map((item) => item.id).join(','), 'yr11,yr13');
+same('ほかの月の検索: カテゴリの絞り込みは、そのまま使う', searchOtherMonths({ search: 'カフェ', account: '', category: 'hobby', type: '', date: '' }, novemberRange).map((item) => item.id).join(','), 'yr13');
+same('ほかの月の検索: 検索の言葉がなければ出さない', searchOtherMonths({ search: ' ', account: '', category: '', type: '', date: '' }, novemberRange).length, 0);
+same('ほかの月の検索: 日付で絞り込み中は出さない', searchOtherMonths({ search: 'カフェ', account: '', category: '', type: '', date: '2026-11-03' }, novemberRange).length, 0);
 same('1年: 先の年は「見込み」（入れてある予定を全部数える）', yearEarnings(2026, '2025-06-01').isFuture + ' ' + yearEarnings(2026, '2025-06-01').earned, 'true ' + (824000 + 600000));
 same('1年: 見られるいちばん先の年は、予定の記録がある年まで', lastEarningsYear('2025-06-01') + ' ' + lastEarningsYear('2030-01-01'), '2026 2030');
 appState.profile = savedForYear.profile;

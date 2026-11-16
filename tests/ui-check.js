@@ -251,6 +251,11 @@ function openScreenInPage(target) {
   document.querySelectorAll('dialog[open]').forEach((dialog) => dialog.close());
   const [name, mode] = target.split(':');
   appState.period = periodOf(todayText()); // ふだんは今月を見る（前の画面で月を動かしていても戻す）
+  appState.filters.search = '';
+  if (mode === 'search' && allTransactions.length > 0) {
+    // 検索する（いちばん古い記録の内容の、はじめの2文字）。ほかの月で見つかった分の一覧も出る
+    appState.filters.search = (allTransactions[allTransactions.length - 1].description || '').slice(0, 2);
+  }
   if (mode === 'past') {
     // 先月を見る。月のはじめに見込みをおぼえていたことにして、「見込み → 実際 ずれ」と理由の行を出す（いちばん長い文になるように）
     const previous = shiftPeriod(appState.period, -1);
@@ -343,7 +348,7 @@ async function main() {
   const { chromium } = loadPlaywright();
   const browser = await launchBrowser(chromium);
   const problems = [];
-  const screens = ['home', 'home:change', 'home:past', 'transactions', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
+  const screens = ['home', 'home:change', 'home:past', 'transactions', 'transactions:search', 'report', 'report:income', 'budget', 'budget:edit', 'cards', 'accounts', 'takehome', 'settings', 'settings:check'];
   const dialogs = ['入出金（新しく）', '入出金（編集）', '口座（新しく）', 'カード（新しく）', 'カード（設定）', '通帳', 'CSV取り込み', 'ロック', 'Claude 用のまとめ'];
   let checkedViews = 0;
   let pressedButtons = 0;
